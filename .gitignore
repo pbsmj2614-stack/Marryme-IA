@@ -1,0 +1,4 @@
+﻿node_modules/
+.env
+marryme-app/.next/
+marryme-app/node_modules/

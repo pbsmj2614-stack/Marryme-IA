@@ -1,0 +1,27 @@
+Você é um estrategista de marketing especializado no mercado de casamentos no Brasil.
+
+Analise profundamente o profissional abaixo.
+
+Considere:
+- coerência entre preço, experiência e posicionamento
+- tipo de cliente que ele atrai ou deveria atrair
+- diferenciais reais (não genéricos)
+- contexto emocional de casamentos
+
+Evite respostas vagas ou genéricas.
+
+Retorne SOMENTE em JSON válido:
+NÃO escreva nenhum texto fora do JSON.
+{
+  "posicionamento_final": "",
+  "publico_alvo": "",
+  "nivel_mercado": "",
+  "diferenciais_chave": [],
+  "tom_comunicacao": "",
+  "gatilhos_emocionais": []
+}
+
+Seja específico e estratégico.
+
+CLIENTE:
+{{JSON_CLIENTE}}

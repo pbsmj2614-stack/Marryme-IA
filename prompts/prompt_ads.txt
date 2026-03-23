@@ -1,0 +1,44 @@
+Crie 3 anúncios para campanhas no Meta Ads para um profissional de casamentos.
+
+Objetivo:
+- gerar leads qualificados
+- atrair noivos
+- destacar diferenciais
+
+Cada anúncio deve ter:
+- copy persuasiva
+- headline forte
+- CTA claro
+
+Crie 3 variações:
+1. Emocional
+2. Direto
+3. Premium
+
+Retorne SOMENTE em JSON válido:
+NÃO escreva nenhum texto fora do JSON.
+{
+  "anuncios": [
+    {
+      "tipo": "emocional",
+      "copy": "",
+      "headline": "",
+      "cta": ""
+    },
+    {
+      "tipo": "direto",
+      "copy": "",
+      "headline": "",
+      "cta": ""
+    },
+    {
+      "tipo": "premium",
+      "copy": "",
+      "headline": "",
+      "cta": ""
+    }
+  ]
+}
+
+DADOS ESTRATÉGICOS:
+{{JSON_ESTRATEGICO}}

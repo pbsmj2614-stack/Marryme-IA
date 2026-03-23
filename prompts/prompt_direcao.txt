@@ -1,0 +1,19 @@
+Sugira direção criativa para vídeos de um profissional de casamentos.
+
+Inclua:
+- tipos de cena
+- ambientação
+- enquadramento
+- estilo de edição
+- sugestões de legenda
+
+Evite respostas genéricas.
+
+Retorne em JSON:
+NÃO escreva nenhum texto fora do JSON.
+{
+  "direcao": []
+}
+
+DADOS:
+{{JSON_ESTRATEGICO}}

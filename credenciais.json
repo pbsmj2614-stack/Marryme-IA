@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "winged-metric-490813-f6",
+  "private_key_id": "a66678319dc5717e044ba5e50a79970e3666f4f1",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDBzPJv3mm3C/sA\n+aJIEJd891DHcCRxQm9+rH7rEy+Iw9vWu8RNuDte7ssQWOyqjXdCo68C/ckFtil9\nqOezWjyx1oX38VOGGp+vf9ZSgaAzgCrIYj7EN59abp2mfxCYi8AOtW6PiGJxDUL5\nIik53et2wxMiSQDoE0evVT4bWpupywHPnHAdDCOJkUuN/SmhAapYlx4+gyhlJlkb\nBDRwjZ1ITX0stOz0JXnp5KGIiw3Nqd7hU3lEbrmSuxcP/8PcCjuZwChbvpQmatvJ\nh1BjdFM8WLqaiD428srgTbgYQMl9V4cvBAJfnbxqgwAi27NVK00AKz9s9Kb8izkm\nDLUHkMU5AgMBAAECggEATXw+9oFrrRcqLXKh8sRHfVx4vLTWrT4NzAz11dFe8QS2\nMf3y98wQWN2K7SdQwMQ9CbTeNYj4xcLWhfpxYWFT4RrPh5nCdlzQud+X9ncDcXPu\nJx440EUY/pQ5jidBoGxHxtm9sb+q9F6EB44kA5H6IgrO7KdZqHCE+dJQOamZkWH6\nYLtgTto2vO7wGmtlHSSG51e83t80WvtgkgzkWTkGFVvtrG3wFNJC3Yk/dX/m0py/\nkhu686l7WwOuGlajblPLNFKUS3CrPrB7msvTglrzZQInWVT0O3teMgf8b8/S2m2W\n11Idyq5Z71k/8kBMuVExTQAvi1hIirN8B/+JSTHTPQKBgQDhCwwMCgSC/POc/Nrj\n8BNEWdIJOlCf3aUctbTj+9MMH8fpvLUdzQ7/kegF1cUAS5TqhIA3FbkiJkJ/GFdw\nHZ2tZy6RmJ3variuxc/tEgP0AFWCjSxzzM+SDrGUXOTPISAaRS9Mv50jFFx8BG6A\n6WV+PYs5Mzi341a7bTf1ZcOQRwKBgQDcda85aDVOKJNa02rn8aaAYAhOd5Gwjf6g\neWHkhu0phocDBAbCpkxInfUdYFd5ZE62Vcc4sSwIEMVLtp87zthSXZ3sF5Qi4Nf9\n/UiYOF/uh5FCeM3+t97gBDnSHcdIpM1mb9W79Ta6UpKn66juIiDRWO4KjGORC0Xf\n04vNzQ0+fwKBgAxRMXibN8H/nEnUYRqmsjdEf0V4Bp+pXvciTuNHjjaUqrl1Vahq\n584/Kybem2i3uk/XrrjVHIvs8ijIqUh+pnmuMxNO+h33hmIye33rRYIeXo/FsFAq\nPpYs7bVEHFXl5z7o2Hzn4+7el21GRNITdDWjorIfxpPyAnZBtRVeW4TTAoGAM1tK\n9YGcIVf8c8Uae2vk0LUOWlEqZEm/zlxYfKcd6nWHUCGI/aFF1gjOCAjgd8vxNjKn\nVUKYskxN2cRyNbmK1S0v08buYG2mg2mUlrlTR7rXEPgZbMQirGbvnU4IlZimrL1S\nuhV2qVMBDRMt6EOVB4/C7DwmGazZmzmpsMia1DsCgYBrhNt00+ZVZ5qz1AtF1SL/\nz7/YZ3H8Ib6nThhdB7+LMpvbbef2Gx9eVhjvART6R9el6+muHHiPcEoJnRkBnmNB\nICHNAMo7tOQ7vF+MeypVnxECM6Pe5qQ7ALkV3mSy2i9Y9UExoHYr1/QKBGOLkTld\nqOn3hsIWEvuQDz+06QbDCg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "marryme-bot@winged-metric-490813-f6.iam.gserviceaccount.com",
+  "client_id": "102043352190970519495",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/marryme-bot%40winged-metric-490813-f6.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
