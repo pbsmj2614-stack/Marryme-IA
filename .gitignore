@@ -1,4 +1,6 @@
 ﻿node_modules/
 .env
+.env.local
+marryme-app/.env.local
 marryme-app/.next/
 marryme-app/node_modules/
