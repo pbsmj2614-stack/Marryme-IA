@@ -142,23 +142,12 @@ export default function NovoPage() {
 
       // 4. Disparar Edge Function
       setStatus("Gerando roteiro com IA (isso pode levar ~30 segundos)...");
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/gerar-roteiro`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        },
-        body: JSON.stringify({ entrevista_id: entrevista.id }),
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
+        body: { entrevista_id: entrevista.id },
       });
 
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Erro ao gerar roteiro");
-      }
+      if (fnError) throw new Error(fnError.message ?? "Erro ao gerar roteiro");
+      if (!fnData?.roteiro) throw new Error("Roteiro não retornado pela IA");
 
       // 5. Redirecionar
       router.push(`/prestador/${prestador.id}`);

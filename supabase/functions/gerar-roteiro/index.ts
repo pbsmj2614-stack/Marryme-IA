@@ -233,7 +233,7 @@ ${exemplosStr}
 Siga o mesmo nível de qualidade e especificidade. Adapte para o perfil do novo prestador, não copie os exemplos.`;
     }
 
-    // ── 3. Passo 1 — Análise estratégica ─────────────────────────────────────
+    // ── 3. Passo 1 — Análise estratégica (obrigatório primeiro) ──────────────
     console.log("Passo 1/4: Análise estratégica...");
     const promptEstrategia = PROMPT_ESTRATEGIA.replace(
       "{{JSON_CLIENTE}}",
@@ -242,20 +242,13 @@ Siga o mesmo nível de qualidade e especificidade. Adapte para o perfil do novo 
     const analiseEstrategica = await chamarClaude(anthropic, promptEstrategia, systemPrompt);
     const estStr = JSON.stringify(analiseEstrategica);
 
-    // ── 4. Passo 2 — Roteiro ─────────────────────────────────────────────────
-    console.log("Passo 2/4: Roteiro de vídeo...");
-    const promptRoteiro = PROMPT_ROTEIRO.replace("{{JSON_ESTRATEGICO}}", estStr);
-    const roteiroSugerido = await chamarClaude(anthropic, promptRoteiro, systemPrompt);
-
-    // ── 5. Passo 3 — Anúncios ────────────────────────────────────────────────
-    console.log("Passo 3/4: Copy de anúncios...");
-    const promptAds = PROMPT_ADS.replace("{{JSON_ESTRATEGICO}}", estStr);
-    const copyAnuncios = await chamarClaude(anthropic, promptAds, systemPrompt);
-
-    // ── 6. Passo 4 — Direção criativa ────────────────────────────────────────
-    console.log("Passo 4/4: Direção criativa...");
-    const promptDirecao = PROMPT_DIRECAO.replace("{{JSON_ESTRATEGICO}}", estStr);
-    const direcaoCriativa = await chamarClaude(anthropic, promptDirecao, systemPrompt);
+    // ── 4-6. Passos 2, 3, 4 em paralelo (todos dependem só do passo 1) ───────
+    console.log("Passos 2-4/4: Roteiro, anúncios e direção criativa em paralelo...");
+    const [roteiroSugerido, copyAnuncios, direcaoCriativa] = await Promise.all([
+      chamarClaude(anthropic, PROMPT_ROTEIRO.replace("{{JSON_ESTRATEGICO}}", estStr), systemPrompt),
+      chamarClaude(anthropic, PROMPT_ADS.replace("{{JSON_ESTRATEGICO}}", estStr), systemPrompt),
+      chamarClaude(anthropic, PROMPT_DIRECAO.replace("{{JSON_ESTRATEGICO}}", estStr), systemPrompt),
+    ]);
 
     // ── 7. Salvar no banco ───────────────────────────────────────────────────
     const { data: roteiro, error: errInsert } = await supabase

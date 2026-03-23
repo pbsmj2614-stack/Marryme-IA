@@ -20,7 +20,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
 
     if (error) {
-      setErro("E-mail ou senha incorretos.");
+      console.error("Supabase auth error:", error);
+      setErro(error.message);
       setLoading(false);
       return;
     }
