@@ -259,7 +259,7 @@ export default function NovoPage() {
             disabled={loading}
             className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition disabled:opacity-60"
           >
-            {loading ? "Processando..." : "Salvar e gerar roteiro com IA"}
+            {loading ? "Processando..." : "Salvar e cadastrar prestador"}
           </button>
         </form>
       </main>
