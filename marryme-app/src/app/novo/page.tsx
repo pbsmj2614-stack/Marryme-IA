@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
@@ -44,6 +44,7 @@ function Field({
   placeholder = "",
   textarea = false,
   required = false,
+  maxLength,
 }: {
   label: string;
   name: keyof DadosEntrevista;
@@ -53,9 +54,12 @@ function Field({
   placeholder?: string;
   textarea?: boolean;
   required?: boolean;
+  maxLength?: number;
 }) {
   const cls =
     "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400";
+  const restantes = maxLength !== undefined ? maxLength - value.length : null;
+  const poucosRestantes = restantes !== null && restantes <= Math.ceil(maxLength! * 0.15);
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -68,6 +72,7 @@ function Field({
           onChange={(e) => onChange(name, e.target.value)}
           placeholder={placeholder}
           required={required}
+          maxLength={maxLength}
           className={cls}
         />
       ) : (
@@ -77,8 +82,20 @@ function Field({
           onChange={(e) => onChange(name, e.target.value)}
           placeholder={placeholder}
           required={required}
+          maxLength={maxLength}
           className={cls}
         />
+      )}
+      {restantes !== null && value.length > 0 && (
+        <p className={`text-right text-xs mt-1 transition-colors ${
+          restantes === 0
+            ? "text-red-500 font-medium"
+            : poucosRestantes
+            ? "text-amber-500"
+            : "text-gray-300"
+        }`}>
+          {restantes} restantes
+        </p>
       )}
     </div>
   );
@@ -90,6 +107,7 @@ export default function NovoPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [erro, setErro] = useState("");
+  const acaoRef = useRef<"cadastrar" | "gerar">("cadastrar");
 
   function handleChange(name: keyof DadosEntrevista, value: string) {
     setDados((prev) => ({ ...prev, [name]: value }));
@@ -140,7 +158,13 @@ export default function NovoPage() {
 
       if (errEntrevista || !entrevista) throw new Error("Erro ao salvar entrevista");
 
-      // 4. Disparar Edge Function
+      // 4a. Só cadastrar — redireciona sem gerar roteiro
+      if (acaoRef.current === "cadastrar") {
+        router.push(`/prestador/${prestador.id}`);
+        return;
+      }
+
+      // 4b. Cadastrar e gerar roteiro
       setStatus("Gerando roteiro com IA (isso pode levar ~30 segundos)...");
       const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
         body: { entrevista_id: entrevista.id },
@@ -170,7 +194,7 @@ export default function NovoPage() {
           <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Dados básicos</h3>
 
-            <Field label="Nome artístico" name="nome_artistico" value={dados.nome_artistico} onChange={handleChange} required placeholder="Ex: Banda Ravel, Foto Ana Lima..." />
+            <Field label="Nome artístico" name="nome_artistico" value={dados.nome_artistico} onChange={handleChange} required placeholder="Ex: Banda Ravel, Foto Ana Lima..." maxLength={60} />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -189,12 +213,12 @@ export default function NovoPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="WhatsApp" name="whatsapp" value={dados.whatsapp} onChange={handleChange} placeholder="(11) 99999-9999" />
-              <Field label="E-mail" name="email" value={dados.email} onChange={handleChange} type="email" placeholder="contato@..." />
+              <Field label="WhatsApp" name="whatsapp" value={dados.whatsapp} onChange={handleChange} placeholder="(11) 99999-9999" maxLength={60} />
+              <Field label="E-mail" name="email" value={dados.email} onChange={handleChange} type="email" placeholder="contato@..." maxLength={60} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" />
-              <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" />
+              <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" maxLength={100} />
+              <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" maxLength={100} />
             </div>
           </section>
 
@@ -203,39 +227,39 @@ export default function NovoPage() {
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Experiência e posicionamento</h3>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Anos de experiência" name="anos_experiencia" value={dados.anos_experiencia} onChange={handleChange} placeholder="Ex: 8 anos" required />
-              <Field label="Nº aproximado de casamentos" name="numero_casamentos" value={dados.numero_casamentos} onChange={handleChange} placeholder="Ex: 200+" />
+              <Field label="Anos de experiência" name="anos_experiencia" value={dados.anos_experiencia} onChange={handleChange} placeholder="Ex: 8 anos" required maxLength={120} />
+              <Field label="Nº aproximado de casamentos" name="numero_casamentos" value={dados.numero_casamentos} onChange={handleChange} placeholder="Ex: 200+" maxLength={120} />
             </div>
 
-            <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea placeholder="Ex: casamentos na natureza, fotojornalismo, música ao vivo MPB..." required />
+            <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea placeholder="Ex: casamentos na natureza, fotojornalismo, música ao vivo MPB..." required maxLength={400} />
 
-            <Field label="Ticket médio (R$)" name="preco_medio" value={dados.preco_medio} onChange={handleChange} placeholder="Ex: R$ 8.000 a R$ 15.000" />
+            <Field label="Ticket médio (R$)" name="preco_medio" value={dados.preco_medio} onChange={handleChange} placeholder="Ex: R$ 8.000 a R$ 15.000" maxLength={120} />
 
-            <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." />
+            <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." maxLength={120} />
           </section>
 
           {/* Diferenciais */}
           <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Diferenciais e estilo</h3>
 
-            <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED, carro de apoio..." />
+            <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED, carro de apoio..." maxLength={400} />
 
-            <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea required placeholder="O que faz este profissional ser único? Seja específico." />
+            <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea required placeholder="O que faz este profissional ser único? Seja específico." maxLength={400} />
 
-            <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" />
+            <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" maxLength={400} />
           </section>
 
           {/* Storytelling */}
           <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Storytelling e conexão emocional</h3>
 
-            <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea placeholder="O que os noivos mais falam depois do casamento?" />
+            <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea placeholder="O que os noivos mais falam depois do casamento?" maxLength={400} />
 
-            <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea placeholder="Uma história ou situação marcante no trabalho..." />
+            <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea placeholder="Uma história ou situação marcante no trabalho..." maxLength={400} />
 
-            <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." />
+            <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." maxLength={400} />
 
-            <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea placeholder="Qualquer outra informação relevante para o roteiro..." />
+            <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea placeholder="Qualquer outra informação relevante para o roteiro..." maxLength={400} />
           </section>
 
           {erro && (
@@ -254,13 +278,24 @@ export default function NovoPage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition disabled:opacity-60"
-          >
-            {loading ? "Processando..." : "Salvar e cadastrar prestador"}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="submit"
+              disabled={loading}
+              onClick={() => { acaoRef.current = "cadastrar"; }}
+              className="flex-1 bg-white border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition disabled:opacity-60"
+            >
+              {loading && acaoRef.current === "cadastrar" ? "Salvando..." : "Cadastrar prestador"}
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              onClick={() => { acaoRef.current = "gerar"; }}
+              className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition disabled:opacity-60"
+            >
+              {loading && acaoRef.current === "gerar" ? "Processando..." : "Cadastrar e gerar roteiro"}
+            </button>
+          </div>
         </form>
       </main>
     </div>

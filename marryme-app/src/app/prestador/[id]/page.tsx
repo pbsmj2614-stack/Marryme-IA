@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import type { Roteiro, Prestador, DadosEntrevista } from "@/lib/types";
+import type { Roteiro, Prestador, DadosEntrevista, CenaRoteiro, Anuncio, DirecaoCena } from "@/lib/types";
 import Header from "@/components/Header";
 import RoteiroCard from "@/components/RoteiroCard";
 import AprovarButton from "@/components/AprovarButton";
@@ -8,6 +8,7 @@ import GerarRoteiroButton from "@/components/GerarRoteiroButton";
 import RefazerRoteiroButton from "@/components/RefazerRoteiroButton";
 import ExcluirPrestadorButton from "@/components/ExcluirPrestadorButton";
 import CopiarButton from "@/components/CopiarButton";
+import GerarSecaoButton from "@/components/GerarSecaoButton";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 const CATEGORIA_LABEL: Record<string, string> = {
@@ -17,6 +18,25 @@ const CATEGORIA_LABEL: Record<string, string> = {
   dj: "DJ",
   outro: "Outro",
 };
+
+/** Renderiza texto com quebras de parágrafo por \n\n */
+function TextoFormatado({ texto, className = "" }: { texto: string; className?: string }) {
+  const paragrafos = texto.split(/\n\n+/).filter(Boolean);
+  if (paragrafos.length <= 1) {
+    return (
+      <p className={`font-lora leading-[1.7] text-gray-800 whitespace-pre-wrap ${className}`}>
+        {texto}
+      </p>
+    );
+  }
+  return (
+    <div className={`font-lora leading-[1.7] text-gray-800 space-y-3 ${className}`}>
+      {paragrafos.map((p, i) => (
+        <p key={i} className="whitespace-pre-wrap">{p}</p>
+      ))}
+    </div>
+  );
+}
 
 export default async function PrestadorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,6 +71,53 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
   const lista = (roteiros ?? []) as Roteiro[];
   const ultimo = lista[0] ?? null;
   const dados = entrevista?.dados_json as DadosEntrevista | undefined;
+
+  // ── Textos para cópia por seção ─────────────────────────────────────────────
+  const textoAnalise = ultimo?.analise_estrategica
+    ? [
+        `Posicionamento: ${ultimo.analise_estrategica.posicionamento_final}`,
+        `Público-alvo: ${ultimo.analise_estrategica.publico_alvo}`,
+        `Nível de mercado: ${ultimo.analise_estrategica.nivel_mercado}`,
+        `Tom de comunicação: ${ultimo.analise_estrategica.tom_comunicacao}`,
+        `Diferenciais-chave:\n${ultimo.analise_estrategica.diferenciais_chave.map((d, i) => `  ${i + 1}. ${d}`).join("\n")}`,
+        `Gatilhos emocionais:\n${ultimo.analise_estrategica.gatilhos_emocionais.map((g, i) => `  ${i + 1}. ${g}`).join("\n")}`,
+      ].join("\n\n")
+    : undefined;
+
+  const textoRoteiro = ultimo?.roteiro_sugerido?.roteiro
+    ? ultimo.roteiro_sugerido.roteiro
+        .map((c: CenaRoteiro) =>
+          [
+            `Cena ${c.cena} — ${c.titulo}`,
+            c.texto,
+            c.legenda_sugerida ? `Legenda: ${c.legenda_sugerida}` : null,
+            c.orientacao_captacao ? `Captação: ${c.orientacao_captacao}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        )
+        .join("\n\n---\n\n")
+    : undefined;
+
+  const textoCopy = ultimo?.copy_anuncios?.anuncios
+    ? ultimo.copy_anuncios.anuncios
+        .map((ad: Anuncio) => `[${ad.tipo.toUpperCase()}]\n${ad.headline}\n\n${ad.copy}\n\nCTA: ${ad.cta}`)
+        .join("\n\n---\n\n")
+    : undefined;
+
+  const textoDirecao = ultimo?.direcao_criativa?.direcao
+    ? ultimo.direcao_criativa.direcao
+        .map((d: DirecaoCena, i: number) =>
+          [
+            `${i + 1}. ${d.tipo_cena}`,
+            `Ambientação: ${d.ambientacao}`,
+            `Enquadramento: ${d.enquadramento}`,
+            `Edição: ${d.estilo_edicao}`,
+            `Legenda: ${d.legenda_sugerida}`,
+          ].join("\n")
+        )
+        .join("\n\n")
+    : undefined;
 
   return (
     <div className="min-h-screen">
@@ -90,7 +157,8 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
         {/* Resumo do perfil da entrevista */}
         {dados && (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4">
-            <div className="flex items-center justify-between mb-3">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">Perfil da entrevista</h3>
               <Link
                 href={`/prestador/${id}/editar`}
@@ -99,99 +167,125 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                 ✏️ Editar informações
               </Link>
             </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+
+            {/* Linha 1 — KPIs numéricos */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
               {dados.anos_experiencia && (
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Experiência</p>
-                  <p className="text-gray-800 font-medium">{dados.anos_experiencia}</p>
+                <div className="bg-white rounded-lg px-3 py-2.5 border border-gray-100">
+                  <p className="text-xs text-gray-400 mb-1">Experiência</p>
+                  <p className="text-sm font-bold text-gray-800">{dados.anos_experiencia}</p>
                 </div>
               )}
               {dados.numero_casamentos && (
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Casamentos</p>
-                  <p className="text-gray-800 font-medium">{dados.numero_casamentos}</p>
+                <div className="bg-white rounded-lg px-3 py-2.5 border border-gray-100">
+                  <p className="text-xs text-gray-400 mb-1">Casamentos</p>
+                  <p className="text-sm font-bold text-gray-800">{dados.numero_casamentos}</p>
                 </div>
               )}
               {dados.preco_medio && (
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Ticket médio</p>
-                  <p className="text-gray-800 font-medium">{dados.preco_medio}</p>
-                </div>
-              )}
-              {dados.especialidade && (
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <p className="text-xs text-gray-400 mb-0.5">Especialidade</p>
-                  <p className="text-gray-700">{dados.especialidade}</p>
-                </div>
-              )}
-              {dados.diferenciais && (
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <p className="text-xs text-gray-400 mb-0.5">Diferenciais</p>
-                  <p className="text-gray-700 whitespace-pre-wrap">{dados.diferenciais}</p>
+                <div className="bg-white rounded-lg px-3 py-2.5 border border-gray-100">
+                  <p className="text-xs text-gray-400 mb-1">Ticket médio</p>
+                  <p className="text-sm font-bold text-gray-800">{dados.preco_medio}</p>
                 </div>
               )}
             </div>
+
+            {/* Linha 2 — Nicho + Certificações */}
+            {(dados.especialidade || dados.formacao) && (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {dados.especialidade && (
+                  <div className="bg-white rounded-lg px-3 py-2.5 border border-brand-100">
+                    <p className="text-xs font-semibold text-brand-500 uppercase tracking-wide mb-1.5">Nicho</p>
+                    <p className="text-xs text-gray-700 leading-relaxed line-clamp-3">{dados.especialidade}</p>
+                  </div>
+                )}
+                {dados.formacao && (
+                  <div className="bg-white rounded-lg px-3 py-2.5 border border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Certificações</p>
+                    <p className="text-xs text-gray-700 leading-relaxed line-clamp-3">{dados.formacao}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* Ações */}
         <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
           <ExcluirPrestadorButton prestadorId={p.id} />
-          {entrevista && ultimo && (
-            <RefazerRoteiroButton entrevistaId={entrevista.id} />
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {entrevista && ultimo && (
+              <RefazerRoteiroButton entrevistaId={entrevista.id} />
+            )}
+            {entrevista && !ultimo && (
+              <GerarRoteiroButton entrevistaId={entrevista.id} />
+            )}
+          </div>
         </div>
 
-        {/* Sem roteiro */}
-        {!ultimo && (
-          <div className="text-center py-16 text-gray-400 space-y-4">
-            <p>Nenhum roteiro gerado ainda.</p>
-            {entrevista && <GerarRoteiroButton entrevistaId={entrevista.id} />}
+        {/* Sem entrevista cadastrada */}
+        {!entrevista && (
+          <div className="text-center py-16 text-gray-400">
+            <p>Nenhuma entrevista cadastrada para este prestador.</p>
           </div>
         )}
 
-        {/* Roteiro mais recente */}
-        {ultimo && (
+        {/* Seções — aparecem sempre que há entrevista, vazias ou preenchidas */}
+        {entrevista && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-lg font-semibold text-gray-800">Roteiro mais recente</h3>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                ultimo.aprovado ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-              }`}>
-                {ultimo.aprovado ? "✓ Aprovado" : "Aguardando aprovação"}
-              </span>
-              {ultimo.exemplos_fewshot_usados > 0 && (
-                <span className="text-xs text-gray-400">
-                  {ultimo.exemplos_fewshot_usados} exemplo(s) de referência usados
+            {ultimo && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-lg font-semibold text-gray-800">Roteiro mais recente</h3>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  ultimo.aprovado ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                }`}>
+                  {ultimo.aprovado ? "✓ Aprovado" : "Aguardando aprovação"}
                 </span>
-              )}
-            </div>
+                {ultimo.exemplos_fewshot_usados > 0 && (
+                  <span className="text-xs text-gray-400">
+                    {ultimo.exemplos_fewshot_usados} exemplo(s) de referência usados
+                  </span>
+                )}
+              </div>
+            )}
 
-            {/* Análise estratégica */}
-            {ultimo.analise_estrategica && (
-              <RoteiroCard titulo="Análise Estratégica" defaultOpen>
-                <div className="grid sm:grid-cols-2 gap-5 text-sm">
+            {/* 1. Análise Estratégica */}
+            <RoteiroCard
+              titulo="1. Análise Estratégica"
+              defaultOpen={!!ultimo?.analise_estrategica}
+              conteudoCopiar={textoAnalise}
+              acaoSlot={
+                <GerarSecaoButton
+                  entrevistaId={entrevista.id}
+                  roteiroId={ultimo?.id}
+                  secao="analise_estrategica"
+                  modo={ultimo?.analise_estrategica ? "refazer" : "gerar"}
+                />
+              }
+            >
+            {ultimo?.analise_estrategica ? (
+              <div className="grid sm:grid-cols-2 gap-5 text-sm">
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Posicionamento</p>
-                    <p className="text-gray-800">{ultimo.analise_estrategica.posicionamento_final}</p>
+                    <TextoFormatado texto={ultimo.analise_estrategica.posicionamento_final} />
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Público-alvo</p>
-                    <p className="text-gray-800">{ultimo.analise_estrategica.publico_alvo}</p>
+                    <TextoFormatado texto={ultimo.analise_estrategica.publico_alvo} />
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Nível de mercado</p>
-                    <p className="text-gray-800">{ultimo.analise_estrategica.nivel_mercado}</p>
+                    <TextoFormatado texto={ultimo.analise_estrategica.nivel_mercado} />
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Tom de comunicação</p>
-                    <p className="text-gray-800">{ultimo.analise_estrategica.tom_comunicacao}</p>
+                    <TextoFormatado texto={ultimo.analise_estrategica.tom_comunicacao} />
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Diferenciais-chave</p>
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {ultimo.analise_estrategica.diferenciais_chave.map((d, i) => (
-                        <li key={i} className="flex gap-2 text-gray-800">
+                        <li key={i} className="flex gap-2 font-lora leading-[1.7] text-gray-800">
                           <span className="text-brand-400 font-bold mt-0.5">•</span>
                           <span>{d}</span>
                         </li>
@@ -200,9 +294,9 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Gatilhos emocionais</p>
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {ultimo.analise_estrategica.gatilhos_emocionais.map((g, i) => (
-                        <li key={i} className="flex gap-2 text-gray-800">
+                        <li key={i} className="flex gap-2 font-lora leading-[1.7] text-gray-800">
                           <span className="text-pink-400 font-bold mt-0.5">•</span>
                           <span>{g}</span>
                         </li>
@@ -210,47 +304,76 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                     </ul>
                   </div>
                 </div>
-              </RoteiroCard>
+            ) : (
+              <GerarSecaoButton entrevistaId={entrevista.id} roteiroId={ultimo?.id} secao="analise_estrategica" modo="gerar" />
             )}
+            </RoteiroCard>
 
-            {/* Roteiro de vídeo */}
-            {ultimo.roteiro_sugerido?.roteiro && (
-              <RoteiroCard titulo="Roteiro de Vídeo">
-                <div className="space-y-5">
-                  {ultimo.roteiro_sugerido.roteiro.map((cena) => (
-                    <div key={cena.cena} className="border-l-4 border-brand-300 pl-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-bold text-brand-600 uppercase tracking-wide">
-                          Cena {cena.cena} — {cena.titulo}
-                        </p>
-                        <CopiarButton texto={cena.texto} />
+            {/* 2. Roteiro de Vídeo */}
+            <RoteiroCard
+              titulo="2. Roteiro de Vídeo"
+              conteudoCopiar={textoRoteiro}
+              acaoSlot={
+                <GerarSecaoButton
+                  entrevistaId={entrevista.id}
+                  roteiroId={ultimo?.id}
+                  secao="roteiro_sugerido"
+                  modo={ultimo?.roteiro_sugerido ? "refazer" : "gerar"}
+                />
+              }
+            >
+              {ultimo?.roteiro_sugerido?.roteiro ? (
+                <div className="space-y-0">
+                  {ultimo.roteiro_sugerido.roteiro.map((cena: CenaRoteiro, idx: number) => (
+                    <div key={cena.cena}>
+                      <div className="border-l-4 border-brand-300 pl-4 py-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-bold text-brand-600 uppercase tracking-wide">
+                            Cena {cena.cena} — {cena.titulo}
+                          </p>
+                          <CopiarButton texto={cena.texto} />
+                        </div>
+                        <TextoFormatado texto={cena.texto} className="mb-3" />
+                        {cena.legenda_sugerida && (
+                          <div className="bg-gray-50 rounded-md px-3 py-2 mt-2">
+                            <p className="text-xs font-medium text-gray-500 mb-0.5">Legenda sugerida</p>
+                            <p className="text-xs text-gray-700 font-lora leading-[1.7] italic">{cena.legenda_sugerida}</p>
+                          </div>
+                        )}
+                        {cena.orientacao_captacao && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-gray-400 mb-0.5">Orientação de captação</p>
+                            <p className="text-xs text-gray-500 font-lora leading-[1.7]">{cena.orientacao_captacao}</p>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap mb-3">
-                        {cena.texto}
-                      </p>
-                      {cena.legenda_sugerida && (
-                        <div className="bg-gray-50 rounded-md px-3 py-2 mt-2">
-                          <p className="text-xs font-medium text-gray-500 mb-0.5">Legenda sugerida</p>
-                          <p className="text-xs text-gray-700 italic">{cena.legenda_sugerida}</p>
-                        </div>
-                      )}
-                      {cena.orientacao_captacao && (
-                        <div className="mt-2">
-                          <p className="text-xs font-medium text-gray-400 mb-0.5">Orientação de captação</p>
-                          <p className="text-xs text-gray-500">{cena.orientacao_captacao}</p>
-                        </div>
+                      {idx < (ultimo.roteiro_sugerido?.roteiro.length ?? 0) - 1 && (
+                        <hr className="my-5 border-gray-100" />
                       )}
                     </div>
                   ))}
                 </div>
-              </RoteiroCard>
-            )}
+              ) : (
+                <GerarSecaoButton entrevistaId={entrevista.id} roteiroId={ultimo?.id} secao="roteiro_sugerido" modo="gerar" />
+              )}
+            </RoteiroCard>
 
-            {/* Copy de anúncios */}
-            {ultimo.copy_anuncios?.anuncios && (
-              <RoteiroCard titulo="Copy de Anúncios — Meta Ads">
+            {/* 3. Roteiro Para Anúncios */}
+            <RoteiroCard
+              titulo="3. Roteiro Para Anúncios"
+              conteudoCopiar={textoCopy}
+              acaoSlot={
+                <GerarSecaoButton
+                  entrevistaId={entrevista.id}
+                  roteiroId={ultimo?.id}
+                  secao="copy_anuncios"
+                  modo={ultimo?.copy_anuncios ? "refazer" : "gerar"}
+                />
+              }
+            >
+              {ultimo?.copy_anuncios?.anuncios ? (
                 <div className="space-y-5">
-                  {ultimo.copy_anuncios.anuncios.map((ad) => {
+                  {ultimo.copy_anuncios.anuncios.map((ad: Anuncio) => {
                     const textoCompleto = `${ad.headline}\n\n${ad.copy}\n\nCTA: ${ad.cta}`;
                     return (
                       <div key={ad.tipo} className="bg-gray-50 rounded-lg p-4 border border-gray-100">
@@ -267,7 +390,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                           <CopiarButton texto={textoCompleto} />
                         </div>
                         <p className="text-sm font-bold text-gray-900 mb-2">{ad.headline}</p>
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-3">{ad.copy}</p>
+                        <TextoFormatado texto={ad.copy} className="mb-3 text-sm text-gray-700" />
                         <div className="border-t border-gray-200 pt-2">
                           <span className="text-xs font-bold text-gray-400 uppercase tracking-wide mr-2">CTA</span>
                           <span className="text-sm text-brand-700 font-medium">{ad.cta}</span>
@@ -276,39 +399,56 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                     );
                   })}
                 </div>
-              </RoteiroCard>
-            )}
+              ) : (
+                <GerarSecaoButton entrevistaId={entrevista.id} roteiroId={ultimo?.id} secao="copy_anuncios" modo="gerar" />
+              )}
+            </RoteiroCard>
 
-            {/* Direção criativa */}
-            {ultimo.direcao_criativa?.direcao && (
-              <RoteiroCard titulo="Direção Criativa">
+            {/* 4. Direção Criativa */}
+            <RoteiroCard
+              titulo="4. Direção Criativa"
+              conteudoCopiar={textoDirecao}
+              acaoSlot={
+                <GerarSecaoButton
+                  entrevistaId={entrevista.id}
+                  roteiroId={ultimo?.id}
+                  secao="direcao_criativa"
+                  modo={ultimo?.direcao_criativa ? "refazer" : "gerar"}
+                />
+              }
+            >
+              {ultimo?.direcao_criativa?.direcao ? (
                 <div className="space-y-4">
-                  {ultimo.direcao_criativa.direcao.map((d, i) => (
+                  {ultimo.direcao_criativa.direcao.map((d: DirecaoCena, i: number) => (
                     <div key={i} className="border border-gray-200 rounded-lg p-4">
-                      <p className="font-semibold text-gray-900 mb-3">{d.tipo_cena}</p>
+                      <p className="font-semibold text-gray-900 mb-3">
+                        <span className="text-brand-500 mr-1">{i + 1}.</span> {d.tipo_cena}
+                      </p>
                       <div className="grid sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Ambientação</p>
-                          <p className="text-gray-700">{d.ambientacao}</p>
+                          <TextoFormatado texto={d.ambientacao} className="text-gray-700" />
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Enquadramento</p>
-                          <p className="text-gray-700">{d.enquadramento}</p>
+                          <TextoFormatado texto={d.enquadramento} className="text-gray-700" />
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Estilo de edição</p>
-                          <p className="text-gray-700">{d.estilo_edicao}</p>
+                          <TextoFormatado texto={d.estilo_edicao} className="text-gray-700" />
                         </div>
                         <div>
                           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Legenda sugerida</p>
-                          <p className="text-gray-700 italic">{d.legenda_sugerida}</p>
+                          <p className="font-lora leading-[1.7] text-gray-700 italic">{d.legenda_sugerida}</p>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </RoteiroCard>
-            )}
+              ) : (
+                <GerarSecaoButton entrevistaId={entrevista.id} roteiroId={ultimo?.id} secao="direcao_criativa" modo="gerar" />
+              )}
+            </RoteiroCard>
           </div>
         )}
       </main>

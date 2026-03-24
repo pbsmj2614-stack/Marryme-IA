@@ -2,15 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Prestador, Roteiro } from "@/lib/types";
 import Header from "@/components/Header";
+import PrestadorCard from "@/components/PrestadorCard";
 import { createSupabaseServer } from "@/lib/supabase-server";
-
-const CATEGORIA_LABEL: Record<string, string> = {
-  musico: "Músico",
-  fotografo: "Fotógrafo",
-  celebrante: "Celebrante",
-  dj: "DJ",
-  outro: "Outro",
-};
 
 const TABS = [
   { value: "todos", label: "Todos" },
@@ -32,10 +25,14 @@ export default async function DashboardPage({
 
   const { data: prestadores } = await supabase
     .from("prestadores")
-    .select("*, roteiros(id, aprovado, criado_em)")
+    .select("*, roteiros(id, aprovado, criado_em, analise_estrategica)")
     .order("criado_em", { ascending: false });
 
-  type PrestadorRow = Prestador & { roteiros: Pick<Roteiro, "id" | "aprovado" | "criado_em">[] };
+  type PrestadorRow = Prestador & {
+    roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
+      analise_estrategica: { nivel_mercado?: string } | null;
+    })[];
+  };
   const lista = (prestadores ?? []) as PrestadorRow[];
 
   function getStatus(p: PrestadorRow) {
@@ -113,42 +110,27 @@ export default async function DashboardPage({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtrada.map((p) => {
               const { total, aprovados } = getStatus(p);
-              const temRoteiro = total > 0;
+              const roteirosOrdenados = [...(p.roteiros ?? [])].sort(
+                (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+              );
+              const ultimoRoteiro = roteirosOrdenados[0];
+
+              const nivelMercado = ultimoRoteiro?.analise_estrategica?.nivel_mercado ?? null;
 
               return (
-                <Link
+                <PrestadorCard
                   key={p.id}
-                  href={`/prestador/${p.id}`}
-                  className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md hover:border-brand-300 transition group"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900 group-hover:text-brand-700 transition">
-                        {p.nome_artistico}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {CATEGORIA_LABEL[p.categoria] ?? p.categoria}
-                        {p.cidade_base ? ` · ${p.cidade_base}` : ""}
-                      </p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      temRoteiro
-                        ? aprovados > 0
-                          ? "bg-green-100 text-green-700"
-                          : "bg-yellow-100 text-yellow-700"
-                        : "bg-gray-100 text-gray-500"
-                    }`}>
-                      {temRoteiro
-                        ? aprovados > 0
-                          ? `${aprovados} aprovado${aprovados > 1 ? "s" : ""}`
-                          : "Aguardando"
-                        : "Sem roteiro"}
-                    </span>
-                  </div>
-                  <div className="mt-4 text-xs text-gray-400">
-                    {total} roteiro{total !== 1 ? "s" : ""} gerado{total !== 1 ? "s" : ""}
-                  </div>
-                </Link>
+                  prestadorId={p.id}
+                  nome={p.nome_artistico}
+                  categoria={p.categoria}
+                  cidadeBase={p.cidade_base}
+                  whatsapp={p.whatsapp}
+                  nivelMercado={nivelMercado}
+                  total={total}
+                  aprovados={aprovados}
+                  ultimoRoteiroId={ultimoRoteiro?.id}
+                  ultimoRoteiroAprovado={ultimoRoteiro?.aprovado}
+                />
               );
             })}
           </div>

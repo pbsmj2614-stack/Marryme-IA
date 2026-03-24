@@ -24,6 +24,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],
+        lora: ["var(--font-lora)", "Georgia", "serif"],
       },
     },
   },
