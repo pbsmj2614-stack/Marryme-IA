@@ -6,13 +6,15 @@ import { createClient } from "@/lib/supabase";
 import type { DadosEntrevista } from "@/lib/types";
 
 function Field({
-  label, name, value, onChange, textarea = false, required = false, placeholder = "",
+  label, name, value, onChange, textarea = false, required = false, placeholder = "", maxLength,
 }: {
   label: string; name: keyof DadosEntrevista; value: string;
   onChange: (name: keyof DadosEntrevista, val: string) => void;
-  textarea?: boolean; required?: boolean; placeholder?: string;
+  textarea?: boolean; required?: boolean; placeholder?: string; maxLength?: number;
 }) {
   const cls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400";
+  const restantes = maxLength !== undefined ? maxLength - value.length : null;
+  const poucosRestantes = restantes !== null && restantes <= Math.ceil(maxLength! * 0.15);
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -20,10 +22,21 @@ function Field({
       </label>
       {textarea ? (
         <textarea rows={3} value={value} onChange={(e) => onChange(name, e.target.value)}
-          placeholder={placeholder} required={required} className={cls} />
+          placeholder={placeholder} required={required} maxLength={maxLength} className={cls} />
       ) : (
         <input type="text" value={value} onChange={(e) => onChange(name, e.target.value)}
-          placeholder={placeholder} required={required} className={cls} />
+          placeholder={placeholder} required={required} maxLength={maxLength} className={cls} />
+      )}
+      {restantes !== null && value.length > 0 && (
+        <p className={`text-right text-xs mt-1 transition-colors ${
+          restantes === 0
+            ? "text-red-500 font-medium"
+            : poucosRestantes
+            ? "text-amber-500"
+            : "text-gray-300"
+        }`}>
+          {restantes} restantes
+        </p>
       )}
     </div>
   );
@@ -69,41 +82,41 @@ export default function EditarEntrevistaForm({
     <form onSubmit={handleSubmit} className="space-y-8">
       <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Dados básicos</h3>
-        <Field label="Nome artístico" name="nome_artistico" value={dados.nome_artistico} onChange={handleChange} required />
+        <Field label="Nome artístico" name="nome_artistico" value={dados.nome_artistico} onChange={handleChange} required maxLength={60} />
         <div className="grid grid-cols-2 gap-4">
-          <Field label="WhatsApp" name="whatsapp" value={dados.whatsapp} onChange={handleChange} placeholder="(11) 99999-9999" />
-          <Field label="E-mail" name="email" value={dados.email} onChange={handleChange} placeholder="contato@..." />
+          <Field label="WhatsApp" name="whatsapp" value={dados.whatsapp} onChange={handleChange} placeholder="(11) 99999-9999" maxLength={60} />
+          <Field label="E-mail" name="email" value={dados.email} onChange={handleChange} placeholder="contato@..." maxLength={60} />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" />
-          <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" />
+          <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" maxLength={100} />
+          <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" maxLength={100} />
         </div>
       </section>
 
       <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Experiência e posicionamento</h3>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Anos de experiência" name="anos_experiencia" value={dados.anos_experiencia} onChange={handleChange} required placeholder="Ex: 8 anos" />
-          <Field label="Nº aproximado de casamentos" name="numero_casamentos" value={dados.numero_casamentos} onChange={handleChange} placeholder="Ex: 200+" />
+          <Field label="Anos de experiência" name="anos_experiencia" value={dados.anos_experiencia} onChange={handleChange} required placeholder="Ex: 8 anos" maxLength={120} />
+          <Field label="Nº aproximado de casamentos" name="numero_casamentos" value={dados.numero_casamentos} onChange={handleChange} placeholder="Ex: 200+" maxLength={120} />
         </div>
-        <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea required placeholder="Ex: casamentos na natureza, fotojornalismo..." />
-        <Field label="Ticket médio (R$)" name="preco_medio" value={dados.preco_medio} onChange={handleChange} placeholder="Ex: R$ 8.000 a R$ 15.000" />
-        <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." />
+        <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea required placeholder="Ex: casamentos na natureza, fotojornalismo..." maxLength={400} />
+        <Field label="Ticket médio (R$)" name="preco_medio" value={dados.preco_medio} onChange={handleChange} placeholder="Ex: R$ 8.000 a R$ 15.000" maxLength={120} />
+        <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." maxLength={120} />
       </section>
 
       <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Diferenciais e estilo</h3>
-        <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED..." />
-        <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea required placeholder="O que faz este profissional ser único?" />
-        <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" />
+        <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED..." maxLength={400} />
+        <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea required placeholder="O que faz este profissional ser único?" maxLength={400} />
+        <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" maxLength={400} />
       </section>
 
       <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
         <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Storytelling e conexão emocional</h3>
-        <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea placeholder="O que os noivos mais falam depois do casamento?" />
-        <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea placeholder="Uma história ou situação marcante no trabalho..." />
-        <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." />
-        <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea placeholder="Qualquer outra informação relevante para o roteiro..." />
+        <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea placeholder="O que os noivos mais falam depois do casamento?" maxLength={400} />
+        <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea placeholder="Uma história ou situação marcante no trabalho..." maxLength={400} />
+        <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." maxLength={400} />
+        <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea placeholder="Qualquer outra informação relevante para o roteiro..." maxLength={400} />
       </section>
 
       {erro && (
