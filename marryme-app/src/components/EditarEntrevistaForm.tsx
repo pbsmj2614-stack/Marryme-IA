@@ -56,8 +56,17 @@ export default function EditarEntrevistaForm({
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState("");
 
+  function formatarTelefone(valor: string): string {
+    const digits = valor.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 2) return digits.length ? `(${digits}` : "";
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
   function handleChange(name: keyof DadosEntrevista, value: string) {
-    setDados((prev) => ({ ...prev, [name]: value }));
+    const val = name === "whatsapp" ? formatarTelefone(value) : value;
+    setDados((prev) => ({ ...prev, [name]: val }));
   }
 
   async function handleSubmit(e: React.FormEvent) {

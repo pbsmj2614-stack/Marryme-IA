@@ -8,7 +8,6 @@ import {
   LineRuleType,
   Packer,
   Paragraph,
-  ShadingType,
   Table,
   TextRun,
   convertInchesToTwip,
@@ -77,12 +76,6 @@ function normalizar(str: string): string {
 
 function nomeArquivo(nome: string, tituloSlug: string): string {
   return `MM_${tituloSlug}_${normalizar(nome)}.docx`;
-}
-
-// ShadingType.CLEAR é a forma correta de cor sólida no OOXML.
-// ShadingType.SOLID usa "color" como cor do padrão (não o fill), causando o bug azul-lavanda.
-function shd(fill: string): { type: typeof ShadingType.CLEAR; color: string; fill: string } {
-  return { type: ShadingType.CLEAR, color: "auto", fill };
 }
 
 
@@ -157,55 +150,57 @@ function cabecalhoLogo(logoData: ArrayBuffer): Header {
   });
 }
 
-// Header de sub-seção reutilizável: fundo escuro, borda colorida à esquerda
-function headerSubSecao(
-  label: string,
-  corBorda: string = C.PINK,
-  corTexto: string = C.WHITE,
-  badge?: { texto: string; cor: string },
-): Paragraph {
+// Header de cena: número em rosa + título escuro + tempo cinza — sem shading, sem bugs
+function headerCena(num: number, titulo: string, tempo: string, corAccento: string = C.PINK): Paragraph {
   return new Paragraph({
-    shading: shd(C.DARK),
-    border: { left: { style: BorderStyle.SINGLE, size: 18, color: corBorda, space: 0 } },
+    border: {
+      top:    { style: BorderStyle.SINGLE, size: 4,  color: C.GRAY_BORDER, space: 4 },
+      bottom: { style: BorderStyle.SINGLE, size: 4,  color: C.GRAY_BORDER, space: 4 },
+      left:   { style: BorderStyle.SINGLE, size: 24, color: corAccento,    space: 6 },
+    },
     keepNext: true,
-    spacing: { before: 0, after: 0 },
-    indent: { left: convertInchesToTwip(0.15) },
+    spacing: { before: 200, after: 100 },
+    indent: { left: convertInchesToTwip(0.2) },
     children: [
-      new TextRun({ text: label, bold: true, color: corTexto, size: SZ.SMALL, font: FONT }),
-      ...(badge ? [
-        new TextRun({ text: "    \u25CF  ", color: badge.cor, size: SZ.TINY, font: FONT }),
-        new TextRun({ text: badge.texto, bold: true, color: badge.cor, size: SZ.SMALL, font: FONT }),
-      ] : []),
+      new TextRun({ text: `CENA ${String(num).padStart(2, "0")}`, bold: true, color: corAccento, size: SZ.SMALL, font: FONT }),
+      new TextRun({ text: `  —  ${titulo.toUpperCase()}`, bold: true, color: C.DARK, size: SZ.SMALL, font: FONT }),
+      new TextRun({ text: `    \u00B7  ${tempo}`, color: C.GRAY, size: SZ.TINY, font: FONT }),
     ],
   });
 }
 
-// Cabeçalho de cena: usa headerSubSecao com badge de tempo
-function headerCena(num: number, titulo: string, tempo: string, corAccento: string = C.PINK): Paragraph {
-  return headerSubSecao(
-    `CENA ${String(num).padStart(2, "0")} — ${titulo.toUpperCase()}`,
-    corAccento,
-    C.WHITE,
-    { texto: tempo, cor: corAccento },
-  );
+// Header de sub-seção (anúncios, direção): label colorido com borda esquerda
+function headerSubSecao(label: string, cor: string = C.PINK): Paragraph {
+  return new Paragraph({
+    border: { left: { style: BorderStyle.SINGLE, size: 20, color: cor, space: 6 } },
+    keepNext: true,
+    spacing: { before: 200, after: 60 },
+    indent: { left: convertInchesToTwip(0.15) },
+    children: [
+      new TextRun({ text: label, bold: true, color: cor, size: SZ.SMALL, font: FONT }),
+    ],
+  });
 }
 
-// Título de seção: parágrafo navy com borda colorida à esquerda
-// corAccento = rosa para roteiro/análise/direção, azul para meta ads
-function tituloSecao(texto: string, corAccento: string = C.PINK): Paragraph[] {
+// Título de seção numerado — mesmo estilo limpo dos headers de cena
+function tituloSecao(numero: number, texto: string, corAccento: string = C.PINK): Paragraph[] {
   return [
-    new Paragraph({ spacing: { before: 360, after: 0 }, keepNext: true }),
+    new Paragraph({ spacing: { before: 480, after: 0 }, keepNext: true }),
     new Paragraph({
-      shading: shd(C.DARK),
-      border: { left: { style: BorderStyle.SINGLE, size: 24, color: corAccento, space: 0 } },
+      border: {
+        top:    { style: BorderStyle.SINGLE, size: 8,  color: corAccento,    space: 4 },
+        bottom: { style: BorderStyle.SINGLE, size: 8,  color: corAccento,    space: 4 },
+        left:   { style: BorderStyle.SINGLE, size: 36, color: corAccento,    space: 8 },
+      },
+      keepNext: true,
       spacing: { before: 0, after: 0 },
       indent: { left: convertInchesToTwip(0.2) },
-      keepNext: true,
       children: [
-        new TextRun({ text: texto.toUpperCase(), bold: true, color: C.WHITE, size: SZ.SECTION, font: FONT }),
+        new TextRun({ text: `0${numero}  `, bold: true, color: corAccento, size: SZ.SECTION, font: FONT }),
+        new TextRun({ text: texto.toUpperCase(), bold: true, color: C.DARK, size: SZ.SECTION, font: FONT }),
       ],
     }),
-    espaco(180),
+    espaco(200),
   ];
 }
 
@@ -247,6 +242,7 @@ function fala(falante: string, texto: string): Paragraph[] {
 function campoValor(label: string, valor: string): Paragraph[] {
   return [
     new Paragraph({
+      keepNext: true,
       spacing: { before: 180, after: 40 },
       children: [new TextRun({ text: label.toUpperCase(), bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
     }),
@@ -308,7 +304,7 @@ function paginaCapa(nome: string, categoria: string, titulo: string): Paragraph[
 
 function secaoAnalise(a: AnaliseEstrategica): (Paragraph | Table)[] {
   return [
-    ...tituloSecao("Análise Estratégica do Perfil"),
+    ...tituloSecao(1, "Análise Estratégica"),
     new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { before: 0, after: 180, ...LINHA_NORMAL },
@@ -324,11 +320,13 @@ function secaoAnalise(a: AnaliseEstrategica): (Paragraph | Table)[] {
     ...campoValor("Nível de Mercado", a.nivel_mercado),
     ...campoValor("Tom de Comunicação", a.tom_comunicacao),
     new Paragraph({
+      keepNext: true,
       spacing: { before: 180, after: 40 },
       children: [new TextRun({ text: "DIFERENCIAIS-CHAVE", bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
     }),
     ...a.diferenciais_chave.map(itemBullet),
     new Paragraph({
+      keepNext: true,
       spacing: { before: 180, after: 40 },
       children: [new TextRun({ text: "GATILHOS EMOCIONAIS", bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
     }),
@@ -341,8 +339,9 @@ function secaoAnalise(a: AnaliseEstrategica): (Paragraph | Table)[] {
 function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Paragraph | Table)[] {
   const primeiroNome = nomeCliente.toUpperCase().split(" ")[0];
   const items: (Paragraph | Table)[] = [
-    ...tituloSecao("Roteiro de Vídeo de Apresentação", C.PINK),
+    ...tituloSecao(2, "Roteiro de Apresentação"),
     new Paragraph({
+      keepNext: true,
       spacing: { before: 0, after: 40, ...LINHA_NORMAL },
       children: [
         new TextRun({ text: "Tempo estimado: ", bold: true, size: SZ.SMALL, font: FONT }),
@@ -352,6 +351,7 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
       ],
     }),
     new Paragraph({
+      keepNext: true,
       spacing: { before: 0, after: 40, ...LINHA_NORMAL },
       children: [
         new TextRun({ text: "Canal: ", bold: true, size: SZ.SMALL, font: FONT }),
@@ -406,7 +406,7 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
   const LABEL_TIPO: Record<string, string> = { emocional: "EMOCIONAL", direto: "DIRETO", premium: "PREMIUM" };
 
   const items: (Paragraph | Table)[] = [
-    ...tituloSecao("Roteiros para Anúncios — Meta Ads", C.BLUE),
+    ...tituloSecao(3, "Roteiro para Meta Ads", C.BLUE),
     new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { before: 0, after: 180, ...LINHA_NORMAL },
@@ -441,6 +441,7 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
         children: [new TextRun({ text: ad.copy, size: SZ.BODY, color: C.BLACK, font: FONT })],
       }),
       new Paragraph({
+        keepNext: true,
         indent: { left: convertInchesToTwip(0.2) },
         spacing: { before: 0, after: 60 },
         children: [
@@ -459,7 +460,7 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
 
 function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
   const items: (Paragraph | Table)[] = [
-    ...tituloSecao("Direção Criativa", C.PINK),
+    ...tituloSecao(4, "Direção Criativa"),
     new Paragraph({
       alignment: AlignmentType.BOTH,
       spacing: { before: 0, after: 180, ...LINHA_NORMAL },
@@ -485,9 +486,10 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
       ["Legenda sugerida", item.legenda_sugerida],
     ];
 
-    campos.filter(([, v]) => v).forEach(([label, valor]) => {
+    campos.filter(([, v]) => v).forEach(([label, valor], i, arr) => {
       items.push(
         new Paragraph({
+          keepNext: i < arr.length - 1,
           alignment: AlignmentType.BOTH,
           indent: { left: convertInchesToTwip(0.3) },
           spacing: { before: 60, after: 40, ...LINHA_NORMAL },
