@@ -1,19 +1,13 @@
-Sugira direção criativa para vídeos de um profissional de casamentos.
+Crie exatamente 3 sugestões de direção criativa para vídeos do profissional abaixo.
+{{FOCO_CATEGORIA}}
 
-Inclua:
-- tipos de cena
-- ambientação
-- enquadramento
-- estilo de edição
-- sugestões de legenda
+Regras:
+- Cada sugestão deve ser específica para o perfil real — sem cenas genéricas de casamento
+- Cada campo (ambientacao, enquadramento, estilo_edicao, legenda_sugerida): máximo 2 linhas
+- Array "direcao" com exatamente 3 itens
 
-Evite respostas genéricas.
-
-Retorne em JSON:
-NÃO escreva nenhum texto fora do JSON.
-{
-  "direcao": []
-}
+Retorne JSON válido. Nenhum texto fora do JSON.
+Campos por sugestão: tipo_cena, ambientacao, enquadramento, estilo_edicao, legenda_sugerida
 
 DADOS:
 {{JSON_ESTRATEGICO}}

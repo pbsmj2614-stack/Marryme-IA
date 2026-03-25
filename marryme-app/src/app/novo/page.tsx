@@ -43,6 +43,7 @@ function Field({
   type = "text",
   placeholder = "",
   textarea = false,
+  rows = 3,
   required = false,
   maxLength,
 }: {
@@ -53,6 +54,7 @@ function Field({
   type?: string;
   placeholder?: string;
   textarea?: boolean;
+  rows?: number;
   required?: boolean;
   maxLength?: number;
 }) {
@@ -67,7 +69,7 @@ function Field({
       </label>
       {textarea ? (
         <textarea
-          rows={3}
+          rows={rows}
           value={value}
           onChange={(e) => onChange(name, e.target.value)}
           placeholder={placeholder}
@@ -231,35 +233,35 @@ export default function NovoPage() {
               <Field label="Nº aproximado de casamentos" name="numero_casamentos" value={dados.numero_casamentos} onChange={handleChange} placeholder="Ex: 200+" maxLength={120} />
             </div>
 
-            <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea placeholder="Ex: casamentos na natureza, fotojornalismo, música ao vivo MPB..." required maxLength={400} />
+            <Field label="Especialidade / nicho" name="especialidade" value={dados.especialidade} onChange={handleChange} textarea rows={4} placeholder="Ex: casamentos na natureza, fotojornalismo, música ao vivo MPB..." required maxLength={800} />
 
             <Field label="Ticket médio (R$)" name="preco_medio" value={dados.preco_medio} onChange={handleChange} placeholder="Ex: R$ 8.000 a R$ 15.000" maxLength={120} />
 
-            <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." maxLength={120} />
+            <Field label="Formação / certificações" name="formacao" value={dados.formacao} onChange={handleChange} textarea placeholder="Cursos, workshops, especializações..." maxLength={300} />
           </section>
 
           {/* Diferenciais */}
           <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Diferenciais e estilo</h3>
 
-            <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED, carro de apoio..." maxLength={400} />
+            <Field label="Equipamentos / recursos principais" name="equipamentos" value={dados.equipamentos} onChange={handleChange} textarea placeholder="Ex: câmeras Sony, iluminação LED, carro de apoio..." maxLength={500} />
 
-            <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea required placeholder="O que faz este profissional ser único? Seja específico." maxLength={400} />
+            <Field label="Principais diferenciais" name="diferenciais" value={dados.diferenciais} onChange={handleChange} textarea rows={5} required placeholder="O que faz este profissional ser único? Seja específico." maxLength={1000} />
 
-            <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" maxLength={400} />
+            <Field label="Estilo / forma de trabalho" name="estilo_trabalho" value={dados.estilo_trabalho} onChange={handleChange} textarea rows={5} required placeholder="Como ele conduz o dia? Como é a relação com os noivos?" maxLength={1000} />
           </section>
 
           {/* Storytelling */}
           <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
             <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Storytelling e conexão emocional</h3>
 
-            <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea placeholder="O que os noivos mais falam depois do casamento?" maxLength={400} />
+            <Field label="Depoimento / feedback favorito de clientes" name="depoimento_favorito" value={dados.depoimento_favorito} onChange={handleChange} textarea rows={4} placeholder="O que os noivos mais falam depois do casamento?" maxLength={800} />
 
-            <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea placeholder="Uma história ou situação marcante no trabalho..." maxLength={400} />
+            <Field label="Momentos especiais / casos que marcaram" name="momentos_especiais" value={dados.momentos_especiais} onChange={handleChange} textarea rows={5} placeholder="Uma história ou situação marcante no trabalho..." maxLength={1200} />
 
-            <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." maxLength={400} />
+            <Field label="Como os noivos costumam encontrá-lo" name="como_conheceu_noivos" value={dados.como_conheceu_noivos} onChange={handleChange} textarea placeholder="Indicação, Instagram, feiras, Google..." maxLength={500} />
 
-            <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea placeholder="Qualquer outra informação relevante para o roteiro..." maxLength={400} />
+            <Field label="Informações adicionais" name="informacoes_adicionais" value={dados.informacoes_adicionais} onChange={handleChange} textarea rows={5} placeholder="Qualquer outra informação relevante para o roteiro..." maxLength={1200} />
           </section>
 
           {erro && (

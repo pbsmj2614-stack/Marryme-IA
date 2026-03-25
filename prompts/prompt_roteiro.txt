@@ -1,34 +1,18 @@
-Crie um roteiro de vídeo para um profissional do mercado de casamentos.
+Crie roteiro de vídeo de 5 cenas para o profissional abaixo.
+{{FOCO_CATEGORIA}}
 
-Baseie-se em:
-- storytelling emocional
-- conexão com noivos
-- construção de autoridade
-- diferenciação clara
+Regras:
+- Linguagem falada, jamais narrada ou corporativa
+- Cite nome, número, lugar ou história real da entrevista em ao menos 3 cenas
+- Proibido expressões genéricas ou frases motivacionais
+- "texto": máximo 3 parágrafos curtos separados por \n\n
+- "legenda_sugerida": 1 frase
+- "orientacao_captacao": 1 frase objetiva
 
-Estrutura obrigatória:
-1. Hook emocional (chamada forte)
-2. Apresentação + autoridade
-3. Diferenciais reais
-4. Forma de trabalho
-5. Encerramento + CTA
+Cenas: 1-Hook emocional, 2-Apresentação+autoridade, 3-Diferenciais reais, 4-Forma de trabalho, 5-Encerramento+CTA
 
-O tom deve ser:
-- humano
-- envolvente
-- elegante
-
-Retorne SOMENTE em JSON válido:
-NÃO escreva nenhum texto fora do JSON.
-{
-  "roteiro": [
-    {"cena": 1, "texto": ""},
-    {"cena": 2, "texto": ""},
-    {"cena": 3, "texto": ""},
-    {"cena": 4, "texto": ""},
-    {"cena": 5, "texto": ""}
-  ]
-}
+Retorne JSON válido. Nenhum texto fora do JSON.
+Campos por cena: cena (int), titulo, texto, legenda_sugerida, orientacao_captacao
 
 DADOS ESTRATÉGICOS:
 {{JSON_ESTRATEGICO}}

@@ -34,7 +34,7 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
         disabled={loading}
         className="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-6 py-2.5 rounded-lg text-sm transition disabled:opacity-60"
       >
-        {loading ? "Gerando roteiro..." : "Gerar roteiro com IA"}
+        {loading ? "Gerando roteiro..." : "Gerar roteiro completo"}
       </button>
       {loading && (
         <p className="text-xs text-gray-400">Isso pode levar ~30 segundos...</p>

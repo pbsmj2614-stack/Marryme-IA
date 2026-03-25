@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import ExportarButton from "@/components/ExportarButton";
+import type { Categoria } from "@/lib/types";
 
 interface Props {
   prestadorId: string;
@@ -211,9 +213,19 @@ export default function PrestadorCard({
         )}
       </div>
 
-      {/* Linha 4: contagem de roteiros */}
-      <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
-        {total === 0 ? "Nenhum roteiro gerado" : `${total} roteiro${total !== 1 ? "s" : ""} gerado${total !== 1 ? "s" : ""}`}
+      {/* Linha 4: contagem + botão download */}
+      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+        <span className="text-xs text-gray-400">
+          {total === 0 ? "Nenhum roteiro gerado" : `${total} roteiro${total !== 1 ? "s" : ""} gerado${total !== 1 ? "s" : ""}`}
+        </span>
+        {ultimoRoteiroAprovado && ultimoRoteiroId && (
+          <ExportarButton
+            tipo="completo"
+            variant="icon"
+            prestador={{ nome_artistico: nome, categoria: categoria as Categoria }}
+            roteiroId={ultimoRoteiroId}
+          />
+        )}
       </div>
 
       {/* Botão 3 pontos */}

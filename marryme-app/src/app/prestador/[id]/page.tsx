@@ -9,6 +9,7 @@ import RefazerRoteiroButton from "@/components/RefazerRoteiroButton";
 import ExcluirPrestadorButton from "@/components/ExcluirPrestadorButton";
 import CopiarButton from "@/components/CopiarButton";
 import GerarSecaoButton from "@/components/GerarSecaoButton";
+import ExportarButton from "@/components/ExportarButton";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 const CATEGORIA_LABEL: Record<string, string> = {
@@ -140,13 +141,45 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
               </div>
 
               <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
-                {p.whatsapp && <span>📱 {p.whatsapp}</span>}
-                {p.instagram && <span>📸 {p.instagram}</span>}
-                {p.email && <span>✉️ {p.email}</span>}
+                {p.whatsapp && (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.03 2.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {p.whatsapp}
+                  </span>
+                )}
+                {p.instagram && (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="12" r="4" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor"/>
+                    </svg>
+                    {p.instagram}
+                  </span>
+                )}
+                {p.email && (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" strokeLinecap="round" strokeLinejoin="round"/>
+                      <polyline points="22,6 12,13 2,6" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {p.email}
+                  </span>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {ultimo && (
+                <ExportarButton
+                  tipo="completo"
+                  variant="primary"
+                  prestador={p}
+                  roteiro={ultimo}
+                />
+              )}
               {ultimo && (
                 <AprovarButton roteiroId={ultimo.id} aprovadoAtual={ultimo.aprovado} />
               )}
@@ -164,7 +197,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                 href={`/prestador/${id}/editar`}
                 className="text-xs font-medium text-brand-600 hover:text-brand-800 hover:underline transition"
               >
-                ✏️ Editar informações
+                Editar informações
               </Link>
             </div>
 
@@ -255,12 +288,17 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
               defaultOpen={!!ultimo?.analise_estrategica}
               conteudoCopiar={textoAnalise}
               acaoSlot={
-                <GerarSecaoButton
-                  entrevistaId={entrevista.id}
-                  roteiroId={ultimo?.id}
-                  secao="analise_estrategica"
-                  modo={ultimo?.analise_estrategica ? "refazer" : "gerar"}
-                />
+                <div className="flex items-center gap-2">
+                  {ultimo?.analise_estrategica && (
+                    <ExportarButton tipo="analise" variant="outline" prestador={p} roteiro={ultimo} />
+                  )}
+                  <GerarSecaoButton
+                    entrevistaId={entrevista.id}
+                    roteiroId={ultimo?.id}
+                    secao="analise_estrategica"
+                    modo={ultimo?.analise_estrategica ? "refazer" : "gerar"}
+                  />
+                </div>
               }
             >
             {ultimo?.analise_estrategica ? (
@@ -314,12 +352,17 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
               titulo="2. Roteiro de Vídeo"
               conteudoCopiar={textoRoteiro}
               acaoSlot={
-                <GerarSecaoButton
-                  entrevistaId={entrevista.id}
-                  roteiroId={ultimo?.id}
-                  secao="roteiro_sugerido"
-                  modo={ultimo?.roteiro_sugerido ? "refazer" : "gerar"}
-                />
+                <div className="flex items-center gap-2">
+                  {ultimo?.roteiro_sugerido && (
+                    <ExportarButton tipo="roteiro" variant="outline" prestador={p} roteiro={ultimo} />
+                  )}
+                  <GerarSecaoButton
+                    entrevistaId={entrevista.id}
+                    roteiroId={ultimo?.id}
+                    secao="roteiro_sugerido"
+                    modo={ultimo?.roteiro_sugerido ? "refazer" : "gerar"}
+                  />
+                </div>
               }
             >
               {ultimo?.roteiro_sugerido?.roteiro ? (
@@ -363,12 +406,17 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
               titulo="3. Roteiro Para Anúncios"
               conteudoCopiar={textoCopy}
               acaoSlot={
-                <GerarSecaoButton
-                  entrevistaId={entrevista.id}
-                  roteiroId={ultimo?.id}
-                  secao="copy_anuncios"
-                  modo={ultimo?.copy_anuncios ? "refazer" : "gerar"}
-                />
+                <div className="flex items-center gap-2">
+                  {ultimo?.copy_anuncios && (
+                    <ExportarButton tipo="anuncios" variant="outline" prestador={p} roteiro={ultimo} />
+                  )}
+                  <GerarSecaoButton
+                    entrevistaId={entrevista.id}
+                    roteiroId={ultimo?.id}
+                    secao="copy_anuncios"
+                    modo={ultimo?.copy_anuncios ? "refazer" : "gerar"}
+                  />
+                </div>
               }
             >
               {ultimo?.copy_anuncios?.anuncios ? (
@@ -409,12 +457,17 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
               titulo="4. Direção Criativa"
               conteudoCopiar={textoDirecao}
               acaoSlot={
-                <GerarSecaoButton
-                  entrevistaId={entrevista.id}
-                  roteiroId={ultimo?.id}
-                  secao="direcao_criativa"
-                  modo={ultimo?.direcao_criativa ? "refazer" : "gerar"}
-                />
+                <div className="flex items-center gap-2">
+                  {ultimo?.direcao_criativa && (
+                    <ExportarButton tipo="direcao" variant="outline" prestador={p} roteiro={ultimo} />
+                  )}
+                  <GerarSecaoButton
+                    entrevistaId={entrevista.id}
+                    roteiroId={ultimo?.id}
+                    secao="direcao_criativa"
+                    modo={ultimo?.direcao_criativa ? "refazer" : "gerar"}
+                  />
+                </div>
               }
             >
               {ultimo?.direcao_criativa?.direcao ? (
