@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
+import { formatarTelefone } from "@/lib/utils";
 import Header from "@/components/Header";
 
 const CATEGORIAS: { value: Categoria; label: string }[] = [
@@ -110,14 +111,6 @@ export default function NovoPage() {
   const [status, setStatus] = useState("");
   const [erro, setErro] = useState("");
   const acaoRef = useRef<"cadastrar" | "gerar">("cadastrar");
-
-  function formatarTelefone(valor: string): string {
-    const digits = valor.replace(/\D/g, "").slice(0, 11);
-    if (digits.length <= 2) return digits.length ? `(${digits}` : "";
-    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-  }
 
   function handleChange(name: keyof DadosEntrevista, value: string) {
     const val = name === "whatsapp" ? formatarTelefone(value) : value;
@@ -228,8 +221,8 @@ export default function NovoPage() {
               <Field label="E-mail" name="email" value={dados.email} onChange={handleChange} type="email" placeholder="contato@..." maxLength={60} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" maxLength={100} />
-              <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" maxLength={100} />
+              <Field label="Cidade base" name="cidade_base" value={dados.cidade_base} onChange={handleChange} placeholder="São Paulo - SP" maxLength={300} />
+              <Field label="Instagram" name="instagram" value={dados.instagram} onChange={handleChange} placeholder="@usuario" maxLength={300} />
             </div>
           </section>
 

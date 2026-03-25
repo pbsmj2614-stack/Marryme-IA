@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import ExportarButton from "@/components/ExportarButton";
 import type { Categoria } from "@/lib/types";
+import { formatarTelefone } from "@/lib/utils";
 
 interface Props {
   prestadorId: string;
@@ -199,7 +200,7 @@ export default function PrestadorCard({
             <svg className="w-3.5 h-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.03 2.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <span className="truncate">{whatsapp}</span>
+            <span className="truncate">{formatarTelefone(whatsapp)}</span>
           </div>
         )}
         {cidadeCurta && (
