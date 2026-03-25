@@ -4,16 +4,13 @@ import {
   Document,
   Footer,
   Header,
+  ImageRun,
   LineRuleType,
   Packer,
   Paragraph,
   ShadingType,
-  TabStopType,
   Table,
-  TableCell,
-  TableRow,
   TextRun,
-  WidthType,
   convertInchesToTwip,
 } from "docx";
 import type {
@@ -53,8 +50,6 @@ const SZ = {
 const FONT = "Nunito";
 
 // Página A4/Letter com 1" de margem: área útil = 6,5" = 9360 twips
-const PAGE_WIDTH = convertInchesToTwip(6.5);
-
 // Espaçamento de linha 1,15× para texto corrido
 const LINHA_NORMAL = { line: 276, lineRule: LineRuleType.AUTO };
 
@@ -80,8 +75,8 @@ function normalizar(str: string): string {
   return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
 }
 
-function nomeArquivo(nome: string, tipo: string): string {
-  return `${normalizar(nome)}_${tipo}_MarryMe.docx`;
+function nomeArquivo(nome: string, tituloSlug: string): string {
+  return `MM_${tituloSlug}_${normalizar(nome)}.docx`;
 }
 
 // ShadingType.CLEAR é a forma correta de cor sólida no OOXML.
@@ -90,8 +85,6 @@ function shd(fill: string): { type: typeof ShadingType.CLEAR; color: string; fil
   return { type: ShadingType.CLEAR, color: "auto", fill };
 }
 
-const SEM_BORDA = { style: BorderStyle.NONE, size: 0, color: "auto", space: 0 };
-const SEM_BORDAS_CELULA = { top: SEM_BORDA, bottom: SEM_BORDA, left: SEM_BORDA, right: SEM_BORDA };
 
 // ─── Blocos base ──────────────────────────────────────────────────────────────
 
@@ -106,8 +99,19 @@ function regua(cor: string = C.GRAY_BORDER): Paragraph {
   });
 }
 
-// Cabeçalho de página: MARRY ME  |  Perfil de Apresentação
-function cabecalhoDoc(): Header {
+// Busca o logo da pasta public e retorna ArrayBuffer (ou null se não encontrado)
+async function buscarLogo(): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetch("/logo-marryme.png");
+    if (!res.ok) return null;
+    return await res.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
+// Cabeçalho padrão (páginas 2+): MARRY ME  |  Perfil de Apresentação
+function cabecalhoTexto(): Header {
   return new Header({
     children: [
       new Paragraph({
@@ -123,37 +127,80 @@ function cabecalhoDoc(): Header {
   });
 }
 
-// Cabeçalho de cena: parágrafo único com fundo escuro — sem tabela, sem risco de texto vertical.
-// Título à esquerda, tempo à direita via tab stop. Borda colorida à esquerda como acento.
-function headerCena(num: number, titulo: string, tempo: string, corAccento: string = C.PINK): Paragraph {
-  return new Paragraph({
-    shading: shd(C.DARK),
-    border: { left: { style: BorderStyle.SINGLE, size: 20, color: corAccento, space: 0 } },
-    tabStops: [{ type: TabStopType.RIGHT, position: convertInchesToTwip(6.3) }],
-    keepNext: true,
-    spacing: { before: 0, after: 0 },
-    indent: { left: convertInchesToTwip(0.15), right: convertInchesToTwip(0.15) },
+// Cabeçalho da primeira página: logo pequeno
+function cabecalhoLogo(logoData: ArrayBuffer): Header {
+  return new Header({
     children: [
-      new TextRun({
-        text: `CENA ${String(num).padStart(2, "0")} — ${titulo.toUpperCase()}`,
-        bold: true, color: C.WHITE, size: SZ.SMALL, font: FONT,
+      // Linha 1: logo à esquerda
+      new Paragraph({
+        spacing: { before: 0, after: 20 },
+        children: [
+          new ImageRun({
+            data: logoData,
+            transformation: { width: 80, height: 51 },
+            type: "png",
+          }) as unknown as TextRun,
+        ],
       }),
-      new TextRun({ text: "\t", size: SZ.SMALL, font: FONT }),
-      new TextRun({ text: tempo, bold: true, color: corAccento, size: SZ.SMALL, font: FONT }),
+      // Linha 2: texto à direita + borda inferior
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { before: 0, after: 80 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: C.GRAY_BORDER, space: 6 } },
+        children: [
+          new TextRun({ text: "MARRY ME", bold: true, color: C.PINK, size: SZ.SMALL, font: FONT }),
+          new TextRun({ text: "   |   ", color: C.GRAY_BORDER, size: SZ.SMALL }),
+          new TextRun({ text: "Assessoria de Vendas & Marketing para Casamentos", color: C.GRAY, size: SZ.TINY, font: FONT }),
+        ],
+      }),
     ],
   });
+}
+
+// Header de sub-seção reutilizável: fundo escuro, borda colorida à esquerda
+function headerSubSecao(
+  label: string,
+  corBorda: string = C.PINK,
+  corTexto: string = C.WHITE,
+  badge?: { texto: string; cor: string },
+): Paragraph {
+  return new Paragraph({
+    shading: shd(C.DARK),
+    border: { left: { style: BorderStyle.SINGLE, size: 18, color: corBorda, space: 0 } },
+    keepNext: true,
+    spacing: { before: 0, after: 0 },
+    indent: { left: convertInchesToTwip(0.15) },
+    children: [
+      new TextRun({ text: label, bold: true, color: corTexto, size: SZ.SMALL, font: FONT }),
+      ...(badge ? [
+        new TextRun({ text: "    \u25CF  ", color: badge.cor, size: SZ.TINY, font: FONT }),
+        new TextRun({ text: badge.texto, bold: true, color: badge.cor, size: SZ.SMALL, font: FONT }),
+      ] : []),
+    ],
+  });
+}
+
+// Cabeçalho de cena: usa headerSubSecao com badge de tempo
+function headerCena(num: number, titulo: string, tempo: string, corAccento: string = C.PINK): Paragraph {
+  return headerSubSecao(
+    `CENA ${String(num).padStart(2, "0")} — ${titulo.toUpperCase()}`,
+    corAccento,
+    C.WHITE,
+    { texto: tempo, cor: corAccento },
+  );
 }
 
 // Título de seção: parágrafo navy com borda colorida à esquerda
 // corAccento = rosa para roteiro/análise/direção, azul para meta ads
 function tituloSecao(texto: string, corAccento: string = C.PINK): Paragraph[] {
   return [
-    espaco(360),
+    new Paragraph({ spacing: { before: 360, after: 0 }, keepNext: true }),
     new Paragraph({
       shading: shd(C.DARK),
       border: { left: { style: BorderStyle.SINGLE, size: 24, color: corAccento, space: 0 } },
       spacing: { before: 0, after: 0 },
-      indent: { left: convertInchesToTwip(0.2), right: convertInchesToTwip(0.15) },
+      indent: { left: convertInchesToTwip(0.2) },
+      keepNext: true,
       children: [
         new TextRun({ text: texto.toUpperCase(), bold: true, color: C.WHITE, size: SZ.SECTION, font: FONT }),
       ],
@@ -224,23 +271,15 @@ function itemBullet(texto: string): Paragraph {
 
 // ─── Capa ─────────────────────────────────────────────────────────────────────
 
-function paginaCapa(nome: string, categoria: string): Paragraph[] {
+function paginaCapa(nome: string, categoria: string, titulo: string): Paragraph[] {
   const cat = CATEG[categoria] ?? categoria;
   return [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 60 },
-      children: [new TextRun({ text: "MARRY ME", bold: true, color: C.PINK, size: 40, font: FONT })],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 480 },
-      children: [
-        new TextRun({ text: "Assessoria de Vendas & Marketing para Casamentos", color: C.GRAY, size: SZ.SMALL, font: FONT }),
-      ],
-    }),
-    regua(C.GRAY_BORDER),
     espaco(480),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 0, after: 80 },
+      children: [new TextRun({ text: titulo.toUpperCase(), color: C.GRAY, size: SZ.SMALL, font: FONT, characterSpacing: 40 })],
+    }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 140 },
@@ -384,16 +423,7 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
     const cor = COR_TIPO[ad.tipo] ?? C.PINK;
     items.push(
       espaco(200),
-      new Paragraph({
-        keepNext: true,
-        shading: shd(C.GRAY_LIGHT),
-        border: { left: { style: BorderStyle.SINGLE, size: 14, color: cor, space: 8 } },
-        indent: { left: convertInchesToTwip(0.2) },
-        spacing: { before: 80, after: 60 },
-        children: [
-          new TextRun({ text: LABEL_TIPO[ad.tipo] ?? ad.tipo.toUpperCase(), bold: true, color: cor, size: SZ.SMALL, font: FONT }),
-        ],
-      }),
+      headerSubSecao(LABEL_TIPO[ad.tipo] ?? ad.tipo.toUpperCase(), cor),
       new Paragraph({
         keepNext: true,
         indent: { left: convertInchesToTwip(0.2) },
@@ -445,16 +475,7 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
   d.direcao.forEach((item, idx) => {
     items.push(
       espaco(180),
-      new Paragraph({
-        keepNext: true,
-        shading: shd(C.GRAY_LIGHT),
-        border: { left: { style: BorderStyle.SINGLE, size: 12, color: C.SLATE, space: 8 } },
-        indent: { left: convertInchesToTwip(0.2) },
-        spacing: { before: 80, after: 60 },
-        children: [
-          new TextRun({ text: `${idx + 1}.  ${item.tipo_cena}`, bold: true, color: C.DARK, size: SZ.BODY, font: FONT }),
-        ],
-      }),
+      headerSubSecao(`${String(idx + 1).padStart(2, "0")}  —  ${item.tipo_cena.toUpperCase()}`, C.PINK),
     );
 
     const campos: [string, string][] = [
@@ -485,7 +506,7 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
 
 // ─── Montagem do documento ────────────────────────────────────────────────────
 
-function montarDocumento(children: (Paragraph | Table)[], nome: string, categoria: string): Document {
+function montarDocumento(children: (Paragraph | Table)[], nome: string, categoria: string, logoData?: ArrayBuffer | null): Document {
   const cat = CATEG[categoria] ?? categoria;
   return new Document({
     styles: {
@@ -496,6 +517,7 @@ function montarDocumento(children: (Paragraph | Table)[], nome: string, categori
     sections: [
       {
         properties: {
+          titlePage: logoData ? true : undefined,
           page: {
             margin: {
               top:    convertInchesToTwip(1),
@@ -505,7 +527,10 @@ function montarDocumento(children: (Paragraph | Table)[], nome: string, categori
             },
           },
         },
-        headers: { default: cabecalhoDoc() },
+        headers: {
+          default: cabecalhoTexto(),
+          ...(logoData ? { first: cabecalhoLogo(logoData) } : {}),
+        },
         footers: {
           default: new Footer({
             children: [
@@ -536,31 +561,35 @@ export async function exportarDocumento(
 ): Promise<void> {
   const nome = prestador.nome_artistico;
   const cat  = prestador.categoria;
-  const capa = paginaCapa(nome, cat);
+
+  const TITULOS: Record<TipoExport, [string, string]> = {
+    completo: ["Kit de Conteúdo",      "KitConteudo"],
+    analise:  ["Análise Estratégica",  "AnaliseEstrategica"],
+    roteiro:  ["Roteiro de Vídeo",     "RoteiroVideo"],
+    anuncios: ["Copy para Anúncios",   "CopyAnuncios"],
+    direcao:  ["Direção Criativa",     "DirecaoCriativa"],
+  };
+  const [titulo, sufixo] = TITULOS[tipo];
+  const capa = paginaCapa(nome, cat, titulo);
 
   let conteudo: (Paragraph | Table)[];
-  let sufixo: string;
 
   switch (tipo) {
     case "analise":
       if (!roteiro.analise_estrategica) throw new Error("Análise estratégica não disponível");
       conteudo = [...capa, ...secaoAnalise(roteiro.analise_estrategica)];
-      sufixo = "AnaliseEstrategica";
       break;
     case "roteiro":
       if (!roteiro.roteiro_sugerido) throw new Error("Roteiro de vídeo não disponível");
       conteudo = [...capa, ...secaoRoteiro(roteiro.roteiro_sugerido, nome)];
-      sufixo = "RoteiroVideo";
       break;
     case "anuncios":
       if (!roteiro.copy_anuncios) throw new Error("Anúncios não disponíveis");
       conteudo = [...capa, ...secaoAnuncios(roteiro.copy_anuncios)];
-      sufixo = "Anuncios";
       break;
     case "direcao":
       if (!roteiro.direcao_criativa) throw new Error("Direção criativa não disponível");
       conteudo = [...capa, ...secaoDirecao(roteiro.direcao_criativa)];
-      sufixo = "DirecaoCriativa";
       break;
     case "completo":
     default:
@@ -569,11 +598,11 @@ export async function exportarDocumento(
       if (roteiro.roteiro_sugerido)     conteudo.push(...secaoRoteiro(roteiro.roteiro_sugerido, nome));
       if (roteiro.copy_anuncios)        conteudo.push(...secaoAnuncios(roteiro.copy_anuncios));
       if (roteiro.direcao_criativa)     conteudo.push(...secaoDirecao(roteiro.direcao_criativa));
-      sufixo = "Completo";
       break;
   }
 
-  const doc  = montarDocumento(conteudo, nome, cat);
+  const logoData = await buscarLogo();
+  const doc  = montarDocumento(conteudo, nome, cat, logoData);
   const blob = await Packer.toBlob(doc);
   const url  = URL.createObjectURL(blob);
   const link = document.createElement("a");
