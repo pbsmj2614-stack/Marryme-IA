@@ -81,7 +81,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
   let totalClientes = 0;
   let totalTarefas = 0;
 
-  // ── 1. Busca abas ──
+  // ── 1. Busca todas as abas ──
   let todasAbas: string[] = [];
   try {
     todasAbas = await fetchTodasAbas();
@@ -90,22 +90,20 @@ export async function importarPlanilha(): Promise<ImportResult> {
     return { clientes: 0, tarefas: 0, erros };
   }
 
-  const ABAS_SISTEMA = new Set(["Cadastro_Clientes"]);
-  const abasClientes = todasAbas.filter((a) => !ABAS_SISTEMA.has(a));
-
-  // ── 2. Busca Cadastro_Clientes ──
+  // ── 2. Busca e valida Cadastro_Clientes (tolerante a variações de nome) ──
   let clientesSheet;
   try {
     clientesSheet = await fetchCadastroClientes();
   } catch (err) {
-    erros.push(`Erro ao buscar Cadastro_Clientes: ${String(err)}`);
+    erros.push(String(err));
     return { clientes: 0, tarefas: 0, erros };
   }
 
-  if (clientesSheet.length === 0) {
-    erros.push("Cadastro_Clientes está vazia ou sem dados após o cabeçalho.");
-    return { clientes: 0, tarefas: 0, erros };
-  }
+  // Exclui a aba de cadastro da lista de abas de clientes
+  const NOMES_SISTEMA = ["cadastro_clientes", "cadastro clientes", "clientes", "cadastro"];
+  const abasClientes = todasAbas.filter(
+    (a) => !NOMES_SISTEMA.includes(a.toLowerCase().trim())
+  );
 
   // ── 3. Monta payload de clientes ──
   const clientesPayload = clientesSheet.map((c) => ({

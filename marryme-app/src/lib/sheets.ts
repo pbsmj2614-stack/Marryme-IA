@@ -87,21 +87,47 @@ export async function fetchTodasAbas(): Promise<string[]> {
 }
 
 /**
- * Lê a aba Cadastro_Clientes e retorna todos os clientes.
- * Ignora a primeira linha (cabeçalho) e linhas com ID vazio.
+ * Resolve o nome real da aba de cadastro — tolerante a variações como
+ * "Cadastro_Clientes", "Cadastro Clientes", "cadastro_clientes", etc.
+ */
+export async function resolverAbaCadastro(): Promise<string> {
+  const abas = await fetchTodasAbas();
+  const candidatos = ["cadastro_clientes", "cadastro clientes", "clientes", "cadastro"];
+  const encontrada = abas.find((a) =>
+    candidatos.includes(a.toLowerCase().trim())
+  );
+  if (!encontrada) {
+    throw new Error(
+      `Aba de cadastro não encontrada. Abas disponíveis: ${abas.join(", ")}. ` +
+      `Renomeie a aba de clientes para "Cadastro_Clientes".`
+    );
+  }
+  return encontrada;
+}
+
+/**
+ * Lê a aba de cadastro de clientes e retorna todos os registros.
+ * Tolera variações no nome da aba e linhas com ID vazio.
  */
 export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
-  const range = encodeURIComponent("Cadastro_Clientes");
+  const nomeAba = await resolverAbaCadastro();
+  const range = encodeURIComponent(nomeAba);
   const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Sheets API error (Cadastro_Clientes) ${res.status}: ${body}`);
+    throw new Error(`Sheets API error (${nomeAba}) ${res.status}: ${body}`);
   }
   const data = await res.json();
   const values: string[][] = data.values ?? [];
 
-  return values
+  if (values.length <= 1) {
+    throw new Error(
+      `A aba "${nomeAba}" está vazia ou tem apenas o cabeçalho — adicione os dados dos clientes.`
+    );
+  }
+
+  const rows = values
     .slice(1) // skip header
     .map((r) => ({
       id_cliente:      r[0]?.trim()  ?? "",
@@ -117,7 +143,20 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
       responsavel_mm:  r[10]?.trim() ?? "",
       observacoes:     r[11]?.trim() ?? "",
     }))
-    .filter((c) => c.id_cliente !== "");
+    .filter((c) => c.id_cliente !== "" || c.nome_empresa !== "");
+
+  if (rows.length === 0) {
+    throw new Error(
+      `A aba "${nomeAba}" tem ${values.length - 1} linha(s) mas todas têm ` +
+      `as colunas ID e Nome vazias — verifique se os dados estão nas colunas corretas (A e B).`
+    );
+  }
+
+  // Garante id_cliente: usa nome se ID estiver vazio
+  return rows.map((r, i) => ({
+    ...r,
+    id_cliente: r.id_cliente || `AUTO${String(i + 1).padStart(3, "0")}`,
+  }));
 }
 
 /**
