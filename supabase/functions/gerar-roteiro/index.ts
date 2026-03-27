@@ -63,8 +63,8 @@ Regras:
 
 Cenas: 1-Hook emocional, 2-Apresentação+autoridade, 3-Diferenciais reais, 4-Forma de trabalho, 5-Encerramento+CTA
 
-Retorne JSON válido. Nenhum texto fora do JSON.
-Campos por cena: cena (int), titulo, texto, legenda_sugerida, orientacao_captacao
+Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
+{ "roteiro": [ { "cena": 1, "titulo": "...", "texto": "...", "legenda_sugerida": "...", "orientacao_captacao": "..." }, ... ] }
 
 DADOS:
 {{DADOS}}`;
@@ -80,8 +80,8 @@ Regras:
 
 Variações: emocional, direto, premium
 
-Retorne JSON válido. Nenhum texto fora do JSON.
-Campos por anúncio: tipo, headline, copy, cta
+Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
+{ "anuncios": [ { "tipo": "emocional", "headline": "...", "copy": "...", "cta": "..." }, { "tipo": "direto", ... }, { "tipo": "premium", ... } ] }
 
 DADOS:
 {{DADOS}}`;
@@ -92,10 +92,9 @@ const PROMPT_DIRECAO = `Crie exatamente 3 sugestões de direção criativa para 
 Regras:
 - Cada sugestão deve ser específica para o perfil real — sem cenas genéricas de casamento
 - Cada campo (ambientacao, enquadramento, estilo_edicao, legenda_sugerida): máximo 2 linhas
-- Array "direcao" com exatamente 3 itens
 
-Retorne JSON válido. Nenhum texto fora do JSON.
-Campos por sugestão: tipo_cena, ambientacao, enquadramento, estilo_edicao, legenda_sugerida
+Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
+{ "direcao": [ { "tipo_cena": "...", "ambientacao": "...", "enquadramento": "...", "estilo_edicao": "...", "legenda_sugerida": "..." }, { ... }, { ... } ] }
 
 DADOS:
 {{DADOS}}`;
@@ -119,6 +118,43 @@ function extrairJSON(texto: string): unknown {
   } catch {
     throw new Error(`JSON inválido retornado pelo modelo:\n${raw.slice(0, 300)}`);
   }
+}
+
+/**
+ * Normaliza saídas das seções garantindo os wrappers esperados pelo frontend.
+ * Defesa contra Claude retornar array solto em vez do objeto com chave.
+ */
+function normalizarSaida(secao: Secao, dado: unknown): unknown {
+  if (!dado || typeof dado !== "object") return dado;
+
+  // Se Claude retornou o array diretamente sem wrapper
+  if (secao === "roteiro_sugerido" && Array.isArray(dado)) {
+    return { roteiro: dado };
+  }
+  if (secao === "copy_anuncios" && Array.isArray(dado)) {
+    return { anuncios: dado };
+  }
+  if (secao === "direcao_criativa" && Array.isArray(dado)) {
+    return { direcao: dado };
+  }
+
+  // Se é objeto mas sem a chave esperada, tenta recuperar
+  const obj = dado as Record<string, unknown>;
+  if (secao === "roteiro_sugerido" && !obj.roteiro) {
+    // Tenta achar qualquer chave que seja array
+    const arr = Object.values(obj).find(Array.isArray);
+    if (arr) return { roteiro: arr };
+  }
+  if (secao === "copy_anuncios" && !obj.anuncios) {
+    const arr = Object.values(obj).find(Array.isArray);
+    if (arr) return { anuncios: arr };
+  }
+  if (secao === "direcao_criativa" && !obj.direcao) {
+    const arr = Object.values(obj).find(Array.isArray);
+    if (arr) return { direcao: arr };
+  }
+
+  return dado;
 }
 
 async function chamarClaude(
@@ -276,28 +312,28 @@ serve(async (req) => {
           );
           break;
         case "roteiro_sugerido":
-          resultado = await chamarClaude(
+          resultado = normalizarSaida("roteiro_sugerido", await chamarClaude(
             anthropic,
             PROMPT_ROTEIRO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.roteiro_sugerido,
             system,
-          );
+          ));
           break;
         case "copy_anuncios":
-          resultado = await chamarClaude(
+          resultado = normalizarSaida("copy_anuncios", await chamarClaude(
             anthropic,
             PROMPT_ADS.replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.copy_anuncios,
             system,
-          );
+          ));
           break;
         case "direcao_criativa":
-          resultado = await chamarClaude(
+          resultado = normalizarSaida("direcao_criativa", await chamarClaude(
             anthropic,
             PROMPT_DIRECAO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.direcao_criativa,
             system,
-          );
+          ));
           break;
         default:
           return errResponse("Seção inválida", 400);
@@ -342,11 +378,14 @@ serve(async (req) => {
     const dadosStr = JSON.stringify(analise);
 
     console.log("Passos 2-4/4: Roteiro, anúncios e direção em paralelo...");
-    const [roteiro, ads, direcao] = await Promise.all([
+    const [roteiroRaw, adsRaw, direcaoRaw] = await Promise.all([
       chamarClaude(anthropic, PROMPT_ROTEIRO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr), MAX_TOKENS.roteiro_sugerido, systemCompleto),
       chamarClaude(anthropic, PROMPT_ADS.replace("{{DADOS}}", dadosStr), MAX_TOKENS.copy_anuncios, systemCompleto),
       chamarClaude(anthropic, PROMPT_DIRECAO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr), MAX_TOKENS.direcao_criativa, systemCompleto),
     ]);
+    const roteiro  = normalizarSaida("roteiro_sugerido",  roteiroRaw);
+    const ads      = normalizarSaida("copy_anuncios",     adsRaw);
+    const direcao  = normalizarSaida("direcao_criativa",  direcaoRaw);
 
     const { data: novoRoteiro, error: errInsert } = await supabase
       .from("roteiros")

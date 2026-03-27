@@ -87,7 +87,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
     : undefined;
 
   const textoRoteiro = ultimo?.roteiro_sugerido?.roteiro
-    ? ultimo.roteiro_sugerido.roteiro
+    ? (ultimo.roteiro_sugerido.roteiro as CenaRoteiro[])
         .map((c: CenaRoteiro) =>
           [
             `Cena ${c.cena} — ${c.titulo}`,
@@ -323,7 +323,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Diferenciais-chave</p>
                   <ul className="space-y-1.5">
-                    {ultimo.analise_estrategica.diferenciais_chave.map((d, i) => (
+                    {(ultimo.analise_estrategica.diferenciais_chave ?? []).map((d, i) => (
                       <li key={i} className="flex gap-2 font-lora leading-[1.7] text-gray-800">
                         <span className="text-brand-400 font-bold mt-0.5">•</span>
                         <span>{d}</span>
@@ -334,7 +334,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Gatilhos emocionais</p>
                   <ul className="space-y-1.5">
-                    {ultimo.analise_estrategica.gatilhos_emocionais.map((g, i) => (
+                    {(ultimo.analise_estrategica.gatilhos_emocionais ?? []).map((g, i) => (
                       <li key={i} className="flex gap-2 font-lora leading-[1.7] text-gray-800">
                         <span className="text-pink-400 font-bold mt-0.5">•</span>
                         <span>{g}</span>
@@ -370,7 +370,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
           >
             {ultimo?.roteiro_sugerido?.roteiro ? (
               <div className="space-y-0">
-                {ultimo.roteiro_sugerido.roteiro.map((cena: CenaRoteiro, idx: number) => (
+                {(ultimo.roteiro_sugerido.roteiro as CenaRoteiro[]).map((cena: CenaRoteiro, idx: number) => (
                   <div key={cena.cena}>
                     <div className="border-l-4 border-brand-300 pl-4 py-1">
                       <div className="flex items-center justify-between mb-2">
@@ -393,7 +393,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
                         </div>
                       )}
                     </div>
-                    {idx < (ultimo.roteiro_sugerido?.roteiro.length ?? 0) - 1 && (
+                    {idx < ((ultimo.roteiro_sugerido?.roteiro as CenaRoteiro[])?.length ?? 0) - 1 && (
                       <hr className="my-5 border-gray-100" />
                     )}
                   </div>
@@ -426,7 +426,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
           >
             {ultimo?.copy_anuncios?.anuncios ? (
               <div className="space-y-5">
-                {ultimo.copy_anuncios.anuncios.map((ad: Anuncio) => {
+                {(ultimo.copy_anuncios.anuncios as Anuncio[]).map((ad: Anuncio) => {
                   const textoCompleto = `${ad.headline}\n\n${ad.copy}\n\nCTA: ${ad.cta}`;
                   return (
                     <div key={ad.tipo} className="bg-gray-50 rounded-lg p-4 border border-gray-100">
@@ -479,7 +479,7 @@ export default async function PrestadorPage({ params }: { params: Promise<{ id: 
           >
             {ultimo?.direcao_criativa?.direcao ? (
               <div className="space-y-4">
-                {ultimo.direcao_criativa.direcao.map((d: DirecaoCena, i: number) => (
+                {(ultimo.direcao_criativa.direcao as DirecaoCena[]).map((d: DirecaoCena, i: number) => (
                   <div key={i} className="border border-gray-200 rounded-lg p-4">
                     <p className="font-semibold text-gray-900 mb-3">
                       <span className="text-brand-500 mr-1">{i + 1}.</span> {d.tipo_cena}
