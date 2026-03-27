@@ -28,7 +28,16 @@ export default function Header({ user }: HeaderProps) {
 
         <nav className="flex items-center gap-4">
           <Link href="/" className="text-sm text-gray-600 hover:text-brand-600 transition">
-            Dashboard
+            Prestadores
+          </Link>
+          <Link href="/dashboard" className="text-sm text-gray-600 hover:text-brand-600 transition">
+            Dashboard BI
+          </Link>
+          <Link href="/pipeline" className="text-sm text-gray-600 hover:text-brand-600 transition">
+            Pipeline
+          </Link>
+          <Link href="/daily" className="text-sm text-gray-600 hover:text-brand-600 transition">
+            Daily
           </Link>
           <Link
             href="/novo"
