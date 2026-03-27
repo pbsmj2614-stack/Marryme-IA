@@ -52,24 +52,32 @@ function isAtrasado(prazoStr: string, status: string): boolean {
 // ─── Tab matching ─────────────────────────────────────────────────────────────
 
 /**
- * Tenta casar nome da aba com nome da empresa (case-insensitive, substring).
- * Aceita também correspondência direta pelo id_cliente.
+ * Casa o id_cliente com o nome da aba no padrão "MM039_NomeCliente".
+ * Prioridade:
+ *  1. Aba começa com ID + "_"  → MM039_AlexandrePissarro  ✓
+ *  2. Aba é exatamente o ID    → MM039                    ✓
+ *  3. Nome da empresa na aba   → fallback fuzzy            ✓
  */
 function encontrarAba(
   abasDisponiveis: string[],
   idCliente: string,
   nomeEmpresa: string
 ): string | null {
-  const nLower = nomeEmpresa.toLowerCase();
+  const idLower  = idCliente.toLowerCase();
+  const nomeLower = nomeEmpresa.toLowerCase().replace(/\s+/g, "");
 
   return (
-    abasDisponiveis.find(
-      (a) =>
-        a === idCliente ||
-        a.toLowerCase() === nLower ||
-        a.toLowerCase().includes(nLower) ||
-        nLower.includes(a.toLowerCase())
-    ) ?? null
+    // 1ª prioridade: ID como prefixo (MM039_NomeQualquer)
+    abasDisponiveis.find((a) =>
+      a.toLowerCase().startsWith(idLower + "_") ||
+      a.toLowerCase() === idLower
+    ) ??
+    // 2ª prioridade: nome da empresa na aba (sem espaços)
+    abasDisponiveis.find((a) => {
+      const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+      return aLower.includes(nomeLower) || nomeLower.includes(aLower);
+    }) ??
+    null
   );
 }
 
@@ -99,11 +107,8 @@ export async function importarPlanilha(): Promise<ImportResult> {
     return { clientes: 0, tarefas: 0, erros };
   }
 
-  // Exclui a aba de cadastro da lista de abas de clientes
-  const NOMES_SISTEMA = ["cadastro_clientes", "cadastro clientes", "clientes", "cadastro"];
-  const abasClientes = todasAbas.filter(
-    (a) => !NOMES_SISTEMA.includes(a.toLowerCase().trim())
-  );
+  // Apenas abas no formato MM039_NomeCliente (ou MM039)
+  const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
   // ── 3. Monta payload de clientes ──
   const clientesPayload = clientesSheet.map((c) => ({
