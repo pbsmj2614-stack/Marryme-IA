@@ -110,7 +110,19 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
-  // ── 3. Monta payload de clientes ──
+  // ── 3. Limpa todos os clientes antigos (CASCADE deleta tarefas também) ──
+  // Garante que registros fantasma (AUTO001 etc.) não fiquem no banco.
+  const { error: errLimpar } = await supabase
+    .from("mm_clientes")
+    .delete()
+    .neq("id_cliente", "__never__"); // deleta tudo
+
+  if (errLimpar) {
+    erros.push(`Erro ao limpar clientes antigos: ${errLimpar.message}`);
+    return { clientes: 0, tarefas: 0, erros };
+  }
+
+  // ── 4. Monta payload de clientes ──
   const clientesPayload = clientesSheet.map((c) => ({
     id_cliente:      c.id_cliente,
     nome_empresa:    c.nome_empresa,
@@ -128,19 +140,18 @@ export async function importarPlanilha(): Promise<ImportResult> {
     atualizado_em:   new Date().toISOString(),
   }));
 
-  // ── 4. Upsert clientes ──
+  // ── 5. Insere clientes frescos ──
   const { error: errClientes } = await supabase
     .from("mm_clientes")
-    .upsert(clientesPayload, { onConflict: "id_cliente" });
+    .insert(clientesPayload);
 
   if (errClientes) {
     erros.push(`Erro ao salvar clientes: ${errClientes.message}`);
-    // Continua mesmo com erro parcial
-  } else {
-    totalClientes = clientesPayload.length;
+    return { clientes: 0, tarefas: 0, erros };
   }
+  totalClientes = clientesPayload.length;
 
-  // ── 5. Importa tarefas de cada cliente ──
+  // ── 6. Importa tarefas de cada cliente ──
   for (const cliente of clientesPayload) {
     if (!cliente.sheets_aba) {
       // Aba não encontrada — não é erro crítico
@@ -170,19 +181,6 @@ export async function importarPlanilha(): Promise<ImportResult> {
       observacoes:  t.observacoes || null,
       atualizado_em: new Date().toISOString(),
     }));
-
-    // Estratégia: delete + insert (sem chave natural estável por linha)
-    const { error: errDelete } = await supabase
-      .from("mm_tarefas")
-      .delete()
-      .eq("cliente_id", cliente.id_cliente);
-
-    if (errDelete) {
-      erros.push(
-        `Erro ao limpar tarefas de ${cliente.nome_empresa}: ${errDelete.message}`
-      );
-      continue;
-    }
 
     if (tarefasPayload.length === 0) continue;
 
