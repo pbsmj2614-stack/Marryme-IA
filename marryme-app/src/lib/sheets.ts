@@ -121,42 +121,53 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   const data = await res.json();
   const values: string[][] = data.values ?? [];
 
-  if (values.length <= 1) {
+  if (values.length === 0) {
+    throw new Error(`A aba "${nomeAba}" está completamente vazia.`);
+  }
+
+  // Auto-detecta qual coluna tem o ID (padrão MM\d+) e quantas linhas de
+  // cabeçalho existem (a planilha pode ter título + cabeçalho antes dos dados).
+  let dataStartRow = -1;
+  let colOffset = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i];
+    if (/^MM\d+/i.test(r[0]?.trim() ?? "")) { dataStartRow = i; colOffset = 0; break; }
+    if (/^MM\d+/i.test(r[1]?.trim() ?? "")) { dataStartRow = i; colOffset = 1; break; }
+  }
+
+  if (dataStartRow === -1) {
     throw new Error(
-      `A aba "${nomeAba}" está vazia ou tem apenas o cabeçalho — adicione os dados dos clientes.`
+      `Nenhuma linha com ID no padrão "MM001" encontrada na aba "${nomeAba}". ` +
+      `Verifique se os IDs dos clientes estão na coluna A ou B.`
     );
   }
 
   const rows = values
-    .slice(1) // skip header
+    .slice(dataStartRow)
     .map((r) => ({
-      id_cliente:      r[0]?.trim()  ?? "",
-      nome_empresa:    r[1]?.trim()  ?? "",
-      segmento:        r[2]?.trim()  ?? "",
-      cidade:          r[3]?.trim()  ?? "",
-      whatsapp:        r[4]?.trim()  ?? "",
-      email:           r[5]?.trim()  ?? "",
-      inicio_contrato: r[6]?.trim()  ?? "",
-      plano:           r[7]?.trim()  ?? "",
-      fase_projeto:    r[8]?.trim()  ?? "",
-      status:          r[9]?.trim()  ?? "",
-      responsavel_mm:  r[10]?.trim() ?? "",
-      observacoes:     r[11]?.trim() ?? "",
+      id_cliente:      r[0 + colOffset]?.trim()  ?? "",
+      nome_empresa:    r[1 + colOffset]?.trim()  ?? "",
+      segmento:        r[2 + colOffset]?.trim()  ?? "",
+      cidade:          r[3 + colOffset]?.trim()  ?? "",
+      whatsapp:        r[4 + colOffset]?.trim()  ?? "",
+      email:           r[5 + colOffset]?.trim()  ?? "",
+      inicio_contrato: r[6 + colOffset]?.trim()  ?? "",
+      plano:           r[7 + colOffset]?.trim()  ?? "",
+      fase_projeto:    r[8 + colOffset]?.trim()  ?? "",
+      status:          r[9 + colOffset]?.trim()  ?? "",
+      responsavel_mm:  r[10 + colOffset]?.trim() ?? "",
+      observacoes:     r[11 + colOffset]?.trim() ?? "",
     }))
-    .filter((c) => c.id_cliente !== "" || c.nome_empresa !== "");
+    .filter((c) => /^MM\d+/i.test(c.id_cliente)); // só linhas com ID real
 
   if (rows.length === 0) {
     throw new Error(
-      `A aba "${nomeAba}" tem ${values.length - 1} linha(s) mas todas têm ` +
-      `as colunas ID e Nome vazias — verifique se os dados estão nas colunas corretas (A e B).`
+      `Nenhum cliente com ID válido encontrado na aba "${nomeAba}".`
     );
   }
 
-  // Garante id_cliente: usa nome se ID estiver vazio
-  return rows.map((r, i) => ({
-    ...r,
-    id_cliente: r.id_cliente || `AUTO${String(i + 1).padStart(3, "0")}`,
-  }));
+  return rows;
 }
 
 /**
@@ -177,8 +188,16 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
   const data = await res.json();
   const values: string[][] = data.values ?? [];
 
+  // Pula todas as linhas antes da primeira tarefa real.
+  // Ignora: linhas de título, cabeçalhos ("O que?", "Etapa", etc.)
+  // e linhas sem conteúdo na coluna "O que".
+  const HEADER_WORDS = /^(o que|etapa|check|tipo|quem|prazo|status|observa)/i;
+
   return values
-    .slice(1) // skip header
+    .filter((r) => {
+      const oQue = r[2]?.trim() ?? "";
+      return oQue !== "" && !HEADER_WORDS.test(oQue);
+    })
     .map((r) => ({
       check_feito:  parseCheckbox(r[0] ?? ""),
       etapa:        r[1]?.trim() ?? "",
@@ -188,8 +207,7 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
       prazo:        r[5]?.trim() ?? "",
       status:       r[6]?.trim() || "Não iniciado",
       observacoes:  r[7]?.trim() ?? "",
-    }))
-    .filter((t) => t.o_que !== "");
+    }));
 }
 
 /**
