@@ -105,9 +105,36 @@ export async function resolverAbaCadastro(): Promise<string> {
   return encontrada;
 }
 
+// ─── Header-based column mapping ─────────────────────────────────────────────
+
+/**
+ * Normaliza nome de cabeçalho para uma chave comparável.
+ * "Nome / Empresa" → "nome_empresa", "Início Contrato" → "inicio_contrato"
+ */
+function normalizeKey(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/[^a-z0-9]+/g, "_")    // não-alfanum → _
+    .replace(/^_+|_+$/g, "");       // remove _ das bordas
+}
+
+/**
+ * Dado um array de cabeçalhos, retorna um map nome→índice.
+ */
+function buildHeaderMap(headerRow: string[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  headerRow.forEach((h, i) => {
+    if (h?.trim()) map[normalizeKey(h.trim())] = i;
+  });
+  return map;
+}
+
 /**
  * Lê a aba de cadastro de clientes e retorna todos os registros.
- * Tolera variações no nome da aba e linhas com ID vazio.
+ * Tolera variações no nome da aba, colunas extras e ordens diferentes.
+ * Usa mapeamento por nome de cabeçalho quando disponível.
  */
 export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   const nomeAba = await resolverAbaCadastro();
@@ -125,46 +152,58 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
     throw new Error(`A aba "${nomeAba}" está completamente vazia.`);
   }
 
-  // Auto-detecta qual coluna tem o ID (padrão MM\d+) e quantas linhas de
-  // cabeçalho existem (a planilha pode ter título + cabeçalho antes dos dados).
+  // 1. Localiza a primeira linha de dados reais (padrão MM\d+)
   let dataStartRow = -1;
-  let colOffset = 0;
-
   for (let i = 0; i < values.length; i++) {
-    const r = values[i];
-    if (/^MM\d+/i.test(r[0]?.trim() ?? "")) { dataStartRow = i; colOffset = 0; break; }
-    if (/^MM\d+/i.test(r[1]?.trim() ?? "")) { dataStartRow = i; colOffset = 1; break; }
+    if (values[i].some((c) => /^MM\d+/i.test(c?.trim() ?? ""))) {
+      dataStartRow = i;
+      break;
+    }
   }
 
   if (dataStartRow === -1) {
     throw new Error(
-      `Nenhuma linha com ID no padrão "MM001" encontrada na aba "${nomeAba}". ` +
-      `Verifique se os IDs dos clientes estão na coluna A ou B.`
+      `Nenhuma linha com ID no padrão "MM001" encontrada na aba "${nomeAba}".`
     );
+  }
+
+  // 2. Usa a linha imediatamente anterior como cabeçalho
+  const headerRow = dataStartRow > 0 ? (values[dataStartRow - 1] ?? []) : [];
+  const hMap = buildHeaderMap(headerRow);
+
+  // 3. Helper: lê uma célula pelo nome do cabeçalho (vários sinônimos),
+  //    com fallback para posição fixa se o cabeçalho não for encontrado.
+  function col(r: string[], fallbackIdx: number, ...names: string[]): string {
+    for (const name of names) {
+      const idx = hMap[name];
+      if (idx !== undefined) return r[idx]?.trim() ?? "";
+    }
+    // Detecta o colOffset a partir do ID (pode estar na col 0 ou 1)
+    const idCol = r.findIndex((c) => /^MM\d+/i.test(c?.trim() ?? ""));
+    const co = idCol >= 0 ? idCol : 0;
+    return r[fallbackIdx + co]?.trim() ?? "";
   }
 
   const rows = values
     .slice(dataStartRow)
     .map((r) => ({
-      id_cliente:      r[0 + colOffset]?.trim()  ?? "",
-      nome_empresa:    r[1 + colOffset]?.trim()  ?? "",
-      segmento:        r[2 + colOffset]?.trim()  ?? "",
-      cidade:          r[3 + colOffset]?.trim()  ?? "",
-      whatsapp:        r[4 + colOffset]?.trim()  ?? "",
-      email:           r[5 + colOffset]?.trim()  ?? "",
-      inicio_contrato: r[6 + colOffset]?.trim()  ?? "",
-      plano:           r[7 + colOffset]?.trim()  ?? "",
-      fase_projeto:    r[8 + colOffset]?.trim()  ?? "",
-      status:          r[9 + colOffset]?.trim()  ?? "",
-      responsavel_mm:  r[10 + colOffset]?.trim() ?? "",
-      observacoes:     r[11 + colOffset]?.trim() ?? "",
+      id_cliente:      col(r, 0, "id_cliente", "id", "codigo", "codigo_cliente"),
+      nome_empresa:    col(r, 1, "nome_empresa", "nome", "empresa"),
+      segmento:        col(r, 2, "segmento"),
+      cidade:          col(r, 3, "cidade"),
+      whatsapp:        col(r, 4, "whatsapp", "telefone", "celular"),
+      email:           col(r, 5, "email", "e_mail"),
+      inicio_contrato: col(r, 6, "inicio_contrato", "inicio", "data_inicio"),
+      plano:           col(r, 7, "plano"),
+      fase_projeto:    col(r, 8, "fase_projeto", "fase", "fase_do_projeto"),
+      status:          col(r, 9, "status"),
+      responsavel_mm:  col(r, 10, "responsavel_mm", "responsavel"),
+      observacoes:     col(r, 11, "observacoes", "observacao", "obs"),
     }))
-    .filter((c) => /^MM\d+/i.test(c.id_cliente)); // só linhas com ID real
+    .filter((c) => /^MM\d+/i.test(c.id_cliente));
 
   if (rows.length === 0) {
-    throw new Error(
-      `Nenhum cliente com ID válido encontrado na aba "${nomeAba}".`
-    );
+    throw new Error(`Nenhum cliente com ID válido encontrado na aba "${nomeAba}".`);
   }
 
   return rows;
@@ -172,6 +211,7 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
 
 /**
  * Lê a aba de um cliente e retorna suas tarefas.
+ * Usa mapeamento por cabeçalho; fallback posicional se não encontrar cabeçalhos.
  * Retorna [] se a aba não existir (HTTP 400).
  */
 export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[]> {
@@ -188,26 +228,56 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
   const data = await res.json();
   const values: string[][] = data.values ?? [];
 
-  // Pula todas as linhas antes da primeira tarefa real.
-  // Ignora: linhas de título, cabeçalhos ("O que?", "Etapa", etc.)
-  // e linhas sem conteúdo na coluna "O que".
-  const HEADER_WORDS = /^(o que|etapa|check|tipo|quem|prazo|status|observa)/i;
+  if (values.length === 0) return [];
 
-  return values
-    .filter((r) => {
-      const oQue = r[2]?.trim() ?? "";
-      return oQue !== "" && !HEADER_WORDS.test(oQue);
-    })
+  // 1. Localiza a linha de cabeçalho (contém "o_que" ou "etapa" ou "prazo")
+  const TASK_HEADER_KEYS = ["o_que", "etapa", "prazo", "status"];
+  let headerRowIdx = -1;
+  let hMap: Record<string, number> = {};
+
+  for (let i = 0; i < Math.min(values.length, 5); i++) {
+    const candidate = buildHeaderMap(values[i]);
+    if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
+      headerRowIdx = i;
+      hMap = candidate;
+      break;
+    }
+  }
+
+  const dataRows = headerRowIdx >= 0
+    ? values.slice(headerRowIdx + 1)
+    : values.slice(1); // fallback: pula só a primeira linha
+
+  // 2. Helper com fallback posicional (assume col A = check, B = etapa, etc.)
+  function tcol(r: string[], pos: number, ...names: string[]): string {
+    for (const name of names) {
+      const idx = hMap[name];
+      if (idx !== undefined) return r[idx]?.trim() ?? "";
+    }
+    return r[pos]?.trim() ?? "";
+  }
+
+  return dataRows
     .map((r) => ({
-      check_feito:  parseCheckbox(r[0] ?? ""),
-      etapa:        r[1]?.trim() ?? "",
-      o_que:        r[2]?.trim() ?? "",
-      tipo:         r[3]?.trim() ?? "",
-      quem:         r[4]?.trim() ?? "",
-      prazo:        r[5]?.trim() ?? "",
-      status:       r[6]?.trim() || "Não iniciado",
-      observacoes:  r[7]?.trim() ?? "",
-    }));
+      check_feito: parseCheckbox(
+        (() => {
+          // check pode ser "✓", "TRUE", "SIM", ou a própria col A
+          for (const name of ["check_feito", "check", "feito", "concluido"]) {
+            const idx = hMap[name];
+            if (idx !== undefined) return r[idx] ?? "";
+          }
+          return r[0] ?? "";
+        })()
+      ),
+      etapa:       tcol(r, 1, "etapa"),
+      o_que:       tcol(r, 2, "o_que"),
+      tipo:        tcol(r, 3, "tipo"),
+      quem:        tcol(r, 4, "quem"),
+      prazo:       tcol(r, 5, "prazo"),
+      status:      tcol(r, 6, "status") || "Não iniciado",
+      observacoes: tcol(r, 7, "observacoes", "observacao", "obs"),
+    }))
+    .filter((t) => t.o_que !== "");
 }
 
 /**
