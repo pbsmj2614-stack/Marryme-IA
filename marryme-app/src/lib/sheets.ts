@@ -64,8 +64,9 @@ function cell(values: string[][], rowIdx: number, colIdx: number): string {
 }
 
 function parseCheckbox(value: string): boolean {
-  const v = value.toLowerCase().trim();
-  return v === "true" || v === "sim" || v === "1" || v === "x" || v === "✓";
+  const v = (value ?? "").toLowerCase().trim();
+  // Google Sheets retorna "TRUE"/"FALSE" em EN e "VERDADEIRO"/"FALSO" em PT-BR
+  return v === "true" || v === "verdadeiro" || v === "sim" || v === "1" || v === "x" || v === "✓" || v === "checked";
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
@@ -209,33 +210,20 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   return rows;
 }
 
+// ─── Task parsing (shared) ────────────────────────────────────────────────────
+
 /**
- * Lê a aba de um cliente e retorna suas tarefas.
- * Usa mapeamento por cabeçalho; fallback posicional se não encontrar cabeçalhos.
- * Retorna [] se a aba não existir (HTTP 400).
+ * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
+ * Detecta automaticamente a linha de cabeçalho e o offset de colunas.
  */
-export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[]> {
-  const range = encodeURIComponent(nomeAba);
-  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
-  const res = await fetch(url, { cache: "no-store" });
-
-  if (res.status === 400) return []; // aba não existe — não é erro
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Sheets API error (${nomeAba}) ${res.status}: ${body}`);
-  }
-
-  const data = await res.json();
-  const values: string[][] = data.values ?? [];
-
+function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
-  // 1. Localiza a linha de cabeçalho (contém "o_que" ou "etapa" ou "prazo")
   const TASK_HEADER_KEYS = ["o_que", "etapa", "prazo", "status"];
   let headerRowIdx = -1;
   let hMap: Record<string, number> = {};
 
-  for (let i = 0; i < Math.min(values.length, 5); i++) {
+  for (let i = 0; i < Math.min(values.length, 6); i++) {
     const candidate = buildHeaderMap(values[i]);
     if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
       headerRowIdx = i;
@@ -246,9 +234,8 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
 
   const dataRows = headerRowIdx >= 0
     ? values.slice(headerRowIdx + 1)
-    : values.slice(1); // fallback: pula só a primeira linha
+    : values.slice(1);
 
-  // 2. Helper com fallback posicional (assume col A = check, B = etapa, etc.)
   function tcol(r: string[], pos: number, ...names: string[]): string {
     for (const name of names) {
       const idx = hMap[name];
@@ -257,18 +244,17 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
     return r[pos]?.trim() ?? "";
   }
 
+  function getCheck(r: string[]): boolean {
+    for (const name of ["check_feito", "check", "feito", "concluido", "_"]) {
+      const idx = hMap[name];
+      if (idx !== undefined) return parseCheckbox(r[idx] ?? "");
+    }
+    return parseCheckbox(r[0] ?? "");
+  }
+
   return dataRows
     .map((r) => ({
-      check_feito: parseCheckbox(
-        (() => {
-          // check pode ser "✓", "TRUE", "SIM", ou a própria col A
-          for (const name of ["check_feito", "check", "feito", "concluido"]) {
-            const idx = hMap[name];
-            if (idx !== undefined) return r[idx] ?? "";
-          }
-          return r[0] ?? "";
-        })()
-      ),
+      check_feito: getCheck(r),
       etapa:       tcol(r, 1, "etapa"),
       o_que:       tcol(r, 2, "o_que"),
       tipo:        tcol(r, 3, "tipo"),
@@ -281,20 +267,69 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
 }
 
 /**
- * Lê todas as abas de uma lista de clientes e retorna tarefas com id_cliente.
+ * Lê a aba de um único cliente (fallback — prefira fetchTodasTarefasBatch).
+ * Retorna [] se a aba não existir (HTTP 400).
+ */
+export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[]> {
+  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(nomeAba)}?key=${apiKey()}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (res.status === 400) return [];
+  if (!res.ok) throw new Error(`Sheets API error (${nomeAba}) ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return parseTarefasValues(data.values ?? []);
+}
+
+/**
+ * Busca as tarefas de TODAS as abas em UMA única chamada batchGet.
+ * Evita o erro 429 (Rate Limit) causado por N chamadas individuais.
+ * Processa em lotes de 20 ranges por chamada.
+ */
+export async function fetchTodasTarefasBatch(
+  abas: string[]
+): Promise<Record<string, TarefaSheet[]>> {
+  if (abas.length === 0) return {};
+
+  const BATCH_SIZE = 20;
+  const result: Record<string, TarefaSheet[]> = {};
+
+  for (let i = 0; i < abas.length; i += BATCH_SIZE) {
+    const lote = abas.slice(i, i + BATCH_SIZE);
+    const rangesParam = lote.map((a) => `ranges=${encodeURIComponent(a)}`).join("&");
+    const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
+
+    const res = await fetch(url, { cache: "no-store" });
+
+    if (!res.ok) {
+      // Fallback individual se batchGet falhar (ex: range inválido causa 400 no lote todo)
+      for (const aba of lote) {
+        try { result[aba] = await fetchTarefasCliente(aba); }
+        catch { result[aba] = []; }
+      }
+      continue;
+    }
+
+    const data = await res.json();
+    const valueRanges: Array<{ values?: string[][] }> = data.valueRanges ?? [];
+
+    for (let j = 0; j < lote.length; j++) {
+      result[lote[j]] = parseTarefasValues(valueRanges[j]?.values ?? []);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Lê todas as abas de uma lista de clientes (wrapper mantido por compatibilidade).
  */
 export async function fetchTodasTarefas(
   clientes: Array<{ id_cliente: string; sheets_aba: string | null }>
 ): Promise<TarefaComCliente[]> {
-  const results: TarefaComCliente[] = [];
-
-  for (const c of clientes) {
-    if (!c.sheets_aba) continue;
-    const tarefas = await fetchTarefasCliente(c.sheets_aba);
-    for (const t of tarefas) {
-      results.push({ ...t, id_cliente: c.id_cliente, aba: c.sheets_aba });
-    }
-  }
-
-  return results;
+  const abas = clientes.filter((c) => c.sheets_aba).map((c) => c.sheets_aba as string);
+  const lote = await fetchTodasTarefasBatch(abas);
+  return clientes.flatMap((c) =>
+    c.sheets_aba
+      ? (lote[c.sheets_aba] ?? []).map((t) => ({ ...t, id_cliente: c.id_cliente, aba: c.sheets_aba! }))
+      : []
+  );
 }

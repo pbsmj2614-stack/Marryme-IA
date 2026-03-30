@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase";
 import {
   fetchTodasAbas,
   fetchCadastroClientes,
-  fetchTarefasCliente,
+  fetchTodasTarefasBatch,
 } from "@/lib/sheets";
 
 export interface ImportResult {
@@ -183,29 +183,26 @@ export async function importarPlanilha(): Promise<ImportResult> {
   }
   totalClientes = clientesPayload.length;
 
-  // ── 6. Importa tarefas de cada cliente ──
-  for (const cliente of clientesPayload) {
-    if (!cliente.sheets_aba) {
-      // Aba não encontrada — não é erro crítico
-      continue;
-    }
+  // ── 6. Busca TODAS as tarefas em uma única chamada batchGet ──
+  const abasComCliente = clientesPayload
+    .filter((c) => c.sheets_aba)
+    .map((c) => ({ id_cliente: c.id_cliente, sheets_aba: c.sheets_aba as string, nome_empresa: c.nome_empresa }));
 
-    let tarefas;
-    try {
-      tarefas = await fetchTarefasCliente(cliente.sheets_aba);
-    } catch (err) {
-      erros.push(
-        `Erro ao buscar tarefas de ${cliente.nome_empresa} (${cliente.sheets_aba}): ${String(err)}`
-      );
-      continue;
-    }
+  let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
+  try {
+    todasTarefasLote = await fetchTodasTarefasBatch(abasComCliente.map((c) => c.sheets_aba));
+  } catch (err) {
+    erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
+  }
 
-    // Determina status final com normalização e check_feito como prioridade
-    const tarefasPayload = tarefas.map((t) => {
+  // ── 7. Monta e insere tarefas ──
+  for (const cliente of abasComCliente) {
+    const tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
+
+    const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
       const prazoISO = parseDateBR(t.prazo);
       const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
-      const statusFinal =
-        t.check_feito ? "Finalizado"
+      const statusFinal = t.check_feito ? "Finalizado"
         : isAtrasado(t.prazo, statusNorm) ? "Atrasado"
         : statusNorm;
       return {
@@ -229,9 +226,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
       .insert(tarefasPayload);
 
     if (errInsert) {
-      erros.push(
-        `Erro ao salvar tarefas de ${cliente.nome_empresa}: ${errInsert.message}`
-      );
+      erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${errInsert.message}`);
     } else {
       totalTarefas += tarefasPayload.length;
     }
