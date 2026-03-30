@@ -143,6 +143,7 @@ function TarefaStatusBadge({ status }: { status: string }) {
     Atrasado:        "bg-red-900 text-red-300",
     "Em andamento":  "bg-blue-900 text-blue-300",
     "Não iniciado":  "bg-gray-700 text-gray-400",
+    Cancelado:       "bg-gray-800 text-gray-600 line-through",
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] ?? "bg-gray-700 text-gray-400"}`}>
@@ -315,15 +316,16 @@ export default function PipelinePage() {
     const tarefas = (tarefasData ?? []) as Tarefa[];
 
     const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
-      const tCliente   = tarefas.filter((t) => t.cliente_id === c.id_cliente);
+      const tCliente    = tarefas.filter((t) => t.cliente_id === c.id_cliente);
       const hoje = new Date().toISOString().split("T")[0];
       const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
       const atrasadas   = tCliente.filter((t) =>
-        !t.check_feito && t.status !== "Finalizado" &&
+        !t.check_feito && t.status !== "Finalizado" && t.status !== "Cancelado" &&
         (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
       ).length;
       const total       = tCliente.length;
-      const score       = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
+      const totalAtivo  = tCliente.filter((t) => t.status !== "Cancelado").length;
+      const score       = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
       return {
         ...c,
         total_tarefas: total,

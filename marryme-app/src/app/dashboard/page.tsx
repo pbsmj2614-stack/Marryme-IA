@@ -127,7 +127,9 @@ function TarefaStatusBadge({ status }: { status: string }) {
   const style =
     status === "Finalizado"   ? "bg-green-900 text-green-300"   :
     status === "Atrasado"     ? "bg-red-900 text-red-300"       :
-    status === "Em andamento" ? "bg-blue-900 text-blue-300"     : "bg-gray-700 text-gray-400";
+    status === "Em andamento" ? "bg-blue-900 text-blue-300"     :
+    status === "Cancelado"    ? "bg-gray-800 text-gray-600 line-through" :
+                                "bg-gray-700 text-gray-400";
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${style}`}>{status}</span>
   );
@@ -238,13 +240,15 @@ export default function DashboardBIPage() {
     const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
       const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
       const hoje = new Date().toISOString().split("T")[0];
-      const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
-      const atrasadas   = tCliente.filter((t) =>
-        !t.check_feito && t.status !== "Finalizado" &&
+      const finalizadas  = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+      const atrasadas    = tCliente.filter((t) =>
+        !t.check_feito && t.status !== "Finalizado" && t.status !== "Cancelado" &&
         (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
       ).length;
-      const total       = tCliente.length;
-      const score       = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
+      const total        = tCliente.length;
+      // Score exclui tarefas canceladas do denominador
+      const totalAtivo   = tCliente.filter((t) => t.status !== "Cancelado").length;
+      const score        = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
 
       return {
         ...c,
@@ -312,13 +316,28 @@ export default function DashboardBIPage() {
   }, [clientes, filtro, sortKey, sortDir]);
 
   // ── Chart data ──
+  const CHART_LIMIT = 10;
+  const [chartExpanded, setChartExpanded] = useState(false);
+
   const chartData = useMemo(
     () =>
       clientes
         .filter((c) => !/paus/i.test(c.status ?? ""))
         .sort((a, b) => a.score - b.score)
-        .map((c) => ({ nome: c.nome_empresa, score: c.score, color: getScoreColor(c.score) })),
+        .map((c) => ({
+          nome:       c.nome_empresa,
+          score:      c.score,
+          color:      getScoreColor(c.score),
+          total:      c.total_tarefas,
+          finalizadas: c.finalizadas,
+          atrasadas:  c.atrasadas,
+        })),
     [clientes]
+  );
+
+  const chartDataVisible = useMemo(
+    () => chartExpanded ? chartData : chartData.slice(0, CHART_LIMIT),
+    [chartData, chartExpanded]
   );
 
   function handleSort(key: SortKey) {
@@ -566,64 +585,120 @@ export default function DashboardBIPage() {
         </div>
 
         {/* ── Gráfico ── */}
-        <div className="bg-[#242424] border border-[#333] rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-6 text-white">
-            Progresso de execução por cliente (ativos)
-          </h2>
-
-          {chartData.length === 0 ? (
-            <p className="text-gray-500 text-sm">Nenhum cliente ativo para exibir</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(chartData.length * 52 + 60, 120)}>
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                margin={{ top: 0, right: 50, left: 20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={false} />
-                <XAxis
-                  type="number"
-                  domain={[0, 100]}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#444" }}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="nome"
-                  tick={{ fill: "#d1d5db", fontSize: 13 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={140}
-                />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "#242424", border: "1px solid #444", borderRadius: 8, color: "#fff" }}
-                  labelStyle={{ color: "#fff", fontWeight: 600 }}
-                  formatter={(value) => [`${value}%`, "Score"]}
-                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                />
-                <Bar dataKey="score" radius={[0, 6, 6, 0]} maxBarSize={28}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-
-          <div className="flex gap-6 mt-4 justify-center">
-            {[
-              { color: "bg-red-500",    label: "Em risco (<50%)"    },
-              { color: "bg-yellow-500", label: "Em atenção (50–69%)" },
-              { color: "bg-green-500",  label: "Saudável (≥70%)"    },
-            ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-2 text-xs text-gray-400">
-                <span className={`w-3 h-3 rounded-sm ${color} inline-block`} />
-                {label}
+        <div className="bg-[#242424] border border-[#333] rounded-xl overflow-hidden">
+          {/* Cabeçalho do gráfico */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#2a2a2a]">
+            <div>
+              <h2 className="text-base font-semibold text-white">Progresso de execução</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {chartData.length} clientes ativos · ordenados por score crescente
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex gap-4">
+                {[
+                  { color: "bg-red-500",    label: "<50%"  },
+                  { color: "bg-yellow-500", label: "50–69%" },
+                  { color: "bg-green-500",  label: "≥70%"  },
+                ].map(({ color, label }) => (
+                  <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <span className={`w-2.5 h-2.5 rounded-sm ${color} inline-block`} />
+                    {label}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
           </div>
+
+          <div className="px-6 py-4">
+            {chartData.length === 0 ? (
+              <p className="text-gray-500 text-sm py-4">Nenhum cliente ativo para exibir</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(chartDataVisible.length * 48 + 40, 100)}>
+                <BarChart
+                  data={chartDataVisible}
+                  layout="vertical"
+                  margin={{ top: 0, right: 70, left: 10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    tick={{ fill: "#6b7280", fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={{ stroke: "#333" }}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="nome"
+                    tick={{ fill: "#d1d5db", fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={150}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload as typeof chartDataVisible[0];
+                      return (
+                        <div className="bg-[#1a1a1a] border border-[#444] rounded-lg px-3 py-2.5 shadow-xl text-xs min-w-[160px]">
+                          <p className="font-semibold text-white text-sm mb-2 leading-tight">{label}</p>
+                          <p className="font-bold text-base mb-1" style={{ color: d.color }}>
+                            {d.score}%
+                          </p>
+                          {d.total > 0 ? (
+                            <div className="space-y-0.5 text-gray-400">
+                              <p>{d.total} tarefas no total</p>
+                              <p className="text-green-400">{d.finalizadas} finalizadas</p>
+                              {d.atrasadas > 0 && (
+                                <p className="text-red-400">{d.atrasadas} atrasadas</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-gray-600">Sem tarefas importadas</p>
+                          )}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="score" radius={[0, 5, 5, 0]} maxBarSize={24} minPointSize={3}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    label={(props: any) => {
+                      const { x = 0, y = 0, width = 0, height = 0, total = 0 } = props as {
+                        x: number; y: number; width: number; height: number; total: number;
+                      };
+                      if (total > 0) return <g />;
+                      return (
+                        <text x={x + width + 10} y={y + height / 2 + 4} fill="#4b5563" fontSize={10}>
+                          Sem tarefas
+                        </text>
+                      );
+                    }}
+                  >
+                    {chartDataVisible.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.total === 0 ? "#374151" : entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Expand/Collapse */}
+          {chartData.length > CHART_LIMIT && (
+            <button
+              onClick={() => setChartExpanded(!chartExpanded)}
+              className="w-full flex items-center justify-center gap-2 py-3 text-xs text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2a] transition border-t border-[#2a2a2a]"
+            >
+              {chartExpanded ? (
+                <><span>▲</span> Minimizar</>
+              ) : (
+                <><span>▼</span> Ver todos os {chartData.length} clientes</>
+              )}
+            </button>
+          )}
         </div>
       </main>
     </div>

@@ -406,9 +406,10 @@ export default function DailyPage() {
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>
     clientes.map((c) => {
       const t = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-      const fin = t.filter(isFinalizado).length;
-      const atr = t.filter(isAtrasado).length;
-      const score = t.length > 0 ? Math.round((fin / t.length) * 100) : 0;
+      const fin        = t.filter(isFinalizado).length;
+      const atr        = t.filter(isAtrasado).length;
+      const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
+      const score      = totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0;
       return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
     }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -430,10 +431,11 @@ export default function DailyPage() {
         t.quem?.toLowerCase().includes(resp.toLowerCase()) ||
         t.cliente.responsavel_mm?.toLowerCase().includes(resp.toLowerCase())
       );
-      const total      = meus.length;
+      const total       = meus.length;
       const finalizadas = meus.filter(isFinalizado).length;
       const atrasadas   = meus.filter(isAtrasado).length;
-      const score = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
+      const totalAtivo  = meus.filter((t) => t.status !== "Cancelado").length;
+      const score       = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
       return { resp, total, finalizadas, atrasadas, score };
     }),
   [tarefasComCliente]);
