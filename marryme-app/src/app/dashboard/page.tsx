@@ -153,7 +153,7 @@ function ImportButton({ onImported }: { onImported: () => void }) {
       setResult(r);
       if (r.clientes > 0 || r.tarefas > 0) onImported();
     } catch (err) {
-      setResult({ clientes: 0, tarefas: 0, erros: [String(err)] });
+      setResult({ clientes: 0, tarefas: 0, erros: [String(err)], semAbas: [], semTarefas: [] });
     } finally {
       setLoading(false);
     }
@@ -179,22 +179,26 @@ function ImportButton({ onImported }: { onImported: () => void }) {
       </button>
 
       {result && (
-        <div className={`text-xs rounded-lg px-3 py-2 border ${
+        <div className={`text-xs rounded-lg px-3 py-2 border max-w-sm ${
           result.erros.length > 0
             ? "bg-red-950 border-red-800 text-red-300"
             : "bg-green-950 border-green-800 text-green-300"
         }`}>
-          {result.erros.length === 0 ? (
-            <span>✓ {result.clientes} clientes · {result.tarefas} tarefas importadas</span>
-          ) : (
-            <div>
-              <p className="font-medium mb-1">
-                {result.clientes} clientes · {result.tarefas} tarefas · {result.erros.length} erro(s)
-              </p>
-              {result.erros.map((e, i) => (
-                <p key={i} className="opacity-75">{e}</p>
-              ))}
-            </div>
+          <p className="font-medium mb-1">
+            {result.erros.length === 0 ? "✓" : "⚠"} {result.clientes} clientes · {result.tarefas} tarefas
+          </p>
+          {result.erros.map((e, i) => (
+            <p key={i} className="opacity-75 mb-0.5">{e}</p>
+          ))}
+          {result.semAbas.length > 0 && (
+            <p className="text-yellow-400 mt-1">
+              Sem aba: {result.semAbas.join(", ")}
+            </p>
+          )}
+          {result.semTarefas.length > 0 && (
+            <p className="text-yellow-500 mt-0.5">
+              Sem tarefas: {result.semTarefas.join(", ")}
+            </p>
           )}
         </div>
       )}

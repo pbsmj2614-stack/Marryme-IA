@@ -261,7 +261,8 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
   // 1. Pelo cabeçalho (hMap)
   // 2. Escaneando as primeiras linhas de dados por valores conhecidos de status
   // 3. Fallback posicional (col G = índice 6)
-  const STATUS_RE = /^(Finaliz|Atrasad|Em andamento|N[aã]o inici|Cancelad)/i;
+  // Sem âncora ^ para aceitar emojis prefix: "🚀 Em andamento", "✅ Finalizado", etc.
+  const STATUS_RE = /(finaliz|atrasad|em andamento|n[aã]o.inici|cancelad)/i;
 
   function detectStatusCol(): number {
     const fromMap = hMap["status"] ?? hMap["situacao"] ?? hMap["estado"];

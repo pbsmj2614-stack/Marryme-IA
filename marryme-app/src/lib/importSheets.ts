@@ -19,6 +19,8 @@ export interface ImportResult {
   clientes: number;
   tarefas: number;
   erros: string[];
+  semAbas: string[];      // clientes sem aba no Sheets
+  semTarefas: string[];   // clientes com aba mas 0 tarefas importadas
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -119,8 +121,13 @@ function encontrarAba(
 export async function importarPlanilha(): Promise<ImportResult> {
   const supabase = createClient();
   const erros: string[] = [];
+  const semAbas: string[] = [];
+  const semTarefas: string[] = [];
   let totalClientes = 0;
   let totalTarefas = 0;
+
+  const vazio = (extra?: Partial<ImportResult>): ImportResult =>
+    ({ clientes: 0, tarefas: 0, erros, semAbas, semTarefas, ...extra });
 
   // ── 1. Busca todas as abas ──
   let todasAbas: string[] = [];
@@ -128,50 +135,53 @@ export async function importarPlanilha(): Promise<ImportResult> {
     todasAbas = await fetchTodasAbas();
   } catch (err) {
     erros.push(`Erro ao buscar abas: ${String(err)}`);
-    return { clientes: 0, tarefas: 0, erros };
+    return vazio();
   }
 
-  // ── 2. Busca e valida Cadastro_Clientes (tolerante a variações de nome) ──
+  // ── 2. Busca e valida Cadastro_Clientes ──
   let clientesSheet;
   try {
     clientesSheet = await fetchCadastroClientes();
   } catch (err) {
     erros.push(String(err));
-    return { clientes: 0, tarefas: 0, erros };
+    return vazio();
   }
 
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
-  // ── 3. Limpa todos os clientes antigos (CASCADE deleta tarefas também) ──
-  // Garante que registros fantasma (AUTO001 etc.) não fiquem no banco.
+  // ── 3. Limpa todos os clientes antigos ──
   const { error: errLimpar } = await supabase
     .from("mm_clientes")
     .delete()
-    .neq("id_cliente", "__never__"); // deleta tudo
+    .neq("id_cliente", "__never__");
 
   if (errLimpar) {
     erros.push(`Erro ao limpar clientes antigos: ${errLimpar.message}`);
-    return { clientes: 0, tarefas: 0, erros };
+    return vazio();
   }
 
   // ── 4. Monta payload de clientes ──
-  const clientesPayload = clientesSheet.map((c) => ({
-    id_cliente:      c.id_cliente,
-    nome_empresa:    c.nome_empresa,
-    segmento:        c.segmento       || null,
-    cidade:          c.cidade         || null,
-    whatsapp:        c.whatsapp       || null,
-    email:           c.email          || null,
-    inicio_contrato: parseDateBR(c.inicio_contrato),
-    plano:           c.plano          || null,
-    fase_projeto:    c.fase_projeto   || null,
-    status:          normalizeClientStatus(c.status),
-    responsavel_mm:  c.responsavel_mm || null,
-    observacoes:     c.observacoes    || null,
-    sheets_aba:      encontrarAba(abasClientes, c.id_cliente, c.nome_empresa),
-    atualizado_em:   new Date().toISOString(),
-  }));
+  const clientesPayload = clientesSheet.map((c) => {
+    const aba = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa);
+    if (!aba) semAbas.push(`${c.id_cliente} (${c.nome_empresa})`);
+    return {
+      id_cliente:      c.id_cliente,
+      nome_empresa:    c.nome_empresa,
+      segmento:        c.segmento       || null,
+      cidade:          c.cidade         || null,
+      whatsapp:        c.whatsapp       || null,
+      email:           c.email          || null,
+      inicio_contrato: parseDateBR(c.inicio_contrato),
+      plano:           c.plano          || null,
+      fase_projeto:    c.fase_projeto   || null,
+      status:          normalizeClientStatus(c.status),
+      responsavel_mm:  c.responsavel_mm || null,
+      observacoes:     c.observacoes    || null,
+      sheets_aba:      aba,
+      atualizado_em:   new Date().toISOString(),
+    };
+  });
 
   // ── 5. Insere clientes frescos ──
   const { error: errClientes } = await supabase
@@ -180,11 +190,11 @@ export async function importarPlanilha(): Promise<ImportResult> {
 
   if (errClientes) {
     erros.push(`Erro ao salvar clientes: ${errClientes.message}`);
-    return { clientes: 0, tarefas: 0, erros };
+    return vazio();
   }
   totalClientes = clientesPayload.length;
 
-  // ── 6. Busca TODAS as tarefas em uma única chamada batchGet ──
+  // ── 6. Busca TODAS as tarefas em batchGet ──
   const abasComCliente = clientesPayload
     .filter((c) => c.sheets_aba)
     .map((c) => ({ id_cliente: c.id_cliente, sheets_aba: c.sheets_aba as string, nome_empresa: c.nome_empresa }));
@@ -200,8 +210,13 @@ export async function importarPlanilha(): Promise<ImportResult> {
   for (const cliente of abasComCliente) {
     const tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
 
+    if (tarefas.length === 0) {
+      semTarefas.push(`${cliente.id_cliente} (${cliente.nome_empresa})`);
+      continue;
+    }
+
     const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
-      const prazoISO = parseDateBR(t.prazo);
+      const prazoISO   = parseDateBR(t.prazo);
       const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
       const statusFinal = t.check_feito ? "Finalizado"
         : isAtrasado(t.prazo, statusNorm) ? "Atrasado"
@@ -220,8 +235,6 @@ export async function importarPlanilha(): Promise<ImportResult> {
       };
     });
 
-    if (tarefasPayload.length === 0) continue;
-
     const { error: errInsert } = await supabase
       .from("mm_tarefas")
       .insert(tarefasPayload);
@@ -233,5 +246,5 @@ export async function importarPlanilha(): Promise<ImportResult> {
     }
   }
 
-  return { clientes: totalClientes, tarefas: totalTarefas, erros };
+  return { clientes: totalClientes, tarefas: totalTarefas, erros, semAbas, semTarefas };
 }

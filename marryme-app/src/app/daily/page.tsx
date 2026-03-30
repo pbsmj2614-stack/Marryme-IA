@@ -288,6 +288,7 @@ export default function DailyPage() {
   const [modalCliente,   setModalCliente]   = useState<ClienteComMetricas | null>(null);
   // Atrasados: controla qual grupo está expandido
   const [atrasadosOpen,  setAtrasadosOpen]  = useState<Set<string>>(new Set());
+  const [filtroResp,     setFiltroResp]     = useState("Todos");
 
   // ── Load ──
   const loadData = useCallback(async () => {
@@ -353,10 +354,22 @@ export default function DailyPage() {
   }, [clientes]);
 
   // ── Helpers de status (declarados antes dos useMemo que os usam) ──
-  const isAtivo = (s: string) => !/paus/i.test(s ?? "");
+  const isAtivo      = (s: string) => !/paus/i.test(s ?? "");
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
-  const isAtrasado = (t: Tarefa) =>
-    !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+  const isAtrasado   = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+
+  // Ordem de prioridade: Atrasado(0) > Em andamento(1) > Não iniciado(2) > outros(3)
+  const getPrioridade = (t: Tarefa): number => {
+    if (isAtrasado(t)) return 0;
+    if (t.status === "Em andamento") return 1;
+    if (t.status === "Não iniciado") return 2;
+    return 3;
+  };
+
+  // Filtro por quem está fazendo a tarefa
+  const matchesResp = (t: TarefaComCliente): boolean =>
+    filtroResp === "Todos" ||
+    (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
 
   // ── Tarefas com cliente ──
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() =>
@@ -365,42 +378,56 @@ export default function DailyPage() {
       .map((t) => ({ ...t, cliente: clienteMap[t.cliente_id] })),
   [tarefas, clienteMap]);
 
-  // ── Atrasados (prazo < hoje && não finalizado) ──
+  // ── Opções de responsável (derivadas dos dados reais) ──
+  const respOptions = useMemo(() => {
+    const nomes = new Set<string>();
+    tarefasComCliente.forEach((t) => { if (t.quem?.trim()) nomes.add(t.quem.trim()); });
+    return ["Todos", ...Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"))];
+  }, [tarefasComCliente]);
+
+  // ── Atrasados agrupados por cliente ──
   const atrasados = useMemo(() => {
-    const list = tarefasComCliente.filter(isAtrasado);
-    // Agrupa por cliente
+    const list = tarefasComCliente.filter((t) => isAtrasado(t) && matchesResp(t));
     const grupos: Record<string, { cliente: Cliente; tarefas: TarefaComCliente[] }> = {};
     list.forEach((t) => {
       if (!grupos[t.cliente_id]) grupos[t.cliente_id] = { cliente: t.cliente, tarefas: [] };
       grupos[t.cliente_id].tarefas.push(t);
     });
-    return Object.values(grupos).sort(
-      (a, b) => b.tarefas.length - a.tarefas.length
-    );
-  }, [tarefasComCliente]);
+    return Object.values(grupos).sort((a, b) => b.tarefas.length - a.tarefas.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tarefasComCliente, filtroResp]);
 
-  // ── Prioridades de hoje ──
+  // ── Prioridades de hoje — ordenadas por prioridade ──
   const prioHoje = useMemo(() =>
     tarefasComCliente
-      .filter((t) => t.prazo === TODAY && !isFinalizado(t))
-      .sort((a, b) => a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR")),
+      .filter((t) => t.prazo === TODAY && !isFinalizado(t) && matchesResp(t))
+      .sort((a, b) => {
+        const diff = getPrioridade(a) - getPrioridade(b);
+        if (diff !== 0) return diff;
+        return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR");
+      }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [tarefasComCliente]);
+  [tarefasComCliente, filtroResp]);
 
-  // ── Prioridades da semana (amanhã → +7 dias) ──
+  // ── Esta semana (hoje → +7 dias) agrupada por data, ordenada por prioridade ──
   const prioSemana = useMemo(() => {
     const list = tarefasComCliente.filter(
-      (t) => t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END && !isFinalizado(t)
+      (t) => t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END &&
+             !isFinalizado(t) && matchesResp(t)
     );
-    // Agrupa por data
     const grupos: Record<string, TarefaComCliente[]> = {};
     list.forEach((t) => {
       const k = t.prazo!;
       if (!grupos[k]) grupos[k] = [];
       grupos[k].push(t);
     });
+    // Ordena tarefas dentro de cada dia por prioridade
+    Object.values(grupos).forEach((arr) =>
+      arr.sort((a, b) => getPrioridade(a) - getPrioridade(b))
+    );
     return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
-  }, [tarefasComCliente]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tarefasComCliente, filtroResp]);
 
   // ── Clientes com métricas ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>
@@ -472,10 +499,30 @@ export default function DailyPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-10">
 
-        {/* ── Título ── */}
-        <div>
-          <h1 className="text-2xl font-bold">Daily Interativo</h1>
-          <p className="text-sm text-gray-500 mt-1 capitalize">{today}</p>
+        {/* ── Título + Filtro ── */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold">Daily Interativo</h1>
+            <p className="text-sm text-gray-500 mt-1 capitalize">{today}</p>
+          </div>
+
+          {/* Filtro por responsável */}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs text-gray-600 mr-1">Ver tarefas de:</span>
+            {respOptions.map((resp) => (
+              <button
+                key={resp}
+                onClick={() => setFiltroResp(resp)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
+                  filtroResp === resp
+                    ? "border-white text-white bg-white/10"
+                    : "border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-200"
+                }`}
+              >
+                {resp}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
@@ -486,7 +533,7 @@ export default function DailyPage() {
 
             {/* ── Card Atrasados ── */}
             <SituacaoCard
-              title={`Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
+              title={`⚠ Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
               borderColor="border-red-800"
               empty={atrasados.length === 0}
               emptyMsg="Nenhum item atrasado hoje"
@@ -546,7 +593,7 @@ export default function DailyPage() {
 
             {/* ── Card Prioridades de Hoje ── */}
             <SituacaoCard
-              title={`Prioridades de hoje (${prioHoje.length})`}
+              title={`Hoje (${prioHoje.length})`}
               borderColor="border-yellow-700"
               empty={prioHoje.length === 0}
               emptyMsg="Nada para hoje"
@@ -556,15 +603,17 @@ export default function DailyPage() {
                   key={t.id}
                   tarefa={t}
                   label={`${t.cliente.nome_empresa} — ${t.o_que}`}
-                  sub={`${t.cliente.id_cliente}${t.quem ? ` · ${t.quem}` : ""}`}
+                  sub={`${t.cliente.id_cliente}${t.quem ? ` · ${t.quem}` : ""}${
+                    isAtrasado(t) ? " · ⚠ atrasado" : t.status === "Em andamento" ? " · em andamento" : ""
+                  }`}
                   onCheckChange={handleCheckChange}
                 />
               ))}
             </SituacaoCard>
 
-            {/* ── Card Prioridades da Semana ── */}
+            {/* ── Card Esta Semana ── */}
             <SituacaoCard
-              title="Prioridades da semana"
+              title={`Esta semana (${prioSemana.reduce((s, [, l]) => s + l.length, 0)})`}
               borderColor="border-blue-800"
               empty={prioSemana.length === 0}
               emptyMsg="Semana tranquila"
@@ -576,12 +625,16 @@ export default function DailyPage() {
                       {formatDateFull(data)}
                     </p>
                     {tList.map((t) => (
-                      <div key={t.id} className="text-sm text-gray-300 py-0.5 flex items-start gap-1.5 pl-2">
-                        <span className="text-blue-600 mt-1 flex-shrink-0 text-xs">•</span>
+                      <div key={t.id} className="text-xs text-gray-300 py-0.5 flex items-start gap-1.5 pl-2">
+                        <span className={`mt-0.5 flex-shrink-0 ${
+                          t.status === "Em andamento" ? "text-blue-500" :
+                          t.status === "Atrasado"     ? "text-red-500"  : "text-gray-600"
+                        }`}>•</span>
                         <span>
-                          <span className="text-gray-500 text-xs">{t.cliente.nome_empresa}</span>
+                          <span className="text-gray-500">{t.cliente.nome_empresa}</span>
                           {" — "}
-                          {t.o_que}
+                          <span className="text-gray-200">{t.o_que}</span>
+                          {t.quem && <span className="text-gray-500 ml-1">· {t.quem}</span>}
                         </span>
                       </div>
                     ))}
