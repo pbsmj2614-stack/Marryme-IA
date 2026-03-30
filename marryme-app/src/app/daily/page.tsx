@@ -507,21 +507,20 @@ export default function DailyPage() {
           </div>
 
           {/* Filtro por responsável */}
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-xs text-gray-600 mr-1">Ver tarefas de:</span>
-            {respOptions.map((resp) => (
-              <button
-                key={resp}
-                onClick={() => setFiltroResp(resp)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
-                  filtroResp === resp
-                    ? "border-white text-white bg-white/10"
-                    : "border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-200"
-                }`}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Ver tarefas de:</span>
+            <div className="relative">
+              <select
+                value={filtroResp}
+                onChange={(e) => setFiltroResp(e.target.value)}
+                className="appearance-none bg-[#242424] border border-[#444] text-sm text-gray-200 rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-[#666] focus:outline-none focus:border-[#888] transition"
               >
-                {resp}
-              </button>
-            ))}
+                {respOptions.map((resp) => (
+                  <option key={resp} value={resp}>{resp}</option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▼</span>
+            </div>
           </div>
         </div>
 
