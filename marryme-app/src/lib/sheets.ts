@@ -215,11 +215,15 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
 /**
  * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
  * Detecta automaticamente a linha de cabeçalho e o offset de colunas.
+ * Quando não há cabeçalho, detecta a coluna de status pelos valores conhecidos.
  */
 function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
-  const TASK_HEADER_KEYS = ["o_que", "etapa", "prazo", "status"];
+  const TASK_HEADER_KEYS = [
+    "o_que", "etapa", "prazo", "status",
+    "tarefa", "descricao", "atividade",   // variantes do campo "o que fazer"
+  ];
   let headerRowIdx = -1;
   let hMap: Record<string, number> = {};
 
@@ -245,22 +249,43 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
   }
 
   function getCheck(r: string[]): boolean {
-    for (const name of ["check_feito", "check", "feito", "concluido", "_"]) {
+    for (const name of ["check_feito", "check", "feito", "concluido"]) {
       const idx = hMap[name];
       if (idx !== undefined) return parseCheckbox(r[idx] ?? "");
     }
+    // Sem cabeçalho: coluna A (index 0) é sempre o checkbox
     return parseCheckbox(r[0] ?? "");
   }
+
+  // Determina qual coluna contém o status:
+  // 1. Pelo cabeçalho (hMap)
+  // 2. Escaneando as primeiras linhas de dados por valores conhecidos de status
+  // 3. Fallback posicional (col G = índice 6)
+  const STATUS_RE = /^(Finaliz|Atrasad|Em andamento|N[aã]o inici|Cancelad)/i;
+
+  function detectStatusCol(): number {
+    const fromMap = hMap["status"] ?? hMap["situacao"] ?? hMap["estado"];
+    if (fromMap !== undefined) return fromMap;
+    // Escaneia colunas 5–8 nos primeiros 20 registros
+    for (const col of [6, 7, 5, 8]) {
+      if (dataRows.slice(0, 20).some((r) => STATUS_RE.test(r[col]?.trim() ?? ""))) {
+        return col;
+      }
+    }
+    return 6; // fallback posicional
+  }
+
+  const statusColIdx = detectStatusCol();
 
   return dataRows
     .map((r) => ({
       check_feito: getCheck(r),
       etapa:       tcol(r, 1, "etapa"),
-      o_que:       tcol(r, 2, "o_que"),
+      o_que:       tcol(r, 2, "o_que", "tarefa", "descricao", "atividade"),
       tipo:        tcol(r, 3, "tipo"),
-      quem:        tcol(r, 4, "quem"),
-      prazo:       tcol(r, 5, "prazo"),
-      status:      tcol(r, 6, "status") || "Não iniciado",
+      quem:        tcol(r, 4, "quem", "responsavel", "responsavel_tarefa"),
+      prazo:       tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega"),
+      status:      r[statusColIdx]?.trim() || "Não iniciado",
       observacoes: tcol(r, 7, "observacoes", "observacao", "obs"),
     }))
     .filter((t) => t.o_que !== "");

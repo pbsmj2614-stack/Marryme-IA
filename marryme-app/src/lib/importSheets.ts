@@ -57,7 +57,7 @@ function parseDateBR(str: string): string | null {
 const TODAY = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
 function isAtrasado(prazoStr: string, status: string): boolean {
-  if (/finaliz/i.test(status)) return false; // já finalizado
+  if (/finaliz|cancelad/i.test(status)) return false; // já finalizado ou cancelado
   const prazo = parseDateBR(prazoStr);
   if (!prazo) return false;
   return prazo < TODAY;
@@ -77,6 +77,7 @@ function normalizeTaskStatus(s: string, checkFeito: boolean): string {
   if (/finaliz|conclu|feito|done/i.test(s)) return "Finalizado";
   if (/andamento|progress|em curso/i.test(s)) return "Em andamento";
   if (/atras|vencid/i.test(s)) return "Atrasado";
+  if (/cancelad/i.test(s)) return "Cancelado";
   if (/não inici|nao inici|pendente|aberto/i.test(s)) return "Não iniciado";
   return s.trim(); // preserva valor original se não reconhecer
 }

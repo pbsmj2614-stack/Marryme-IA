@@ -352,6 +352,12 @@ export default function DailyPage() {
     return m;
   }, [clientes]);
 
+  // ── Helpers de status (declarados antes dos useMemo que os usam) ──
+  const isAtivo = (s: string) => !/paus/i.test(s ?? "");
+  const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
+  const isAtrasado = (t: Tarefa) =>
+    !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+
   // ── Tarefas com cliente ──
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() =>
     tarefas
@@ -395,12 +401,6 @@ export default function DailyPage() {
     });
     return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
   }, [tarefasComCliente]);
-
-  // ── Helpers de status ──
-  const isAtivo = (s: string) => !/paus/i.test(s ?? "");
-  const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
-  const isAtrasado = (t: Tarefa) =>
-    !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 
   // ── Clientes com métricas ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>

@@ -27,7 +27,6 @@ type SortKey =
   | "id_cliente"
   | "nome_empresa"
   | "plano"
-  | "valor_contrato"
   | "total_tarefas"
   | "finalizadas"
   | "atrasadas"
@@ -71,9 +70,6 @@ interface ClienteComMetricas extends Cliente {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatMRR(value: number): string {
-  return `R$ ${value.toLocaleString("pt-BR")}`;
-}
 
 function planoBadgeClass(plano: string | null): string {
   switch (plano?.toLowerCase()) {
@@ -209,16 +205,15 @@ function ImportButton({ onImported }: { onImported: () => void }) {
 const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados"];
 
 const TABLE_COLS: { key: SortKey | null; label: string }[] = [
-  { key: "id_cliente",    label: "ID"          },
-  { key: "nome_empresa",  label: "Cliente"     },
-  { key: "plano",         label: "Plano"       },
-  { key: "valor_contrato",label: "MRR"         },
-  { key: "total_tarefas", label: "Tarefas"     },
-  { key: "finalizadas",   label: "Finalizadas" },
-  { key: "atrasadas",     label: "Atrasadas"   },
-  { key: "score",         label: "Progresso"   },
-  { key: null,            label: "Score"       },
-  { key: "statusScore",   label: "Status"      },
+  { key: "id_cliente",   label: "ID"          },
+  { key: "nome_empresa", label: "Cliente"     },
+  { key: "plano",        label: "Plano"       },
+  { key: "total_tarefas",label: "Tarefas"     },
+  { key: "finalizadas",  label: "Finalizadas" },
+  { key: "atrasadas",    label: "Atrasadas"   },
+  { key: "score",        label: "Progresso"   },
+  { key: null,           label: "Score"       },
+  { key: "statusScore",  label: "Status"      },
 ];
 
 export default function DashboardBIPage() {
@@ -282,11 +277,13 @@ export default function DashboardBIPage() {
   const metrics = useMemo(() => {
     const ativos   = clientes.filter((c) => !/paus/i.test(c.status ?? ""));
     const pausados = clientes.filter((c) => /paus/i.test(c.status ?? ""));
-    const mrr      = ativos.reduce((s, c) => s + (c.valor_contrato ?? 0), 0);
     const atrasadasTotal    = clientes.reduce((s, c) => s + c.atrasadas, 0);
     const clientesAtrasados = clientes.filter((c) => c.atrasadas > 0).length;
     const emRisco  = ativos.filter((c) => c.score < 50).length;
-    return { mrr, ativos: ativos.length, pausados: pausados.length, atrasadasTotal, clientesAtrasados, emRisco };
+    const scoreAtivos = ativos.length > 0
+      ? Math.round(ativos.reduce((s, c) => s + c.score, 0) / ativos.length)
+      : 0;
+    return { scoreAtivos, ativos: ativos.length, pausados: pausados.length, atrasadasTotal, clientesAtrasados, emRisco };
   }, [clientes]);
 
   // ── Filtered + sorted ──
@@ -352,9 +349,13 @@ export default function DashboardBIPage() {
         {/* ── Cards de métricas ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
           <MetricCard
-            title="MRR Ativo"
-            value={formatMRR(metrics.mrr)}
-            subtitle={`${metrics.ativos} contratos ativos`}
+            title="Score Médio"
+            value={`${metrics.scoreAtivos}%`}
+            subtitle={`${metrics.ativos} clientes ativos`}
+            valueColor={
+              metrics.scoreAtivos >= 70 ? "text-green-400" :
+              metrics.scoreAtivos >= 50 ? "text-yellow-400" : "text-red-400"
+            }
           />
           <MetricCard
             title="Clientes Ativos"
@@ -423,7 +424,7 @@ export default function DashboardBIPage() {
               <tbody>
                 {clientesFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-12 text-gray-500">
+                    <td colSpan={9} className="text-center py-12 text-gray-500">
                       Nenhum cliente neste filtro
                     </td>
                   </tr>
@@ -460,10 +461,6 @@ export default function DashboardBIPage() {
                           ) : (
                             <span className="text-gray-600 text-xs">—</span>
                           )}
-                        </td>
-                        {/* MRR */}
-                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                          {formatMRR(c.valor_contrato ?? 0)}
                         </td>
                         {/* Total */}
                         <td className="px-4 py-3 text-center text-gray-300">
@@ -515,7 +512,7 @@ export default function DashboardBIPage() {
                       {/* Expanded — tarefas */}
                       {expandedId === c.id && (
                         <tr>
-                          <td colSpan={10} className="px-6 py-4 bg-[#161625] border-t border-[#1a1a1a]">
+                          <td colSpan={9} className="px-6 py-4 bg-[#161625] border-t border-[#1a1a1a]">
                             <div className="flex items-center justify-between mb-3">
                               <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
                                 Tarefas · {c.nome_empresa}

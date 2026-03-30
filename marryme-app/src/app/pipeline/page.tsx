@@ -14,7 +14,7 @@ type StatusCliente = "Ativo" | "Pausado";
 type StatusScore   = "Em risco" | "Em atenção" | "Saudável" | "Concluído";
 type FiltroStatus  = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Pausados";
 type SortKey =
-  | "id_cliente" | "nome_empresa" | "plano" | "valor_contrato"
+  | "id_cliente" | "nome_empresa" | "plano"
   | "total_tarefas" | "finalizadas" | "atrasadas" | "score" | "statusScore";
 
 interface Cliente {
@@ -60,9 +60,6 @@ const TODAY                      = new Date().toISOString().split("T")[0]; // YY
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatMRR(v: number) {
-  return `R$ ${(v ?? 0).toLocaleString("pt-BR")}`;
-}
 
 function isPrazoVencido(prazo: string | null, status: string) {
   if (!prazo || status === "Finalizado") return false;
@@ -282,16 +279,15 @@ function SummaryBadge({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
-  { key: "id_cliente",     label: "ID"          },
-  { key: "nome_empresa",   label: "Cliente"     },
-  { key: "plano",          label: "Plano"       },
-  { key: "valor_contrato", label: "MRR"         },
-  { key: "total_tarefas",  label: "Tarefas",  center: true },
-  { key: "finalizadas",    label: "Finaliz.",  center: true },
-  { key: "atrasadas",      label: "Atrasadas", center: true },
-  { key: "score",          label: "Progresso"   },
-  { key: null,             label: "Score",     center: true },
-  { key: "statusScore",    label: "Status"      },
+  { key: "id_cliente",    label: "ID"          },
+  { key: "nome_empresa",  label: "Cliente"     },
+  { key: "plano",         label: "Plano"       },
+  { key: "total_tarefas", label: "Tarefas",  center: true },
+  { key: "finalizadas",   label: "Finaliz.",  center: true },
+  { key: "atrasadas",     label: "Atrasadas", center: true },
+  { key: "score",         label: "Progresso"   },
+  { key: null,            label: "Score",     center: true },
+  { key: "statusScore",   label: "Status"      },
 ];
 
 export default function PipelinePage() {
@@ -594,7 +590,7 @@ export default function PipelinePage() {
               <tbody>
                 {clientesFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-16 text-gray-500">
+                    <td colSpan={9} className="text-center py-16 text-gray-500">
                       Nenhum cliente encontrado
                     </td>
                   </tr>
@@ -630,10 +626,6 @@ export default function PipelinePage() {
                           ) : (
                             <span className="text-gray-600 text-xs">—</span>
                           )}
-                        </td>
-                        {/* MRR */}
-                        <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                          {formatMRR(c.valor_contrato)}
                         </td>
                         {/* Total */}
                         <td className="px-4 py-3 text-center text-gray-300">
@@ -673,7 +665,7 @@ export default function PipelinePage() {
                       {expandedId === c.id && (
                         <tr>
                           <td
-                            colSpan={10}
+                            colSpan={9}
                             className="px-5 py-4 bg-[#161625] border-t border-[#1a1a1a]"
                           >
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
