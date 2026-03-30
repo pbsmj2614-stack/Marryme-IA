@@ -24,18 +24,32 @@ export interface ImportResult {
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Converte DD/MM/YYYY ou YYYY-MM-DD para YYYY-MM-DD.
+ * Converte D/M/YYYY, DD/MM/YYYY, DD/MM/YY ou YYYY-MM-DD para YYYY-MM-DD.
  * Retorna null se não reconhecer o formato.
  */
 function parseDateBR(str: string): string | null {
   if (!str || str.trim() === "") return null;
+  const s = str.trim();
 
-  // DD/MM/YYYY
-  const brMatch = str.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+  // D/M/YYYY ou DD/MM/YYYY (aceita 1 ou 2 dígitos no dia e mês)
+  const brMatch = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (brMatch) {
+    const d = brMatch[1].padStart(2, "0");
+    const m = brMatch[2].padStart(2, "0");
+    return `${brMatch[3]}-${m}-${d}`;
+  }
+
+  // D/M/YY (ano com 2 dígitos)
+  const brShort = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})$/);
+  if (brShort) {
+    const d = brShort[1].padStart(2, "0");
+    const m = brShort[2].padStart(2, "0");
+    const y = parseInt(brShort[3]) < 50 ? `20${brShort[3]}` : `19${brShort[3]}`;
+    return `${y}-${m}-${d}`;
+  }
 
   // YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str.trim())) return str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
   return null;
 }
@@ -43,10 +57,28 @@ function parseDateBR(str: string): string | null {
 const TODAY = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
 function isAtrasado(prazoStr: string, status: string): boolean {
-  if (status === "Finalizado") return false;
+  if (/finaliz/i.test(status)) return false; // já finalizado
   const prazo = parseDateBR(prazoStr);
   if (!prazo) return false;
   return prazo < TODAY;
+}
+
+// Normaliza status do cliente para "Ativo" ou "Pausado"
+function normalizeClientStatus(s: string): "Ativo" | "Pausado" {
+  if (!s?.trim()) return "Ativo";
+  if (/paus/i.test(s)) return "Pausado";
+  return "Ativo";
+}
+
+// Normaliza status da tarefa para valor canônico
+function normalizeTaskStatus(s: string, checkFeito: boolean): string {
+  if (checkFeito) return "Finalizado";
+  if (!s?.trim()) return "Não iniciado";
+  if (/finaliz|conclu|feito|done/i.test(s)) return "Finalizado";
+  if (/andamento|progress|em curso/i.test(s)) return "Em andamento";
+  if (/atras|vencid/i.test(s)) return "Atrasado";
+  if (/não inici|nao inici|pendente|aberto/i.test(s)) return "Não iniciado";
+  return s.trim(); // preserva valor original se não reconhecer
 }
 
 // ─── Tab matching ─────────────────────────────────────────────────────────────
@@ -133,7 +165,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
     inicio_contrato: parseDateBR(c.inicio_contrato),
     plano:           c.plano          || null,
     fase_projeto:    c.fase_projeto   || null,
-    status:          c.status         || "Ativo",
+    status:          normalizeClientStatus(c.status),
     responsavel_mm:  c.responsavel_mm || null,
     observacoes:     c.observacoes    || null,
     sheets_aba:      encontrarAba(abasClientes, c.id_cliente, c.nome_empresa),
@@ -168,19 +200,27 @@ export async function importarPlanilha(): Promise<ImportResult> {
       continue;
     }
 
-    // Determina status final (marca atrasado se necessário)
-    const tarefasPayload = tarefas.map((t) => ({
-      cliente_id:   cliente.id_cliente,
-      check_feito:  t.check_feito,
-      etapa:        t.etapa       || null,
-      o_que:        t.o_que,
-      tipo:         t.tipo        || null,
-      quem:         t.quem        || null,
-      prazo:        parseDateBR(t.prazo),
-      status:       isAtrasado(t.prazo, t.status) ? "Atrasado" : (t.status || "Não iniciado"),
-      observacoes:  t.observacoes || null,
-      atualizado_em: new Date().toISOString(),
-    }));
+    // Determina status final com normalização e check_feito como prioridade
+    const tarefasPayload = tarefas.map((t) => {
+      const prazoISO = parseDateBR(t.prazo);
+      const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
+      const statusFinal =
+        t.check_feito ? "Finalizado"
+        : isAtrasado(t.prazo, statusNorm) ? "Atrasado"
+        : statusNorm;
+      return {
+        cliente_id:    cliente.id_cliente,
+        check_feito:   t.check_feito,
+        etapa:         t.etapa       || null,
+        o_que:         t.o_que,
+        tipo:          t.tipo        || null,
+        quem:          t.quem        || null,
+        prazo:         prazoISO,
+        status:        statusFinal,
+        observacoes:   t.observacoes || null,
+        atualizado_em: new Date().toISOString(),
+      };
+    });
 
     if (tarefasPayload.length === 0) continue;
 

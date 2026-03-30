@@ -320,8 +320,12 @@ export default function PipelinePage() {
 
     const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
       const tCliente   = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-      const finalizadas = tCliente.filter((t) => t.status === "Finalizado").length;
-      const atrasadas   = tCliente.filter((t) => t.status === "Atrasado").length;
+      const hoje = new Date().toISOString().split("T")[0];
+      const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+      const atrasadas   = tCliente.filter((t) =>
+        !t.check_feito && t.status !== "Finalizado" &&
+        (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
+      ).length;
       const total       = tCliente.length;
       const score       = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
       return {
@@ -408,8 +412,8 @@ export default function PipelinePage() {
 
   // ── Summary metrics ──
   const metrics = useMemo(() => {
-    const ativos   = clientes.filter((c) => c.status === "Ativo");
-    const pausados = clientes.filter((c) => c.status === "Pausado").length;
+    const ativos   = clientes.filter((c) => !/paus/i.test(c.status ?? ""));
+    const pausados = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
     const atrasadasTotal = clientes.reduce((s, c) => s + c.atrasadas, 0);
     const emRisco        = ativos.filter((c) => c.score < 50).length;
     return { ativos: ativos.length, pausados, atrasadasTotal, emRisco };
@@ -419,10 +423,10 @@ export default function PipelinePage() {
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
       // Filtro status
-      if (filtro === "Em risco")   return c.statusScore === "Em risco"  && c.status === "Ativo";
+      if (filtro === "Em risco")   return c.statusScore === "Em risco"  && !/paus/i.test(c.status ?? "");
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
       if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
-      if (filtro === "Pausados")   return c.status === "Pausado";
+      if (filtro === "Pausados")   return /paus/i.test(c.status ?? "");
       return true;
     });
 

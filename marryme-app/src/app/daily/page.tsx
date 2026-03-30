@@ -359,11 +359,9 @@ export default function DailyPage() {
       .map((t) => ({ ...t, cliente: clienteMap[t.cliente_id] })),
   [tarefas, clienteMap]);
 
-  // ── Atrasados (prazo < hoje && status != Finalizado) ──
+  // ── Atrasados (prazo < hoje && não finalizado) ──
   const atrasados = useMemo(() => {
-    const list = tarefasComCliente.filter(
-      (t) => t.prazo && t.prazo < TODAY && t.status !== "Finalizado"
-    );
+    const list = tarefasComCliente.filter(isAtrasado);
     // Agrupa por cliente
     const grupos: Record<string, { cliente: Cliente; tarefas: TarefaComCliente[] }> = {};
     list.forEach((t) => {
@@ -378,14 +376,15 @@ export default function DailyPage() {
   // ── Prioridades de hoje ──
   const prioHoje = useMemo(() =>
     tarefasComCliente
-      .filter((t) => t.prazo === TODAY && t.status !== "Finalizado")
+      .filter((t) => t.prazo === TODAY && !isFinalizado(t))
       .sort((a, b) => a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR")),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   [tarefasComCliente]);
 
   // ── Prioridades da semana (amanhã → +7 dias) ──
   const prioSemana = useMemo(() => {
     const list = tarefasComCliente.filter(
-      (t) => t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END && t.status !== "Finalizado"
+      (t) => t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END && !isFinalizado(t)
     );
     // Agrupa por data
     const grupos: Record<string, TarefaComCliente[]> = {};
@@ -397,23 +396,31 @@ export default function DailyPage() {
     return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
   }, [tarefasComCliente]);
 
+  // ── Helpers de status ──
+  const isAtivo = (s: string) => !/paus/i.test(s ?? "");
+  const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
+  const isAtrasado = (t: Tarefa) =>
+    !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+
   // ── Clientes com métricas ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>
     clientes.map((c) => {
       const t = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-      const fin = t.filter((t) => t.status === "Finalizado").length;
-      const atr = t.filter((t) => t.status === "Atrasado" || (t.prazo && t.prazo < TODAY && t.status !== "Finalizado")).length;
+      const fin = t.filter(isFinalizado).length;
+      const atr = t.filter(isAtrasado).length;
       const score = t.length > 0 ? Math.round((fin / t.length) * 100) : 0;
       return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
     }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   [clientes, tarefas]);
 
   // ── Ranking: 5 piores scores (ativos) ──
   const ranking = useMemo(() =>
     clientesComMetricas
-      .filter((c) => c.status === "Ativo")
+      .filter((c) => isAtivo(c.status))
       .sort((a, b) => a.score - b.score)
       .slice(0, 5),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   [clientesComMetricas]);
 
   // ── Resumo por responsável ──
@@ -424,10 +431,8 @@ export default function DailyPage() {
         t.cliente.responsavel_mm?.toLowerCase().includes(resp.toLowerCase())
       );
       const total      = meus.length;
-      const finalizadas = meus.filter((t) => t.status === "Finalizado").length;
-      const atrasadas   = meus.filter(
-        (t) => t.prazo && t.prazo < TODAY && t.status !== "Finalizado"
-      ).length;
+      const finalizadas = meus.filter(isFinalizado).length;
+      const atrasadas   = meus.filter(isAtrasado).length;
       const score = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
       return { resp, total, finalizadas, atrasadas, score };
     }),

@@ -242,8 +242,12 @@ export default function DashboardBIPage() {
 
     const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
       const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-      const finalizadas = tCliente.filter((t) => t.status === "Finalizado").length;
-      const atrasadas   = tCliente.filter((t) => t.status === "Atrasado").length;
+      const hoje = new Date().toISOString().split("T")[0];
+      const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+      const atrasadas   = tCliente.filter((t) =>
+        !t.check_feito && t.status !== "Finalizado" &&
+        (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
+      ).length;
       const total       = tCliente.length;
       const score       = total > 0 ? Math.round((finalizadas / total) * 100) : 0;
 
@@ -276,8 +280,8 @@ export default function DashboardBIPage() {
 
   // ── Metrics ──
   const metrics = useMemo(() => {
-    const ativos   = clientes.filter((c) => c.status === "Ativo");
-    const pausados = clientes.filter((c) => c.status === "Pausado");
+    const ativos   = clientes.filter((c) => !/paus/i.test(c.status ?? ""));
+    const pausados = clientes.filter((c) => /paus/i.test(c.status ?? ""));
     const mrr      = ativos.reduce((s, c) => s + (c.valor_contrato ?? 0), 0);
     const atrasadasTotal    = clientes.reduce((s, c) => s + c.atrasadas, 0);
     const clientesAtrasados = clientes.filter((c) => c.atrasadas > 0).length;
@@ -288,10 +292,10 @@ export default function DashboardBIPage() {
   // ── Filtered + sorted ──
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
-      if (filtro === "Em risco")   return c.statusScore === "Em risco"  && c.status === "Ativo";
+      if (filtro === "Em risco")   return c.statusScore === "Em risco"  && !/paus/i.test(c.status ?? "");
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
       if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
-      if (filtro === "Pausados")   return c.status === "Pausado";
+      if (filtro === "Pausados")   return /paus/i.test(c.status ?? "");
       return true;
     });
 
@@ -314,7 +318,7 @@ export default function DashboardBIPage() {
   const chartData = useMemo(
     () =>
       clientes
-        .filter((c) => c.status === "Ativo")
+        .filter((c) => !/paus/i.test(c.status ?? ""))
         .sort((a, b) => a.score - b.score)
         .map((c) => ({ nome: c.nome_empresa, score: c.score, color: getScoreColor(c.score) })),
     [clientes]
