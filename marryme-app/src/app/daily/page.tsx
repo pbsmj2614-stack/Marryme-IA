@@ -580,6 +580,9 @@ export default function DailyPage() {
                                 {t.prazo && (
                                   <span className="text-red-500 ml-1">({formatDate(t.prazo)})</span>
                                 )}
+                                {t.quem && (
+                                  <span className="text-blue-400 ml-1">· {t.quem}</span>
+                                )}
                               </span>
                             </div>
                           ))}

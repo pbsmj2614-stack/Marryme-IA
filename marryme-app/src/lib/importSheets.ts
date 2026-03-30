@@ -94,26 +94,34 @@ function normalizeTaskStatus(s: string, checkFeito: boolean): string {
  *  3. Nome da empresa na aba   → fallback fuzzy            ✓
  */
 function encontrarAba(
-  abasDisponiveis: string[],
+  abasDisponiveis: string[], // abas filtradas MM\d+
   idCliente: string,
-  nomeEmpresa: string
+  nomeEmpresa: string,
+  todasAbas: string[] = [], // todas as abas (fallback para abas sem prefixo MM)
 ): string | null {
-  const idLower  = idCliente.toLowerCase();
+  const idLower   = idCliente.toLowerCase();
   const nomeLower = nomeEmpresa.toLowerCase().replace(/\s+/g, "");
 
-  return (
-    // 1ª prioridade: ID como prefixo (MM039_NomeQualquer)
-    abasDisponiveis.find((a) =>
-      a.toLowerCase().startsWith(idLower + "_") ||
-      a.toLowerCase() === idLower
-    ) ??
-    // 2ª prioridade: nome da empresa na aba (sem espaços)
-    abasDisponiveis.find((a) => {
-      const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
-      return aLower.includes(nomeLower) || nomeLower.includes(aLower);
-    }) ??
-    null
-  );
+  // 1ª: ID como prefixo (MM039_Nome ou MM039 Nome ou exatamente MM039)
+  const porId = abasDisponiveis.find((a) => {
+    const al = a.toLowerCase();
+    return al.startsWith(idLower + "_") || al.startsWith(idLower + " ") || al === idLower;
+  });
+  if (porId) return porId;
+
+  // 2ª: nome da empresa nas abas MM
+  const porNomeMM = abasDisponiveis.find((a) => {
+    const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+    return aLower.includes(nomeLower) || nomeLower.includes(aLower);
+  });
+  if (porNomeMM) return porNomeMM;
+
+  // 3ª: busca em TODAS as abas pelo nome (para abas sem prefixo MM)
+  const porNomeTodas = todasAbas.find((a) => {
+    const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+    return aLower.includes(nomeLower) || nomeLower.includes(aLower);
+  });
+  return porNomeTodas ?? null;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -163,7 +171,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
 
   // ── 4. Monta payload de clientes ──
   const clientesPayload = clientesSheet.map((c) => {
-    const aba = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa);
+    const aba = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
     if (!aba) semAbas.push(`${c.id_cliente} (${c.nome_empresa})`);
     return {
       id_cliente:      c.id_cliente,
