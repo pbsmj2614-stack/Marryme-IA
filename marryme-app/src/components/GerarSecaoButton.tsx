@@ -32,36 +32,35 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     setLoading(true);
 
     try {
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-
       const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      // Usa token do usuário se estiver logado, senão anon key (mesmo comportamento do SDK)
-      const bearerToken = session?.access_token ?? anonKey;
-
-      const res = await fetch(`${supabaseUrl}/functions/v1/gerar-roteiro`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${bearerToken}`,
-          "apikey": anonKey,
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke("gerar-roteiro", {
+        body: {
           entrevista_id: entrevistaId,
           secao,
           roteiro_id: roteiroId,
-        }),
+        },
       });
 
-      const resBody = await res.json().catch(() => ({})) as Record<string, unknown>;
-
-      if (!res.ok) {
-        setErro((resBody.error as string) ?? `Erro ${res.status} ao gerar seção`);
+      if (error) {
+        let detalhe = error.message ?? "Erro ao gerar seção";
+        // Lê o body real da resposta HTTP (context é o Response object, ainda não consumido)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (error as any).context;
+        if (ctx instanceof Response) {
+          try {
+            const body = await ctx.clone().json();
+            if (body?.error) detalhe = body.error;
+            else if (body?.message) detalhe = body.message;
+          } catch {
+            try { detalhe = (await ctx.clone().text()) || detalhe; } catch { /* ignora */ }
+          }
+        }
+        setErro(detalhe);
         setLoading(false);
         return;
       }
 
+      void data;
       router.refresh();
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro inesperado ao chamar Edge Function");
