@@ -332,7 +332,7 @@ export default function DashboardBIPage() {
           nome:       c.nome_empresa,
           score:      c.score,
           color:      getScoreColor(c.score),
-          total:      c.total_tarefas,
+          taskCount:  c.total_tarefas,  // "total" conflita com prop interna do Recharts
           finalizadas: c.finalizadas,
           atrasadas:  c.atrasadas,
         })),
@@ -652,9 +652,9 @@ export default function DashboardBIPage() {
                           <p className="font-bold text-base mb-1" style={{ color: d.color }}>
                             {d.score}%
                           </p>
-                          {d.total > 0 ? (
+                          {d.taskCount > 0 ? (
                             <div className="space-y-0.5 text-gray-400">
-                              <p>{d.total} tarefas no total</p>
+                              <p>{d.taskCount} tarefas no total</p>
                               <p className="text-green-400">{d.finalizadas} finalizadas</p>
                               {d.atrasadas > 0 && (
                                 <p className="text-red-400">{d.atrasadas} atrasadas</p>
@@ -670,10 +670,10 @@ export default function DashboardBIPage() {
                   <Bar dataKey="score" radius={[0, 5, 5, 0]} maxBarSize={24} minPointSize={3}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     label={(props: any) => {
-                      const { x = 0, y = 0, width = 0, height = 0, total = 0 } = props as {
-                        x: number; y: number; width: number; height: number; total: number;
+                      const { x = 0, y = 0, width = 0, height = 0, taskCount = 0 } = props as {
+                        x: number; y: number; width: number; height: number; taskCount: number;
                       };
-                      if (total > 0) return <g />;
+                      if (taskCount > 0) return <g />;
                       return (
                         <text x={x + width + 10} y={y + height / 2 + 4} fill="#4b5563" fontSize={10}>
                           Sem tarefas
@@ -682,7 +682,7 @@ export default function DashboardBIPage() {
                     }}
                   >
                     {chartDataVisible.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.total === 0 ? "#374151" : entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.taskCount === 0 ? "#374151" : entry.color} />
                     ))}
                   </Bar>
                 </BarChart>

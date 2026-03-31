@@ -207,26 +207,31 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ─── Card de situação ─────────────────────────────────────────────────────────
 
 function SituacaoCard({
-  title, borderColor, children, empty, emptyMsg,
+  title, borderColor, children, empty, emptyMsg, expanded, footer,
 }: {
   title: string;
   borderColor: string;
   children: React.ReactNode;
   empty: boolean;
   emptyMsg: string;
+  expanded?: boolean;
+  footer?: React.ReactNode;
 }) {
   return (
-    <div className={`bg-[#242424] border ${borderColor} rounded-xl flex flex-col h-full`}>
+    <div className={`bg-[#242424] border ${borderColor} rounded-xl flex flex-col`}>
       <div className="px-4 py-3 border-b border-[#333]">
         <h3 className="font-semibold text-sm text-white">{title}</h3>
       </div>
-      <div className="px-4 py-3 flex-1 overflow-y-auto max-h-80">
+      <div className={`px-4 py-3 overflow-y-auto ${expanded ? "max-h-[500px]" : ""}`}>
         {empty ? (
           <p className="text-gray-500 text-sm py-2">{emptyMsg}</p>
         ) : (
           children
         )}
       </div>
+      {footer && (
+        <div className="border-t border-[#2a2a2a]">{footer}</div>
+      )}
     </div>
   );
 }
@@ -289,6 +294,10 @@ export default function DailyPage() {
   // Atrasados: controla qual grupo está expandido
   const [atrasadosOpen,  setAtrasadosOpen]  = useState<Set<string>>(new Set());
   const [filtroResp,     setFiltroResp]     = useState("Todos");
+  const [atrasadosExp,   setAtrasadosExp]   = useState(false);
+  const [hojeExp,        setHojeExp]        = useState(false);
+  const [semanaExp,      setSemanaExp]      = useState(false);
+  const CARD_LIMIT = 5;
 
   // ── Load ──
   const loadData = useCallback(async () => {
@@ -535,10 +544,19 @@ export default function DailyPage() {
               title={`⚠ Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
               borderColor="border-red-800"
               empty={atrasados.length === 0}
-              emptyMsg="Nenhum item atrasado hoje"
+              emptyMsg="Nenhum item atrasado"
+              expanded={atrasadosExp}
+              footer={atrasados.length > CARD_LIMIT ? (
+                <button
+                  onClick={() => setAtrasadosExp(!atrasadosExp)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                >
+                  {atrasadosExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({atrasados.length} clientes)</>}
+                </button>
+              ) : undefined}
             >
               <div className="space-y-1">
-                {atrasados.map(({ cliente, tarefas: tList }) => {
+                {(atrasadosExp ? atrasados : atrasados.slice(0, CARD_LIMIT)).map(({ cliente, tarefas: tList }) => {
                   const open = atrasadosOpen.has(cliente.id_cliente);
                   return (
                     <div key={cliente.id_cliente}>
@@ -599,8 +617,17 @@ export default function DailyPage() {
               borderColor="border-yellow-700"
               empty={prioHoje.length === 0}
               emptyMsg="Nada para hoje"
+              expanded={hojeExp}
+              footer={prioHoje.length > CARD_LIMIT ? (
+                <button
+                  onClick={() => setHojeExp(!hojeExp)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                >
+                  {hojeExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({prioHoje.length} tarefas)</>}
+                </button>
+              ) : undefined}
             >
-              {prioHoje.map((t) => (
+              {(hojeExp ? prioHoje : prioHoje.slice(0, CARD_LIMIT)).map((t) => (
                 <TarefaCheck
                   key={t.id}
                   tarefa={t}
@@ -619,9 +646,18 @@ export default function DailyPage() {
               borderColor="border-blue-800"
               empty={prioSemana.length === 0}
               emptyMsg="Semana tranquila"
+              expanded={semanaExp}
+              footer={prioSemana.length > CARD_LIMIT ? (
+                <button
+                  onClick={() => setSemanaExp(!semanaExp)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                >
+                  {semanaExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({prioSemana.length} dias)</>}
+                </button>
+              ) : undefined}
             >
               <div className="space-y-3">
-                {prioSemana.map(([data, tList]) => (
+                {(semanaExp ? prioSemana : prioSemana.slice(0, CARD_LIMIT)).map(([data, tList]) => (
                   <div key={data}>
                     <p className="text-xs text-blue-400 font-semibold mb-1 capitalize">
                       {formatDateFull(data)}
