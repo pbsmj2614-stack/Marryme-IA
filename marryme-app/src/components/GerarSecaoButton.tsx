@@ -31,31 +31,37 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     setErro("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke("gerar-roteiro", {
-      body: {
-        entrevista_id: entrevistaId,
-        secao,
-        roteiro_id: roteiroId,
-      },
-    });
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
 
-    if (error) {
-      let detalhe = error.message ?? "Erro ao gerar seção";
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (error as any).context;
-        if (ctx) {
-          const body = typeof ctx.json === "function" ? await ctx.json() : null;
-          if (body?.error) detalhe = body.error;
-        }
-      } catch { /* ignora erro de parse */ }
-      setErro(detalhe);
-      setLoading(false);
-      return;
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/gerar-roteiro`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+          "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        },
+        body: JSON.stringify({
+          entrevista_id: entrevistaId,
+          secao,
+          roteiro_id: roteiroId,
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        setErro(errBody.error ?? `Erro ${res.status} ao gerar seção`);
+        setLoading(false);
+        return;
+      }
+
+      router.refresh();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Erro inesperado");
     }
 
-    router.refresh();
     setLoading(false);
   }
 

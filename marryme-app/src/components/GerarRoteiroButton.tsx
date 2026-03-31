@@ -13,35 +13,41 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
     setErro("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
-      body: { entrevista_id: entrevistaId },
-    });
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
 
-    if (fnError) {
-      // Tenta extrair mensagem real do body da resposta HTTP da Edge Function
-      let detalhe = fnError.message ?? "Erro ao chamar Edge Function";
-      try {
-        // FunctionsHttpError expõe o body via .context.json()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (fnError as any).context;
-        if (ctx) {
-          const body = typeof ctx.json === "function" ? await ctx.json() : null;
-          if (body?.error) detalhe = body.error;
-        }
-      } catch { /* ignora erro de parse */ }
-      setErro(detalhe);
-      setLoading(false);
-      return;
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/gerar-roteiro`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+          "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+        },
+        body: JSON.stringify({ entrevista_id: entrevistaId }),
+      });
+
+      const resBody = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setErro(resBody.error ?? `Erro ${res.status} ao gerar roteiro`);
+        setLoading(false);
+        return;
+      }
+
+      if (!resBody?.roteiro) {
+        setErro(resBody?.error ?? "Roteiro não retornado. Tente novamente.");
+        setLoading(false);
+        return;
+      }
+
+      router.refresh();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Erro inesperado");
     }
 
-    if (!fnData?.roteiro) {
-      setErro(fnData?.error ?? "Roteiro não retornado. Tente novamente.");
-      setLoading(false);
-      return;
-    }
-
-    router.refresh();
+    setLoading(false);
   }
 
   return (
