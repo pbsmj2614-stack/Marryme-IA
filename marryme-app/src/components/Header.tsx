@@ -39,9 +39,6 @@ export default function Header({ user }: HeaderProps) {
           <Link href="/daily" className="text-sm text-gray-600 hover:text-brand-600 transition">
             Daily
           </Link>
-          <Link href="/novo-cliente" className="text-sm text-gray-600 hover:text-brand-600 transition">
-            Novo Cliente
-          </Link>
           <Link
             href="/novo"
             className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg transition font-medium"
