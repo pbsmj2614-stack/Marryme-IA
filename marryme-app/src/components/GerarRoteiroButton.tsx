@@ -18,8 +18,16 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
       body: { entrevista_id: entrevistaId },
     });
 
-    if (fnError || !fnData?.roteiro) {
-      setErro(fnError?.message ?? "Erro ao gerar roteiro");
+    if (fnError) {
+      // fnData pode conter o erro real da Edge Function mesmo quando fnError existe
+      const detalhe = fnData?.error ?? fnError.message ?? "Erro ao chamar Edge Function";
+      setErro(`Erro: ${detalhe}`);
+      setLoading(false);
+      return;
+    }
+
+    if (!fnData?.roteiro) {
+      setErro(fnData?.error ?? "Roteiro não retornado. Tente novamente.");
       setLoading(false);
       return;
     }

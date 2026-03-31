@@ -32,7 +32,7 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.functions.invoke("gerar-roteiro", {
+    const { data, error } = await supabase.functions.invoke("gerar-roteiro", {
       body: {
         entrevista_id: entrevistaId,
         secao,
@@ -41,7 +41,8 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     });
 
     if (error) {
-      setErro(error.message ?? "Erro ao gerar");
+      const detalhe = data?.error ?? error.message ?? "Erro ao gerar seção";
+      setErro(`Erro: ${detalhe}`);
       setLoading(false);
       return;
     }

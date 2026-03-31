@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.27.3";
+import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.36.3";
 import { INSTRUCOES_MARRYME } from "./instrucoes.ts";
 
 const corsHeaders = {
@@ -170,9 +170,25 @@ async function chamarClaude(
   };
   if (system) params.system = system;
 
-  const response = await client.messages.create(params);
-  const texto = (response.content[0] as Anthropic.TextBlock).text;
-  return extrairJSON(texto);
+  let response: Anthropic.Message;
+  try {
+    response = await client.messages.create(params);
+  } catch (apiErr) {
+    // Expõe a mensagem real da API Anthropic (ex: chave inválida, rate limit)
+    const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+    throw new Error(`Anthropic API: ${msg}`);
+  }
+
+  if (!response.content || response.content.length === 0) {
+    throw new Error(`Anthropic retornou resposta vazia (stop_reason: ${response.stop_reason})`);
+  }
+
+  const block = response.content[0];
+  if (block.type !== "text") {
+    throw new Error(`Anthropic retornou bloco de tipo inesperado: ${block.type}`);
+  }
+
+  return extrairJSON(block.text);
 }
 
 /** Monta system prompt combinando instruções fixas + few-shot da categoria */
