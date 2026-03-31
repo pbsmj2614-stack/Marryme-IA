@@ -159,10 +159,12 @@ function CharField({
 export default function NovoPage() {
   const router = useRouter();
   const [user,    setUser]    = useState<User | null>(null);
-  const [dados,   setDados]   = useState<DadosEntrevista>(INITIAL);
-  const [plano,        setPlano]        = useState("Essencial");
-  const [faseProjeto,  setFaseProjeto]  = useState("Onboarding");
-  const [responsavel,  setResponsavel]  = useState("");
+  const [dados,   setDados]   = useState<DadosEntrevista>({
+    ...INITIAL,
+    plano:          "Essencial",
+    fase_projeto:   "Onboarding",
+    responsavel_mm: "",
+  });
   const [loading, setLoading] = useState(false);
   const [status,  setStatus]  = useState("");
   const [erro,    setErro]    = useState("");
@@ -246,12 +248,12 @@ export default function NovoPage() {
           body:    JSON.stringify({
             nome_empresa:   dados.nome_artistico.trim(),
             segmento:       segmentoLabel,
-            cidade:         dados.cidade_base  || "",
-            whatsapp:       dados.whatsapp     || "",
-            email:          dados.email        || "",
-            plano,
-            fase_projeto:   faseProjeto,
-            responsavel_mm: responsavel,
+            cidade:         dados.cidade_base      || "",
+            whatsapp:       dados.whatsapp         || "",
+            email:          dados.email            || "",
+            plano:          dados.plano            || "Essencial",
+            fase_projeto:   dados.fase_projeto     || "Onboarding",
+            responsavel_mm: dados.responsavel_mm   || "",
             observacoes:    dados.informacoes_adicionais || "",
           }),
         });
@@ -338,8 +340,8 @@ export default function NovoPage() {
                   />
                   <Select
                     label="Plano"
-                    value={plano}
-                    onChange={setPlano}
+                    value={dados.plano ?? "Essencial"}
+                    onChange={(v) => set("plano", v)}
                     options={PLANOS.map((p) => ({ value: p, label: p }))}
                     disabled={loading}
                   />
@@ -348,8 +350,8 @@ export default function NovoPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Select
                     label="Fase do projeto"
-                    value={faseProjeto}
-                    onChange={setFaseProjeto}
+                    value={dados.fase_projeto ?? "Onboarding"}
+                    onChange={(v) => set("fase_projeto", v)}
                     options={FASES.map((f) => ({ value: f, label: f }))}
                     disabled={loading}
                   />
@@ -357,8 +359,8 @@ export default function NovoPage() {
                     <Label>Responsável MM</Label>
                     <div className="relative">
                       <select
-                        value={responsavel}
-                        onChange={(e) => setResponsavel(e.target.value)}
+                        value={dados.responsavel_mm ?? ""}
+                        onChange={(e) => set("responsavel_mm", e.target.value)}
                         className={selectCls}
                         disabled={loading}
                       >

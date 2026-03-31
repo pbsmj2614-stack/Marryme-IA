@@ -7,6 +7,15 @@ import ExportarButton from "@/components/ExportarButton";
 import type { Categoria } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 
+const FASES = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
+
+const PLANO_COLORS: Record<string, string> = {
+  Essencial: "bg-blue-50 text-blue-700 border-blue-100",
+  Growth:    "bg-green-50 text-green-700 border-green-100",
+  Premium:   "bg-purple-50 text-purple-700 border-purple-100",
+  Trial:     "bg-gray-100 text-gray-600 border-gray-200",
+};
+
 interface Props {
   prestadorId: string;
   nome: string;
@@ -14,6 +23,8 @@ interface Props {
   cidadeBase: string | null;
   whatsapp: string | null;
   nivelMercado: string | null;
+  plano: string | null;
+  faseProjeto: string | null;
   total: number;
   aprovados: number;
   ultimoRoteiroId?: string;
@@ -35,14 +46,18 @@ export default function PrestadorCard({
   cidadeBase,
   whatsapp,
   nivelMercado,
+  plano,
+  faseProjeto,
   total,
   aprovados,
   ultimoRoteiroId,
   ultimoRoteiroAprovado,
 }: Props) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen,    setMenuOpen]    = useState(false);
   const [loadingAcao, setLoadingAcao] = useState<string | null>(null);
+  const [fase,        setFase]        = useState(faseProjeto ?? "");
+  const [savingFase,  setSavingFase]  = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const temRoteiro = total > 0;
@@ -156,6 +171,28 @@ export default function PrestadorCard({
 
   const carregando = loadingAcao !== null;
 
+  async function handleFaseChange(novaFase: string) {
+    setFase(novaFase);
+    setSavingFase(true);
+    const supabase = createClient();
+    // Busca última entrevista e atualiza dados_json.fase_projeto
+    const { data: ent } = await supabase
+      .from("entrevistas")
+      .select("id, dados_json")
+      .eq("prestador_id", prestadorId)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (ent) {
+      await supabase
+        .from("entrevistas")
+        .update({ dados_json: { ...(ent.dados_json as object), fase_projeto: novaFase } })
+        .eq("id", ent.id);
+    }
+    setSavingFase(false);
+    router.refresh();
+  }
+
   return (
     <div
       className={`relative bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-brand-300 transition group cursor-pointer ${carregando ? "opacity-60 pointer-events-none" : ""}`}
@@ -181,17 +218,49 @@ export default function PrestadorCard({
         </span>
       </div>
 
-      {/* Linha 2: tags de tipo e classificação */}
+      {/* Linha 2: tags de tipo, plano e classificação */}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
           {CATEGORIA_LABEL[categoria] ?? categoria}
         </span>
+        {plano && (
+          <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${PLANO_COLORS[plano] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+            {plano}
+          </span>
+        )}
         {nivelCurto && (
           <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
             {nivelCurto}
           </span>
         )}
       </div>
+
+      {/* Fase do projeto — editável inline */}
+      {(fase || faseProjeto) && (
+        <div
+          className="mt-2 flex items-center gap-1.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-xs text-gray-400 shrink-0">Fase:</span>
+          <div className="relative">
+            <select
+              value={fase}
+              onChange={(e) => handleFaseChange(e.target.value)}
+              disabled={savingFase || carregando}
+              className="text-xs text-gray-600 bg-transparent border border-gray-200 rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer hover:border-gray-400 focus:outline-none focus:border-brand-400 transition disabled:opacity-50"
+            >
+              {FASES.map((f) => <option key={f}>{f}</option>)}
+            </select>
+            <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 text-[9px]">▼</span>
+          </div>
+          {savingFase && (
+            <svg className="animate-spin h-3 w-3 text-brand-500 shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          )}
+        </div>
+      )}
 
       {/* Linha 3: telefone e cidade */}
       <div className="mt-3 space-y-1.5">

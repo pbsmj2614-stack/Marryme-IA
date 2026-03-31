@@ -27,6 +27,11 @@ export interface DadosEntrevista {
   cidade_base: string;
   instagram: string;
 
+  // Gestão interna (opcionais para compatibilidade retroativa)
+  plano?: string;
+  fase_projeto?: string;
+  responsavel_mm?: string;
+
   // Dados da entrevista
   anos_experiencia: string;
   especialidade: string;

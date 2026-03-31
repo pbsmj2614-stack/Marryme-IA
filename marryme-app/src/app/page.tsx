@@ -25,13 +25,14 @@ export default async function DashboardPage({
 
   const { data: prestadores } = await supabase
     .from("prestadores")
-    .select("*, roteiros(id, aprovado, criado_em, analise_estrategica)")
+    .select("*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em)")
     .order("criado_em", { ascending: false });
 
   type PrestadorRow = Prestador & {
     roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
       analise_estrategica: { nivel_mercado?: string } | null;
     })[];
+    entrevistas: { dados_json: { plano?: string; fase_projeto?: string } | null; criado_em: string }[];
   };
   const lista = (prestadores ?? []) as PrestadorRow[];
 
@@ -117,6 +118,12 @@ export default async function DashboardPage({
 
               const nivelMercado = ultimoRoteiro?.analise_estrategica?.nivel_mercado ?? null;
 
+              const ultimaEntrevista = [...(p.entrevistas ?? [])].sort(
+                (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+              )[0];
+              const plano       = ultimaEntrevista?.dados_json?.plano       ?? null;
+              const faseProjeto = ultimaEntrevista?.dados_json?.fase_projeto ?? null;
+
               return (
                 <PrestadorCard
                   key={p.id}
@@ -126,6 +133,8 @@ export default async function DashboardPage({
                   cidadeBase={p.cidade_base}
                   whatsapp={p.whatsapp}
                   nivelMercado={nivelMercado}
+                  plano={plano}
+                  faseProjeto={faseProjeto}
                   total={total}
                   aprovados={aprovados}
                   ultimoRoteiroId={ultimoRoteiro?.id}
