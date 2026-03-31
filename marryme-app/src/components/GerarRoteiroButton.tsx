@@ -19,9 +19,18 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
     });
 
     if (fnError) {
-      // fnData pode conter o erro real da Edge Function mesmo quando fnError existe
-      const detalhe = fnData?.error ?? fnError.message ?? "Erro ao chamar Edge Function";
-      setErro(`Erro: ${detalhe}`);
+      // Tenta extrair mensagem real do body da resposta HTTP da Edge Function
+      let detalhe = fnError.message ?? "Erro ao chamar Edge Function";
+      try {
+        // FunctionsHttpError expõe o body via .context.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (fnError as any).context;
+        if (ctx) {
+          const body = typeof ctx.json === "function" ? await ctx.json() : null;
+          if (body?.error) detalhe = body.error;
+        }
+      } catch { /* ignora erro de parse */ }
+      setErro(detalhe);
       setLoading(false);
       return;
     }

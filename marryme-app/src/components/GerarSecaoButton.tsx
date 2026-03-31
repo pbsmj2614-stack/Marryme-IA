@@ -41,8 +41,16 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     });
 
     if (error) {
-      const detalhe = data?.error ?? error.message ?? "Erro ao gerar seção";
-      setErro(`Erro: ${detalhe}`);
+      let detalhe = error.message ?? "Erro ao gerar seção";
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (error as any).context;
+        if (ctx) {
+          const body = typeof ctx.json === "function" ? await ctx.json() : null;
+          if (body?.error) detalhe = body.error;
+        }
+      } catch { /* ignora erro de parse */ }
+      setErro(detalhe);
       setLoading(false);
       return;
     }
