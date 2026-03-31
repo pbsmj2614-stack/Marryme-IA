@@ -246,7 +246,15 @@ export default function DashboardBIPage() {
       supabase.from("mm_tarefas").select("*"),
     ]);
 
-    const tarefas = (tarefasData ?? []) as Tarefa[];
+    // Deduplica tarefas por cliente_id+o_que+prazo antes de calcular métricas
+    const rawTarefas = (tarefasData ?? []) as Tarefa[];
+    const seenT = new Set<string>();
+    const tarefas = rawTarefas.filter((t) => {
+      const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
+      if (seenT.has(key)) return false;
+      seenT.add(key);
+      return true;
+    });
 
     const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
       const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);

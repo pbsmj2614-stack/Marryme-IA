@@ -158,7 +158,18 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
-  // ── 3. Limpa todos os clientes antigos ──
+  // ── 3. Limpa tarefas e clientes antigos ──
+  // Tarefas primeiro (referência a mm_clientes via cliente_id)
+  const { error: errLimparTarefas } = await supabase
+    .from("mm_tarefas")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (errLimparTarefas) {
+    erros.push(`Erro ao limpar tarefas antigas: ${errLimparTarefas.message}`);
+    return vazio();
+  }
+
   const { error: errLimpar } = await supabase
     .from("mm_clientes")
     .delete()

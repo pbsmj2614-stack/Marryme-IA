@@ -297,7 +297,7 @@ export default function DailyPage() {
   const [atrasadosExp,   setAtrasadosExp]   = useState(false);
   const [hojeExp,        setHojeExp]        = useState(false);
   const [semanaExp,      setSemanaExp]      = useState(false);
-  const CARD_LIMIT = 5;
+  const CARD_LIMIT = 10;
 
   // ── Load ──
   const loadData = useCallback(async () => {
@@ -380,12 +380,19 @@ export default function DailyPage() {
     filtroResp === "Todos" ||
     (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
 
-  // ── Tarefas com cliente ──
-  const tarefasComCliente = useMemo<TarefaComCliente[]>(() =>
-    tarefas
-      .filter((t) => clienteMap[t.cliente_id])
-      .map((t) => ({ ...t, cliente: clienteMap[t.cliente_id] })),
-  [tarefas, clienteMap]);
+  // ── Tarefas com cliente (deduplicadas por cliente_id+o_que+prazo) ──
+  const tarefasComCliente = useMemo<TarefaComCliente[]>(() => {
+    const seen = new Set<string>();
+    const result: TarefaComCliente[] = [];
+    for (const t of tarefas) {
+      if (!clienteMap[t.cliente_id]) continue;
+      const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ ...t, cliente: clienteMap[t.cliente_id] });
+    }
+    return result;
+  }, [tarefas, clienteMap]);
 
   // ── Opções de responsável (derivadas dos dados reais) ──
   const respOptions = useMemo(() => {
