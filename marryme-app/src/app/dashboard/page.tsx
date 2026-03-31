@@ -227,10 +227,17 @@ export default function DashboardBIPage() {
   const [user, setUser] = useState<User | null>(null);
   const [clientes, setClientes] = useState<ClienteComMetricas[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState<FiltroStatus>("Todos");
+  const [filtro, setFiltro] = useState<FiltroStatus>("Em risco");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [tableExpanded, setTableExpanded] = useState(false);
+  const TABLE_LIMIT = 5;
+
+  function handleFiltro(f: FiltroStatus) {
+    setFiltro(f);
+    setTableExpanded(false); // colapsa ao trocar filtro
+  }
 
   async function loadData() {
     const supabase = createClient();
@@ -404,7 +411,7 @@ export default function DashboardBIPage() {
           {FILTROS.map((f) => (
             <button
               key={f}
-              onClick={() => setFiltro(f)}
+              onClick={() => handleFiltro(f)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition border ${
                 filtro === f
                   ? "border-white text-white bg-white/10"
@@ -452,7 +459,7 @@ export default function DashboardBIPage() {
                     </td>
                   </tr>
                 ) : (
-                  clientesFiltrados.map((c, i) => (
+                  (tableExpanded ? clientesFiltrados : clientesFiltrados.slice(0, TABLE_LIMIT)).map((c, i) => (
                     <React.Fragment key={c.id}>
                       <tr
                         onClick={() =>
@@ -586,6 +593,20 @@ export default function DashboardBIPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Expand/collapse da tabela */}
+          {clientesFiltrados.length > TABLE_LIMIT && (
+            <button
+              onClick={() => setTableExpanded(!tableExpanded)}
+              className="w-full flex items-center justify-center gap-2 py-3 text-xs text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2a] transition border-t border-[#333]"
+            >
+              {tableExpanded ? (
+                <><span>▲</span> Minimizar</>
+              ) : (
+                <><span>▼</span> Ver todos os {clientesFiltrados.length} clientes</>
+              )}
+            </button>
+          )}
         </div>
 
         {/* ── Gráfico ── */}
