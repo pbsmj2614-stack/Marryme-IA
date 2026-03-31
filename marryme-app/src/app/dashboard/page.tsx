@@ -670,10 +670,12 @@ export default function DashboardBIPage() {
                   <Bar dataKey="score" radius={[0, 5, 5, 0]} maxBarSize={24} minPointSize={3}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     label={(props: any) => {
-                      const { x = 0, y = 0, width = 0, height = 0, taskCount = 0 } = props as {
-                        x: number; y: number; width: number; height: number; taskCount: number;
+                      const { x = 0, y = 0, width = 0, height = 0, index = 0 } = props as {
+                        x: number; y: number; width: number; height: number; index: number;
                       };
-                      if (taskCount > 0) return <g />;
+                      // Recharts não repassa campos custom para label — acessa via index
+                      const entry = chartDataVisible[index];
+                      if (!entry || entry.taskCount > 0) return <g />;
                       return (
                         <text x={x + width + 10} y={y + height / 2 + 4} fill="#4b5563" fontSize={10}>
                           Sem tarefas

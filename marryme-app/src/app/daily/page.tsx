@@ -218,11 +218,11 @@ function SituacaoCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <div className={`bg-[#242424] border ${borderColor} rounded-xl flex flex-col`}>
+    <div className={`bg-[#242424] border ${borderColor} rounded-xl flex flex-col h-full`}>
       <div className="px-4 py-3 border-b border-[#333]">
         <h3 className="font-semibold text-sm text-white">{title}</h3>
       </div>
-      <div className={`px-4 py-3 overflow-y-auto ${expanded ? "max-h-[500px]" : ""}`}>
+      <div className={`px-4 py-3 flex-1 overflow-y-auto ${expanded ? "max-h-[460px]" : "max-h-72"}`}>
         {empty ? (
           <p className="text-gray-500 text-sm py-2">{emptyMsg}</p>
         ) : (
