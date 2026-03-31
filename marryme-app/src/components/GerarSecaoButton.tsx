@@ -32,16 +32,20 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
     setLoading(true);
 
     try {
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
+      // Usa token do usuário se estiver logado, senão anon key (mesmo comportamento do SDK)
+      const bearerToken = session?.access_token ?? anonKey;
 
-      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/gerar-roteiro`;
-      const res = await fetch(url, {
+      const res = await fetch(`${supabaseUrl}/functions/v1/gerar-roteiro`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-          "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+          "Authorization": `Bearer ${bearerToken}`,
+          "apikey": anonKey,
         },
         body: JSON.stringify({
           entrevista_id: entrevistaId,
@@ -50,19 +54,20 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
         }),
       });
 
+      const resBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        setErro(errBody.error ?? `Erro ${res.status} ao gerar seção`);
+        setErro((resBody.error as string) ?? `Erro ${res.status} ao gerar seção`);
         setLoading(false);
         return;
       }
 
       router.refresh();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro inesperado");
+      setErro(err instanceof Error ? err.message : "Erro inesperado ao chamar Edge Function");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   if (modo === "refazer") {
