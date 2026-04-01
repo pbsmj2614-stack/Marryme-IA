@@ -13,7 +13,7 @@ const PLANO_COLORS: Record<string, string> = {
   essencial: "bg-blue-50 text-blue-700 border-blue-100",
   growth:    "bg-green-50 text-green-700 border-green-100",
   premium:   "bg-purple-50 text-purple-700 border-purple-100",
-  trial:     "bg-gray-100 text-gray-600 border-gray-200",
+  trial:     "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 const PLANO_LABEL: Record<string, string> = {
@@ -23,10 +23,14 @@ const PLANO_LABEL: Record<string, string> = {
   trial:     "Trial",
 };
 
-function normalizePlano(p: string | null): string | null {
-  if (!p) return null;
-  return p.trim().toLowerCase();
-}
+// Cores da borda + texto do select de fase por etapa
+const FASE_COLORS: Record<string, string> = {
+  "Onboarding": "border-sky-300 text-sky-700",
+  "Captação":   "border-violet-300 text-violet-700",
+  "Produção":   "border-amber-300 text-amber-700",
+  "Entrega":    "border-green-300 text-green-700",
+  "Pós-venda":  "border-rose-300 text-rose-700",
+};
 
 interface Props {
   prestadorId: string;
@@ -233,31 +237,35 @@ export default function PrestadorCard({
       </div>
 
       {/* Linha 2: tags de tipo, plano, classificação e mmId */}
-      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-        <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
-          {CATEGORIA_LABEL[categoria] ?? categoria}
-        </span>
-        {plano && (() => {
-          const key = normalizePlano(plano)!;
-          return (
-            <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${PLANO_COLORS[key] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
-              {PLANO_LABEL[key] ?? plano}
+      {(() => {
+        const planoKey = plano ? plano.trim().toLowerCase() : null;
+        const planoCls = planoKey ? (PLANO_COLORS[planoKey] ?? "bg-gray-100 text-gray-600 border-gray-200") : null;
+        const planoLabel = planoKey ? (PLANO_LABEL[planoKey] ?? plano) : null;
+        return (
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
+              {CATEGORIA_LABEL[categoria] ?? categoria}
             </span>
-          );
-        })()}
-        {nivelCurto && (
-          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
-            {nivelCurto}
-          </span>
-        )}
-        {mmId && (
-          <span className="text-xs font-mono bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
-            {mmId}
-          </span>
-        )}
-      </div>
+            {planoLabel && (
+              <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${planoCls}`}>
+                {planoLabel}
+              </span>
+            )}
+            {nivelCurto && (
+              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
+                {nivelCurto}
+              </span>
+            )}
+            {mmId && (
+              <span className="text-xs font-mono bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+                {mmId}
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
-      {/* Fase do projeto — sempre editável inline */}
+      {/* Fase do projeto — sempre editável inline, cor muda por etapa */}
       <div
         className="mt-2 flex items-center gap-1.5"
         onClick={(e) => e.stopPropagation()}
@@ -268,7 +276,7 @@ export default function PrestadorCard({
             value={fase}
             onChange={(e) => handleFaseChange(e.target.value)}
             disabled={savingFase || carregando}
-            className="text-xs text-gray-600 bg-transparent border border-gray-200 rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer hover:border-gray-400 focus:outline-none focus:border-brand-400 transition disabled:opacity-50"
+            className={`text-xs bg-transparent border rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer focus:outline-none transition disabled:opacity-50 font-medium ${FASE_COLORS[fase] ?? "border-gray-200 text-gray-600"}`}
           >
             {FASES.map((f) => <option key={f}>{f}</option>)}
           </select>
