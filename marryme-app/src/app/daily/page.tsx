@@ -445,10 +445,10 @@ export default function DailyPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp]);
 
-  // ── Clientes com métricas ──
+  // ── Clientes com métricas (usa tarefasComCliente — já deduplicadas) ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>
     clientes.map((c) => {
-      const t = tarefas.filter((t) => t.cliente_id === c.id_cliente);
+      const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
       const fin        = t.filter(isFinalizado).length;
       const atr        = t.filter(isAtrasado).length;
       const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
@@ -456,7 +456,7 @@ export default function DailyPage() {
       return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
     }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [clientes, tarefas]);
+  [clientes, tarefasComCliente]);
 
   // ── Ranking: 5 piores scores (ativos) ──
   const ranking = useMemo(() =>

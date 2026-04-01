@@ -324,15 +324,21 @@ export async function POST(req: NextRequest) {
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
       const { error: dbErr } = await supabase.from("mm_clientes").insert({
-        id_cliente:     newId,
-        nome_empresa:   nomeTrimmed,
-        segmento:       segmento?.trim()      || null,
-        plano:          plano?.trim()         || null,
-        status:         "Ativo",
-        fase_projeto:   fase_projeto?.trim()  || "Onboarding",
-        responsavel_mm: responsavel_mm?.trim()|| null,
-        valor_contrato: 0,
-        sheets_aba:     novaAba,
+        id_cliente:      newId,
+        nome_empresa:    nomeTrimmed,
+        segmento:        segmento?.trim()       || null,
+        cidade:          cidade?.trim()         || null,
+        whatsapp:        whatsapp?.trim()       || null,
+        email:           email?.trim()          || null,
+        plano:           plano?.trim()          || null,
+        status:          "Ativo",
+        fase_projeto:    fase_projeto?.trim()   || "Onboarding",
+        responsavel_mm:  responsavel_mm?.trim() || null,
+        observacoes:     observacoes?.trim()    || null,
+        inicio_contrato: hojeStr.split("/").reverse().join("-"), // DD/MM/YYYY → YYYY-MM-DD
+        valor_contrato:  0,
+        sheets_aba:      novaAba,
+        atualizado_em:   new Date().toISOString(),
       });
       if (dbErr) console.error("Supabase insert:", dbErr.message);
     }
