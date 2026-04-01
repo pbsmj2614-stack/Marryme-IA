@@ -32,7 +32,7 @@ export default async function DashboardPage({
     roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
       analise_estrategica: { nivel_mercado?: string } | null;
     })[];
-    entrevistas: { dados_json: { plano?: string; fase_projeto?: string } | null; criado_em: string }[];
+    entrevistas: { dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null; criado_em: string }[];
   };
   const lista = (prestadores ?? []) as PrestadorRow[];
 
@@ -123,6 +123,7 @@ export default async function DashboardPage({
               )[0];
               const plano       = ultimaEntrevista?.dados_json?.plano       ?? null;
               const faseProjeto = ultimaEntrevista?.dados_json?.fase_projeto ?? null;
+              const mmId        = ultimaEntrevista?.dados_json?.mm_id        ?? null;
 
               return (
                 <PrestadorCard
@@ -135,6 +136,7 @@ export default async function DashboardPage({
                   nivelMercado={nivelMercado}
                   plano={plano}
                   faseProjeto={faseProjeto}
+                  mmId={mmId}
                   total={total}
                   aprovados={aprovados}
                   ultimoRoteiroId={ultimoRoteiro?.id}

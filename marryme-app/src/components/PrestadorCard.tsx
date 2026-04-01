@@ -10,11 +10,23 @@ import { formatarTelefone } from "@/lib/utils";
 const FASES = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
 
 const PLANO_COLORS: Record<string, string> = {
-  Essencial: "bg-blue-50 text-blue-700 border-blue-100",
-  Growth:    "bg-green-50 text-green-700 border-green-100",
-  Premium:   "bg-purple-50 text-purple-700 border-purple-100",
-  Trial:     "bg-gray-100 text-gray-600 border-gray-200",
+  essencial: "bg-blue-50 text-blue-700 border-blue-100",
+  growth:    "bg-green-50 text-green-700 border-green-100",
+  premium:   "bg-purple-50 text-purple-700 border-purple-100",
+  trial:     "bg-gray-100 text-gray-600 border-gray-200",
 };
+
+const PLANO_LABEL: Record<string, string> = {
+  essencial: "Essencial",
+  growth:    "Growth",
+  premium:   "Premium",
+  trial:     "Trial",
+};
+
+function normalizePlano(p: string | null): string | null {
+  if (!p) return null;
+  return p.trim().toLowerCase();
+}
 
 interface Props {
   prestadorId: string;
@@ -25,6 +37,7 @@ interface Props {
   nivelMercado: string | null;
   plano: string | null;
   faseProjeto: string | null;
+  mmId: string | null;
   total: number;
   aprovados: number;
   ultimoRoteiroId?: string;
@@ -48,6 +61,7 @@ export default function PrestadorCard({
   nivelMercado,
   plano,
   faseProjeto,
+  mmId,
   total,
   aprovados,
   ultimoRoteiroId,
@@ -56,7 +70,7 @@ export default function PrestadorCard({
   const router = useRouter();
   const [menuOpen,    setMenuOpen]    = useState(false);
   const [loadingAcao, setLoadingAcao] = useState<string | null>(null);
-  const [fase,        setFase]        = useState(faseProjeto ?? "");
+  const [fase,        setFase]        = useState(faseProjeto ?? "Onboarding");
   const [savingFase,  setSavingFase]  = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -218,49 +232,55 @@ export default function PrestadorCard({
         </span>
       </div>
 
-      {/* Linha 2: tags de tipo, plano e classificação */}
+      {/* Linha 2: tags de tipo, plano, classificação e mmId */}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
           {CATEGORIA_LABEL[categoria] ?? categoria}
         </span>
-        {plano && (
-          <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${PLANO_COLORS[plano] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
-            {plano}
-          </span>
-        )}
+        {plano && (() => {
+          const key = normalizePlano(plano)!;
+          return (
+            <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${PLANO_COLORS[key] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+              {PLANO_LABEL[key] ?? plano}
+            </span>
+          );
+        })()}
         {nivelCurto && (
           <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
             {nivelCurto}
           </span>
         )}
+        {mmId && (
+          <span className="text-xs font-mono bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+            {mmId}
+          </span>
+        )}
       </div>
 
-      {/* Fase do projeto — editável inline */}
-      {(fase || faseProjeto) && (
-        <div
-          className="mt-2 flex items-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-xs text-gray-400 shrink-0">Fase:</span>
-          <div className="relative">
-            <select
-              value={fase}
-              onChange={(e) => handleFaseChange(e.target.value)}
-              disabled={savingFase || carregando}
-              className="text-xs text-gray-600 bg-transparent border border-gray-200 rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer hover:border-gray-400 focus:outline-none focus:border-brand-400 transition disabled:opacity-50"
-            >
-              {FASES.map((f) => <option key={f}>{f}</option>)}
-            </select>
-            <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 text-[9px]">▼</span>
-          </div>
-          {savingFase && (
-            <svg className="animate-spin h-3 w-3 text-brand-500 shrink-0" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-          )}
+      {/* Fase do projeto — sempre editável inline */}
+      <div
+        className="mt-2 flex items-center gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="text-xs text-gray-400 shrink-0">Fase:</span>
+        <div className="relative">
+          <select
+            value={fase}
+            onChange={(e) => handleFaseChange(e.target.value)}
+            disabled={savingFase || carregando}
+            className="text-xs text-gray-600 bg-transparent border border-gray-200 rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer hover:border-gray-400 focus:outline-none focus:border-brand-400 transition disabled:opacity-50"
+          >
+            {FASES.map((f) => <option key={f}>{f}</option>)}
+          </select>
+          <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 text-[9px]">▼</span>
         </div>
-      )}
+        {savingFase && (
+          <svg className="animate-spin h-3 w-3 text-brand-500 shrink-0" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        )}
+      </div>
 
       {/* Linha 3: telefone e cidade */}
       <div className="mt-3 space-y-1.5">

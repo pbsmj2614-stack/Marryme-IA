@@ -244,7 +244,8 @@ export async function POST(req: NextRequest) {
       }],
     }) as { replies: Array<{ duplicateSheet?: { properties: { sheetId: number } } }> };
 
-    const _newSheetId = dupRes.replies?.[0]?.duplicateSheet?.properties?.sheetId;
+    // sheetId da nova aba (reservado para uso futuro)
+    // dupRes.replies?.[0]?.duplicateSheet?.properties?.sheetId
 
     // ── 8. Ler conteúdo da nova aba ──
     const novaData = await sGet(

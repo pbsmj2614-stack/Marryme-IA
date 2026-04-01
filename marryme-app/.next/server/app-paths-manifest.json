@@ -1,11 +1,1 @@
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/daily/page": "app/daily/page.js",
-  "/novo/page": "app/novo/page.js",
-  "/page": "app/page.js",
-  "/login/page": "app/login/page.js",
-  "/pipeline/page": "app/pipeline/page.js",
-  "/prestador/[id]/editar/page": "app/prestador/[id]/editar/page.js",
-  "/prestador/[id]/page": "app/prestador/[id]/page.js"
-}
+{}

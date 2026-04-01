@@ -33,6 +33,8 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
 
     try {
       const supabase = createClient();
+      // Garante que o token está válido antes de chamar a Edge Function
+      await supabase.auth.refreshSession();
       const { data, error } = await supabase.functions.invoke("gerar-roteiro", {
         body: {
           entrevista_id: entrevistaId,

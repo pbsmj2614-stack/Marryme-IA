@@ -31,6 +31,7 @@ export interface DadosEntrevista {
   plano?: string;
   fase_projeto?: string;
   responsavel_mm?: string;
+  mm_id?: string; // ID gerado na planilha Google Sheets (ex: MM001)
 
   // Dados da entrevista
   anos_experiencia: string;

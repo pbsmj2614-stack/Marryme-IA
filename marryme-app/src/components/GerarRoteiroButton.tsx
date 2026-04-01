@@ -15,6 +15,8 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
 
     try {
       const supabase = createClient();
+      // Garante que o token está válido antes de chamar a Edge Function
+      await supabase.auth.refreshSession();
       const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
         body: { entrevista_id: entrevistaId },
       });

@@ -46,19 +46,19 @@ const INITIAL: DadosEntrevista = {
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
 const inputCls = (err?: boolean) =>
-  `w-full bg-[#1e1e1e] border ${
-    err ? "border-red-600" : "border-[#333]"
-  } rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#666] transition`;
+  `w-full bg-white border ${
+    err ? "border-red-400" : "border-gray-200"
+  } rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 transition`;
 
 const selectCls =
-  "w-full bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#666] transition appearance-none cursor-pointer";
+  "w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-brand-400 transition appearance-none cursor-pointer";
 
 const textareaCls =
-  "w-full bg-[#1e1e1e] border border-[#333] rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#666] transition resize-none";
+  "w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 transition resize-none";
 
 function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
       {children}
       {required && <span className="text-red-500 ml-1">*</span>}
     </label>
@@ -67,7 +67,7 @@ function Label({ children, required }: { children: React.ReactNode; required?: b
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-4">
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
       {children}
     </p>
   );
@@ -248,18 +248,25 @@ export default function NovoPage() {
           body:    JSON.stringify({
             nome_empresa:   dados.nome_artistico.trim(),
             segmento:       segmentoLabel,
-            cidade:         dados.cidade_base      || "",
-            whatsapp:       dados.whatsapp         || "",
-            email:          dados.email            || "",
-            plano:          dados.plano            || "Essencial",
-            fase_projeto:   dados.fase_projeto     || "Onboarding",
-            responsavel_mm: dados.responsavel_mm   || "",
+            cidade:         dados.cidade_base           || "",
+            whatsapp:       dados.whatsapp              || "",
+            email:          dados.email                 || "",
+            plano:          dados.plano                 || "Essencial",
+            fase_projeto:   dados.fase_projeto          || "Onboarding",
+            responsavel_mm: dados.responsavel_mm        || "",
             observacoes:    dados.informacoes_adicionais || "",
           }),
         });
         const sheetData = await res.json();
         if (sheetData.ok) {
-          const info = `Planilha: ${sheetData.aba} · ${sheetData.tarefas} tarefa(s) com prazo.`;
+          // Salva mm_id na entrevista para vincular prestador ↔ planilha
+          if (sheetData.id) {
+            await supabase
+              .from("entrevistas")
+              .update({ dados_json: { ...dados, mm_id: sheetData.id } })
+              .eq("id", entrevista.id);
+          }
+          const info = `Planilha: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`;
           setSheetsAviso(info);
           if (sheetData.aviso) setSheetsAviso(info + " ⚠ " + sheetData.aviso);
         } else {
@@ -279,12 +286,21 @@ export default function NovoPage() {
 
       // ── 4b. Gerar roteiro ──
       setStatus("Gerando roteiro com IA (~30 segundos)...");
+      await supabase.auth.refreshSession();
       const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
         body: { entrevista_id: entrevista.id },
       });
 
-      if (fnError) throw new Error(fnError.message ?? "Erro ao gerar roteiro");
-      if (!fnData?.roteiro) throw new Error("Roteiro não retornado pela IA");
+      if (fnError) {
+        let detalhe = fnError.message ?? "Erro ao gerar roteiro";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ctx = (fnError as any).context;
+        if (ctx instanceof Response) {
+          try { const b = await ctx.clone().json(); if (b?.error) detalhe = b.error; } catch { /* ignora */ }
+        }
+        throw new Error(detalhe);
+      }
+      if (!fnData?.roteiro) throw new Error(fnData?.error ?? "Roteiro não retornado pela IA");
 
       router.push(`/prestador/${prestador.id}`);
 
@@ -296,14 +312,14 @@ export default function NovoPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white">
+    <div className="min-h-screen bg-gray-50">
       <Header user={user} />
 
       <main className="max-w-3xl mx-auto px-4 py-10">
 
         {/* ── Cabeçalho ── */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">Novo Prestador</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Novo Prestador</h1>
           <p className="text-sm text-gray-500 mt-1">
             Cadastra o perfil, cria a aba na planilha e pode gerar os roteiros de IA em um clique.
           </p>
@@ -314,8 +330,8 @@ export default function NovoPage() {
           {/* ══════════════════════════════════════════════════ */}
           {/* SEÇÃO 1 — Identificação                           */}
           {/* ══════════════════════════════════════════════════ */}
-          <div className="bg-[#242424] border border-[#333] rounded-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-[#2a2a2a]">
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-6 py-5 border-b border-gray-100">
               <SectionHeader>Identificação</SectionHeader>
               <div className="space-y-4">
 
@@ -355,28 +371,20 @@ export default function NovoPage() {
                     options={FASES.map((f) => ({ value: f, label: f }))}
                     disabled={loading}
                   />
-                  <div>
-                    <Label>Responsável MM</Label>
-                    <div className="relative">
-                      <select
-                        value={dados.responsavel_mm ?? ""}
-                        onChange={(e) => set("responsavel_mm", e.target.value)}
-                        className={selectCls}
-                        disabled={loading}
-                      >
-                        <option value="">— selecione —</option>
-                        {RESPS.map((r) => <option key={r}>{r}</option>)}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▼</span>
-                    </div>
-                  </div>
+                  <Select
+                    label="Responsável MM"
+                    value={dados.responsavel_mm ?? ""}
+                    onChange={(v) => set("responsavel_mm", v)}
+                    options={[{ value: "", label: "— selecione —" }, ...RESPS.map((r) => ({ value: r, label: r }))]}
+                    disabled={loading}
+                  />
                 </div>
 
               </div>
             </div>
 
             {/* ── Contato ── */}
-            <div className="px-6 py-5 border-b border-[#2a2a2a]">
+            <div className="px-6 py-5 border-b border-gray-100">
               <SectionHeader>Contato</SectionHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -425,7 +433,7 @@ export default function NovoPage() {
             </div>
 
             {/* ── Experiência ── */}
-            <div className="px-6 py-5 border-b border-[#2a2a2a]">
+            <div className="px-6 py-5 border-b border-gray-100">
               <SectionHeader>Experiência e posicionamento</SectionHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -478,7 +486,7 @@ export default function NovoPage() {
             </div>
 
             {/* ── Diferenciais ── */}
-            <div className="px-6 py-5 border-b border-[#2a2a2a]">
+            <div className="px-6 py-5 border-b border-gray-100">
               <SectionHeader>Diferenciais e estilo</SectionHeader>
               <div className="space-y-4">
                 <CharField
@@ -564,7 +572,7 @@ export default function NovoPage() {
 
           {/* ── Alertas ── */}
           {erro && (
-            <div className="px-4 py-3 rounded-xl border border-red-700 bg-red-950 text-red-300 text-sm">
+            <div className="px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm">
               ✕ {erro}
             </div>
           )}
@@ -572,24 +580,24 @@ export default function NovoPage() {
           {sheetsAviso && !erro && (
             <div className={`px-4 py-3 rounded-xl border text-sm ${
               sheetsAviso.startsWith("Aviso")
-                ? "border-yellow-700 bg-yellow-950/50 text-yellow-300"
-                : "border-green-800 bg-green-950/40 text-green-400"
+                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                : "border-green-200 bg-green-50 text-green-700"
             }`}>
               {sheetsAviso}
             </div>
           )}
 
           {status && !erro && (
-            <div className="px-4 py-3 rounded-xl border border-[#444] bg-[#242424] text-blue-300 text-sm flex items-center gap-2">
+            <div className="px-4 py-3 rounded-xl border border-blue-100 bg-blue-50 text-blue-700 text-sm flex items-center gap-2">
               <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
               {status}
             </div>
           )}
 
           {/* ── Aviso de pré-requisito Sheets ── */}
-          <p className="text-xs text-gray-700 text-center">
+          <p className="text-xs text-gray-400 text-center">
             A criação da aba na planilha requer{" "}
-            <span className="font-mono text-gray-600">GOOGLE_SERVICE_ACCOUNT_JSON</span> configurado.
+            <span className="font-mono text-gray-500">GOOGLE_SERVICE_ACCOUNT_JSON</span> configurado.
             Se ausente, o prestador ainda é cadastrado normalmente.
           </p>
 
@@ -599,11 +607,11 @@ export default function NovoPage() {
               type="submit"
               disabled={loading}
               onClick={() => { acaoRef.current = "cadastrar"; }}
-              className="flex-1 py-3.5 rounded-xl border border-[#444] bg-[#2a2a2a] hover:border-[#666] hover:bg-[#333] text-gray-200 font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading && acaoRef.current === "cadastrar" ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                   Salvando…
                 </span>
               ) : "Cadastrar prestador"}
@@ -612,11 +620,11 @@ export default function NovoPage() {
               type="submit"
               disabled={loading}
               onClick={() => { acaoRef.current = "gerar"; }}
-              className="flex-1 py-3.5 rounded-xl bg-white hover:bg-gray-100 text-black font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading && acaoRef.current === "gerar" ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-gray-400 border-t-black rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Gerando roteiro…
                 </span>
               ) : "Cadastrar e gerar roteiro ✦"}
