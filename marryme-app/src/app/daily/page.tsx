@@ -752,7 +752,7 @@ export default function DailyPage() {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Resumo por responsável">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {resumoResponsavel.map(({ resp, total, finalizadas, atrasadas, score }) => (
+            {resumoResponsavel.filter(({ total }) => total > 0).map(({ resp, total, finalizadas, atrasadas, score }) => (
               <div
                 key={resp}
                 className="bg-[#242424] border border-[#333] rounded-xl p-5"

@@ -240,33 +240,31 @@ export default function PrestadorCard({
       </div>
 
       {/* Linha 2: tags de tipo, plano, classificação e mmId */}
-      {(() => {
-        const planoKey = plano ? plano.trim().toLowerCase() : null;
-        const planoCls = planoKey ? (PLANO_COLORS[planoKey] ?? "bg-gray-100 text-gray-600 border-gray-200") : null;
-        const planoLabel = planoKey ? (PLANO_LABEL[planoKey] ?? plano) : null;
-        return (
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
-              {CATEGORIA_LABEL[categoria] ?? categoria}
+      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+        <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
+          {CATEGORIA_LABEL[categoria] ?? categoria}
+        </span>
+        {plano && (() => {
+          const k = plano.trim().toLowerCase();
+          const cls = PLANO_COLORS[k] ?? "bg-gray-100 text-gray-600 border-gray-200";
+          const label = PLANO_LABEL[k] ?? (plano.charAt(0).toUpperCase() + plano.slice(1).toLowerCase());
+          return (
+            <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${cls}`}>
+              {label}
             </span>
-            {planoLabel && (
-              <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${planoCls}`}>
-                {planoLabel}
-              </span>
-            )}
-            {nivelCurto && (
-              <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
-                {nivelCurto}
-              </span>
-            )}
-            {mmId && (
-              <span className="text-xs font-mono bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
-                {mmId}
-              </span>
-            )}
-          </div>
-        );
-      })()}
+          );
+        })()}
+        {nivelCurto && (
+          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 rounded-full font-medium">
+            {nivelCurto}
+          </span>
+        )}
+        {mmId && (
+          <span className="text-xs font-mono bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+            {mmId}
+          </span>
+        )}
+      </div>
 
       {/* Fase do projeto — sempre editável inline, cor muda por etapa */}
       <div
