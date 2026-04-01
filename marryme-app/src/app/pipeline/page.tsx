@@ -74,10 +74,22 @@ function formatDate(isoDate: string | null) {
 
 function planoBadgeClass(plano: string | null) {
   switch (plano?.toLowerCase()) {
-    case "premium": return "bg-purple-900 text-purple-300";
-    case "growth":  return "bg-green-900 text-green-300";
-    default:        return "bg-gray-700 text-gray-200";
+    case "essencial":  return "bg-pink-900 text-pink-300";
+    case "growth":     return "bg-violet-900 text-violet-300";
+    case "enterprise": return "bg-amber-900 text-amber-300";
+    // legado
+    case "premium":    return "bg-purple-900 text-purple-300";
+    case "trial":      return "bg-gray-700 text-gray-300";
+    default:           return "bg-gray-700 text-gray-200";
   }
+}
+
+function planoLabel(plano: string): string {
+  const map: Record<string, string> = {
+    essencial: "Essencial", growth: "Growth", enterprise: "Enterprise",
+    premium: "Premium", trial: "Trial",
+  };
+  return map[plano.toLowerCase()] ?? plano;
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -630,7 +642,7 @@ export default function PipelinePage() {
                         <td className="px-4 py-3">
                           {c.plano ? (
                             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}>
-                              {c.plano}
+                              {planoLabel(c.plano)}
                             </span>
                           ) : (
                             <span className="text-gray-600 text-xs">—</span>

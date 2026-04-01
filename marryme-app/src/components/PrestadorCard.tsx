@@ -10,17 +10,20 @@ import { formatarTelefone } from "@/lib/utils";
 const FASES = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
 
 const PLANO_COLORS: Record<string, string> = {
-  essencial: "bg-blue-50 text-blue-700 border-blue-100",
-  growth:    "bg-green-50 text-green-700 border-green-100",
-  premium:   "bg-purple-50 text-purple-700 border-purple-100",
-  trial:     "bg-gray-100 text-gray-500 border-gray-200",
+  essencial:  "bg-pink-50 text-pink-700 border-pink-100",
+  growth:     "bg-violet-50 text-violet-700 border-violet-100",
+  enterprise: "bg-amber-50 text-amber-700 border-amber-100",
+  // legado — exibe mas não aparece nos novos cadastros
+  premium:    "bg-purple-50 text-purple-700 border-purple-100",
+  trial:      "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 const PLANO_LABEL: Record<string, string> = {
-  essencial: "Essencial",
-  growth:    "Growth",
-  premium:   "Premium",
-  trial:     "Trial",
+  essencial:  "Essencial",
+  growth:     "Growth",
+  enterprise: "Enterprise",
+  premium:    "Premium",
+  trial:      "Trial",
 };
 
 // Cores da borda + texto do select de fase por etapa

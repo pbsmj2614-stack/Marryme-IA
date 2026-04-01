@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase";
 interface ClienteSeed {
   codigo: string;
   nome: string;
-  plano: "Essencial" | "Growth" | "Premium";
+  plano: "Essencial" | "Growth" | "Enterprise";
   valor_contrato: number;
   status: "Ativo" | "Pausado";
 }
@@ -26,7 +26,7 @@ interface TarefaSeed {
 const CLIENTES_SEED: ClienteSeed[] = [
   { codigo: "MM001", nome: "Analu",            plano: "Growth",    valor_contrato: 600,  status: "Ativo"   },
   { codigo: "MM002", nome: "AirtonSax",         plano: "Essencial", valor_contrato: 300,  status: "Ativo"   },
-  { codigo: "MM003", nome: "Aline Nascimento",  plano: "Premium",   valor_contrato: 1200, status: "Ativo"   },
+  { codigo: "MM003", nome: "Aline Nascimento",  plano: "Enterprise", valor_contrato: 1200, status: "Ativo"   },
   { codigo: "MM004", nome: "Arpeggio",          plano: "Growth",    valor_contrato: 600,  status: "Ativo"   },
   { codigo: "MM005", nome: "Banda Pérola",      plano: "Essencial", valor_contrato: 300,  status: "Pausado" },
 ];

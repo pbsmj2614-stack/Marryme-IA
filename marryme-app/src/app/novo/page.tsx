@@ -18,7 +18,7 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
   { value: "outro",      label: "Outro" },
 ];
 
-const PLANOS    = ["Essencial", "Growth", "Premium", "Trial"];
+const PLANOS    = ["Essencial", "Growth", "Enterprise"];
 const FASES     = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
 const RESPS     = ["Paulo", "Murilo", "Kauê"];
 
