@@ -161,12 +161,14 @@ export async function importarPlanilha(): Promise<ImportResult> {
 
   // ── 3a. Snapshots manuais (preservar após delete) ──
 
-  // Clientes Encerrados manualmente
-  const { data: encerradosExistentes } = await supabase
+  // Status manual (Pausado / Encerrado) definido pelo app — prevalece sobre "Ativo" da planilha
+  const { data: statusOverrideData } = await supabase
     .from("mm_clientes")
-    .select("id_cliente")
-    .eq("status", "Encerrado");
-  const encerradosSet = new Set((encerradosExistentes ?? []).map((c: { id_cliente: string }) => c.id_cliente));
+    .select("id_cliente, status")
+    .in("status", ["Pausado", "Encerrado"]);
+  const statusOverrides = new Map<string, string>(
+    (statusOverrideData ?? []).map((c: { id_cliente: string; status: string }) => [c.id_cliente, c.status])
+  );
 
   // Checks manuais feitos no app (check_feito=true que a planilha ainda não reflete)
   const { data: checksExistentes } = await supabase
@@ -216,9 +218,12 @@ export async function importarPlanilha(): Promise<ImportResult> {
       inicio_contrato: parseDateBR(c.inicio_contrato),
       plano:           c.plano          || null,
       fase_projeto:    c.fase_projeto   || null,
-      status:          encerradosSet.has(c.id_cliente) && normalizeClientStatus(c.status) === "Ativo"
-        ? "Encerrado"
-        : normalizeClientStatus(c.status),
+      status:          (() => {
+        const sheetStatus = normalizeClientStatus(c.status);
+        const override    = statusOverrides.get(c.id_cliente);
+        // Override manual (Pausado/Encerrado) prevalece quando a planilha diz "Ativo"
+        return (override && sheetStatus === "Ativo") ? override : sheetStatus;
+      })(),
       responsavel_mm:  c.responsavel_mm || null,
       observacoes:     c.observacoes    || null,
       sheets_aba:      aba,

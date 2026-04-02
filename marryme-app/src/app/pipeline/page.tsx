@@ -429,8 +429,7 @@ export default function PipelinePage() {
     }
   }
 
-  async function handleToggleEncerrado(idCliente: string, encerrar: boolean) {
-    const novoStatus = encerrar ? "Encerrado" : "Ativo";
+  async function handleStatusChange(idCliente: string, novoStatus: StatusCliente) {
     const supabase = createClient();
     const { error } = await supabase
       .from("mm_clientes")
@@ -439,7 +438,8 @@ export default function PipelinePage() {
     if (error) {
       setToast({ type: "error", msg: `Erro: ${error.message}` });
     } else {
-      setToast({ type: "success", msg: encerrar ? "Cliente encerrado" : "Cliente reativado" });
+      const labels: Record<StatusCliente, string> = { Ativo: "reativado", Pausado: "pausado", Encerrado: "encerrado" };
+      setToast({ type: "success", msg: `Cliente ${labels[novoStatus]}` });
       setExpandedId(null);
       await loadData();
     }
@@ -731,22 +731,25 @@ export default function PipelinePage() {
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                             />
-                            <div className="mt-3 flex justify-end">
-                              {c.status === "Encerrado" ? (
+                            <div className="mt-4 pt-3 border-t border-[#2a2a2a] flex items-center gap-3"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span className="text-xs text-gray-500">Status do contrato:</span>
+                              {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleToggleEncerrado(c.id_cliente, false); }}
-                                  className="text-xs px-3 py-1.5 rounded-lg bg-green-950 border border-green-800 text-green-400 hover:text-green-200 hover:border-green-600 transition"
+                                  key={s}
+                                  onClick={() => c.status !== s && handleStatusChange(c.id_cliente, s)}
+                                  className={`text-xs px-3 py-1.5 rounded-lg border transition ${
+                                    c.status === s
+                                      ? s === "Ativo"     ? "bg-green-950 border-green-700 text-green-300 cursor-default"
+                                      : s === "Pausado"   ? "bg-gray-800 border-gray-600 text-gray-300 cursor-default"
+                                                          : "bg-zinc-900 border-zinc-600 text-zinc-300 cursor-default"
+                                      : "bg-transparent border-[#444] text-gray-500 hover:border-[#666] hover:text-gray-300"
+                                  }`}
                                 >
-                                  ↩ Reativar cliente
+                                  {s === c.status ? `● ${s}` : s}
                                 </button>
-                              ) : (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleToggleEncerrado(c.id_cliente, true); }}
-                                  className="text-xs px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition"
-                                >
-                                  Encerrar cliente
-                                </button>
-                              )}
+                              ))}
                             </div>
                           </td>
                         </tr>
