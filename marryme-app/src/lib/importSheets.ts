@@ -65,10 +65,11 @@ function isAtrasado(prazoStr: string, status: string): boolean {
   return prazo < TODAY;
 }
 
-// Normaliza status do cliente para "Ativo" ou "Pausado"
-function normalizeClientStatus(s: string): "Ativo" | "Pausado" {
+// Normaliza status do cliente para "Ativo", "Pausado" ou "Encerrado"
+function normalizeClientStatus(s: string): "Ativo" | "Pausado" | "Encerrado" {
   if (!s?.trim()) return "Ativo";
   if (/paus/i.test(s)) return "Pausado";
+  if (/encerr/i.test(s)) return "Encerrado";
   return "Ativo";
 }
 
@@ -158,6 +159,13 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
+  // ── 3a. Snapshot de clientes Encerrados manualmente (preservar após delete) ──
+  const { data: encerradosExistentes } = await supabase
+    .from("mm_clientes")
+    .select("id_cliente")
+    .eq("status", "Encerrado");
+  const encerradosSet = new Set((encerradosExistentes ?? []).map((c: { id_cliente: string }) => c.id_cliente));
+
   // ── 3. Limpa tarefas e clientes antigos ──
   // Tarefas primeiro (referência a mm_clientes via cliente_id)
   const { error: errLimparTarefas } = await supabase
@@ -194,7 +202,9 @@ export async function importarPlanilha(): Promise<ImportResult> {
       inicio_contrato: parseDateBR(c.inicio_contrato),
       plano:           c.plano          || null,
       fase_projeto:    c.fase_projeto   || null,
-      status:          normalizeClientStatus(c.status),
+      status:          encerradosSet.has(c.id_cliente) && normalizeClientStatus(c.status) === "Ativo"
+        ? "Encerrado"
+        : normalizeClientStatus(c.status),
       responsavel_mm:  c.responsavel_mm || null,
       observacoes:     c.observacoes    || null,
       sheets_aba:      aba,

@@ -363,7 +363,7 @@ export default function DailyPage() {
   }, [clientes]);
 
   // ── Helpers de status (declarados antes dos useMemo que os usam) ──
-  const isAtivo      = (s: string) => !/paus/i.test(s ?? "");
+  const isAtivo      = (s: string) => !/paus|encerr/i.test(s ?? "");
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
   const isAtrasado   = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 
@@ -386,6 +386,7 @@ export default function DailyPage() {
     const result: TarefaComCliente[] = [];
     for (const t of tarefas) {
       if (!clienteMap[t.cliente_id]) continue;
+      if (/encerr/i.test(clienteMap[t.cliente_id].status ?? "")) continue;
       const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);

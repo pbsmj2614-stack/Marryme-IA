@@ -310,10 +310,10 @@ export default function DashboardBIPage() {
 
   // ── Metrics ──
   const metrics = useMemo(() => {
-    const ativos   = clientes.filter((c) => !/paus/i.test(c.status ?? ""));
+    const ativos   = clientes.filter((c) => !/paus|encerr/i.test(c.status ?? ""));
     const pausados = clientes.filter((c) => /paus/i.test(c.status ?? ""));
-    const atrasadasTotal    = clientes.reduce((s, c) => s + c.atrasadas, 0);
-    const clientesAtrasados = clientes.filter((c) => c.atrasadas > 0).length;
+    const atrasadasTotal    = ativos.reduce((s, c) => s + c.atrasadas, 0);
+    const clientesAtrasados = ativos.filter((c) => c.atrasadas > 0).length;
     const emRisco  = ativos.filter((c) => c.score < 50).length;
     const scoreAtivos = ativos.length > 0
       ? Math.round(ativos.reduce((s, c) => s + c.score, 0) / ativos.length)
@@ -324,6 +324,7 @@ export default function DashboardBIPage() {
   // ── Filtered + sorted ──
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
+      if (/encerr/i.test(c.status ?? "")) return false;
       if (filtro === "Em risco")   return c.statusScore === "Em risco"  && !/paus/i.test(c.status ?? "");
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
       if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
@@ -353,7 +354,7 @@ export default function DashboardBIPage() {
   const chartData = useMemo(
     () =>
       clientes
-        .filter((c) => !/paus/i.test(c.status ?? ""))
+        .filter((c) => !/paus|encerr/i.test(c.status ?? ""))
         .sort((a, b) => a.score - b.score)
         .map((c) => ({
           nome:       c.nome_empresa,

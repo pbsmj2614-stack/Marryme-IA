@@ -10,9 +10,9 @@ import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type StatusCliente = "Ativo" | "Pausado";
+type StatusCliente = "Ativo" | "Pausado" | "Encerrado";
 type StatusScore   = "Em risco" | "Em atenção" | "Saudável" | "Concluído";
-type FiltroStatus  = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Pausados";
+type FiltroStatus  = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Pausados" | "Encerrados";
 type SortKey =
   | "id_cliente" | "nome_empresa" | "plano"
   | "total_tarefas" | "finalizadas" | "atrasadas" | "score" | "statusScore";
@@ -54,7 +54,7 @@ interface ClienteComMetricas extends Cliente {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const FILTROS: FiltroStatus[]   = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados"];
+const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados", "Encerrados"];
 const RESPONSAVEIS               = ["Todos", "Paulo", "Murilo", "Kauê"];
 const TODAY                      = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
@@ -132,6 +132,8 @@ function ClienteStatusBadge({
 }: {
   score: number; clienteStatus: StatusCliente;
 }) {
+  if (clienteStatus === "Encerrado")
+    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 line-through">Encerrado</span>;
   if (clienteStatus === "Pausado")
     return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">Pausado</span>;
 
@@ -427,19 +429,37 @@ export default function PipelinePage() {
     }
   }
 
+  async function handleToggleEncerrado(idCliente: string, encerrar: boolean) {
+    const novoStatus = encerrar ? "Encerrado" : "Ativo";
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("mm_clientes")
+      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
+      .eq("id_cliente", idCliente);
+    if (error) {
+      setToast({ type: "error", msg: `Erro: ${error.message}` });
+    } else {
+      setToast({ type: "success", msg: encerrar ? "Cliente encerrado" : "Cliente reativado" });
+      setExpandedId(null);
+      await loadData();
+    }
+  }
+
   // ── Summary metrics ──
   const metrics = useMemo(() => {
-    const ativos   = clientes.filter((c) => !/paus/i.test(c.status ?? ""));
-    const pausados = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
-    const atrasadasTotal = clientes.reduce((s, c) => s + c.atrasadas, 0);
+    const ativos     = clientes.filter((c) => !/paus|encerr/i.test(c.status ?? ""));
+    const pausados   = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
+    const encerrados = clientes.filter((c) => /encerr/i.test(c.status ?? "")).length;
+    const atrasadasTotal = ativos.reduce((s, c) => s + c.atrasadas, 0);
     const emRisco        = ativos.filter((c) => c.score < 50).length;
-    return { ativos: ativos.length, pausados, atrasadasTotal, emRisco };
+    return { ativos: ativos.length, pausados, encerrados, atrasadasTotal, emRisco };
   }, [clientes]);
 
   // ── Filtered + sorted ──
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
-      // Filtro status
+      if (filtro === "Encerrados")  return /encerr/i.test(c.status ?? "");
+      if (/encerr/i.test(c.status ?? "")) return false;
       if (filtro === "Em risco")   return c.statusScore === "Em risco"  && !/paus/i.test(c.status ?? "");
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
       if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
@@ -517,6 +537,8 @@ export default function PipelinePage() {
                 color={metrics.emRisco > 0 ? "text-red-400" : "text-gray-200"} />
               <SummaryBadge label="pausados"          value={metrics.pausados}
                 color="text-gray-400" />
+              <SummaryBadge label="encerrados"        value={metrics.encerrados}
+                color="text-zinc-500" />
             </div>
           </div>
 
@@ -709,6 +731,23 @@ export default function PipelinePage() {
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                             />
+                            <div className="mt-3 flex justify-end">
+                              {c.status === "Encerrado" ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleToggleEncerrado(c.id_cliente, false); }}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-green-950 border border-green-800 text-green-400 hover:text-green-200 hover:border-green-600 transition"
+                                >
+                                  ↩ Reativar cliente
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleToggleEncerrado(c.id_cliente, true); }}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition"
+                                >
+                                  Encerrar cliente
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )}

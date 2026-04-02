@@ -26,7 +26,7 @@ export default async function DashboardPage({
   const { data: prestadores } = await supabase
     .from("prestadores")
     .select("*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em)")
-    .order("criado_em", { ascending: false });
+    .order("nome_artistico", { ascending: true });
 
   type PrestadorRow = Prestador & {
     roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
