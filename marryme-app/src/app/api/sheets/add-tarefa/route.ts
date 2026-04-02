@@ -1,0 +1,152 @@
+/**
+ * POST /api/sheets/add-tarefa
+ *
+ * Adiciona uma nova tarefa:
+ *  1. Busca a aba do cliente em mm_clientes.sheets_aba
+ *  2. Faz append da linha na aba do cliente no Google Sheets
+ *  3. Insere a tarefa em mm_tarefas no Supabase
+ *
+ * Requer env: GOOGLE_SERVICE_ACCOUNT_JSON, NEXT_PUBLIC_SHEETS_ID,
+ *             SUPABASE_URL (ou NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY
+ */
+
+export const runtime = "nodejs";
+
+import { NextRequest, NextResponse } from "next/server";
+import { createSign } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+
+const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
+const BASE     = "https://sheets.googleapis.com/v4/spreadsheets";
+
+// ─── Google Auth ──────────────────────────────────────────────────────────────
+
+function makeJWT(email: string, key: string): string {
+  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const now     = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({
+    iss: email, scope: "https://www.googleapis.com/auth/spreadsheets",
+    aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
+  })).toString("base64url");
+  const msg  = `${header}.${payload}`;
+  const sign = createSign("RSA-SHA256");
+  sign.update(msg);
+  return `${msg}.${sign.sign(key, "base64url")}`;
+}
+
+async function googleToken(): Promise<string> {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON não configurado.");
+  const sa  = JSON.parse(raw) as { client_email: string; private_key: string };
+  const jwt = makeJWT(sa.client_email, sa.private_key);
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion:  jwt,
+    }),
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error(`Google Auth falhou: ${data.error_description ?? JSON.stringify(data)}`);
+  return data.access_token;
+}
+
+async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** YYYY-MM-DD → DD/MM/YYYY para o Sheets */
+function toDateBR(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => null);
+    if (!body) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+
+    const { id_cliente, etapa, o_que, tipo, quem, prazo, status, observacoes } =
+      body as Record<string, string>;
+
+    if (!id_cliente?.trim()) return NextResponse.json({ error: "id_cliente obrigatório" }, { status: 400 });
+    if (!o_que?.trim())      return NextResponse.json({ error: "O que? é obrigatório" },   { status: 400 });
+
+    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    if (!supabaseUrl || !supabaseKey)
+      return NextResponse.json({ error: "Supabase não configurado" }, { status: 500 });
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // ── 1. Busca aba do cliente ──
+    const { data: cliente, error: errCliente } = await supabase
+      .from("mm_clientes")
+      .select("sheets_aba, nome_empresa")
+      .eq("id_cliente", id_cliente)
+      .maybeSingle();
+
+    if (errCliente || !cliente)
+      return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
+    if (!cliente.sheets_aba)
+      return NextResponse.json({ error: `Cliente ${id_cliente} não tem aba configurada` }, { status: 422 });
+
+    // ── 2. Monta linha para o Sheets (ordem: A=check, B=etapa, C=o_que, D=tipo, E=quem, F=prazo, G=status, H=obs) ──
+    const prazoBR = prazo ? toDateBR(prazo) : "";
+    const novaLinha = [
+      "FALSE",
+      etapa?.trim()       ?? "",
+      o_que.trim(),
+      tipo?.trim()        || "Marry Me",
+      quem?.trim()        ?? "",
+      prazoBR,
+      status?.trim()      || "Não iniciado",
+      observacoes?.trim() ?? "",
+    ];
+
+    // ── 3. Append no Sheets ──
+    const token = await googleToken();
+    await sAppend(token, `${cliente.sheets_aba}!A:H`, [novaLinha]);
+
+    // ── 4. Insert no Supabase ──
+    const prazoISO = prazo || null; // já vem como YYYY-MM-DD do form HTML date
+    const statusFinal = status?.trim() || "Não iniciado";
+
+    const { data: novaTarefa, error: errInsert } = await supabase
+      .from("mm_tarefas")
+      .insert({
+        cliente_id:    id_cliente,
+        check_feito:   false,
+        etapa:         etapa?.trim()       || null,
+        o_que:         o_que.trim(),
+        tipo:          tipo?.trim()        || null,
+        quem:          quem?.trim()        || null,
+        prazo:         prazoISO,
+        status:        statusFinal,
+        observacoes:   observacoes?.trim() || null,
+        atualizado_em: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (errInsert) throw new Error(`Erro ao salvar no Supabase: ${errInsert.message}`);
+
+    return NextResponse.json({ ok: true, tarefa: novaTarefa });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[add-tarefa]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

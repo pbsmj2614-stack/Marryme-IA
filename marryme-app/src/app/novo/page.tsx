@@ -19,7 +19,7 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
 ];
 
 const PLANOS    = ["Essencial", "Growth", "Enterprise"];
-const FASES     = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
+const FASES     = ["Onboarding", "Planejamento de Metas", "Voo de Cruzeiro", "Renovação", "Pausado", "Churn"];
 const RESPS     = ["Paulo", "Murilo", "Kauê"];
 
 const INITIAL: DadosEntrevista = {

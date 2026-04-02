@@ -318,6 +318,9 @@ export default function PipelinePage() {
   const [sortKey,         setSortKey]         = useState<SortKey | null>(null);
   const [sortDir,         setSortDir]         = useState<"asc" | "desc">("asc");
   const [expandedId,      setExpandedId]      = useState<string | null>(null);
+  const [addTarefaFor,    setAddTarefaFor]    = useState<string | null>(null);
+  const [addTarefaForm,   setAddTarefaForm]   = useState({ etapa: "", o_que: "", tipo: "Marry Me", quem: "", prazo: "", status: "Não iniciado", observacoes: "" });
+  const [savingTarefa,    setSavingTarefa]    = useState(false);
 
   // ── Load data ──
   const loadData = useCallback(async () => {
@@ -442,6 +445,28 @@ export default function PipelinePage() {
       setToast({ type: "success", msg: `Cliente ${labels[novoStatus]}` });
       setExpandedId(null);
       await loadData();
+    }
+  }
+
+  async function handleAddTarefa(idCliente: string) {
+    if (!addTarefaForm.o_que.trim()) return;
+    setSavingTarefa(true);
+    try {
+      const res = await fetch("/api/sheets/add-tarefa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_cliente: idCliente, ...addTarefaForm }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error ?? "Erro ao salvar");
+      setToast({ type: "success", msg: "Tarefa adicionada na planilha e no sistema" });
+      setAddTarefaFor(null);
+      setAddTarefaForm({ etapa: "", o_que: "", tipo: "Marry Me", quem: "", prazo: "", status: "Não iniciado", observacoes: "" });
+      await loadData();
+    } catch (err) {
+      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar tarefa" });
+    } finally {
+      setSavingTarefa(false);
     }
   }
 
@@ -715,7 +740,7 @@ export default function PipelinePage() {
                               <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
                                 Tarefas · {c.nome_empresa}
                               </p>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                 {c.fase_projeto && (
                                   <span className="text-xs text-blue-400 bg-blue-950 px-2 py-0.5 rounded-full">
                                     {c.fase_projeto}
@@ -724,6 +749,12 @@ export default function PipelinePage() {
                                 <span className="text-xs text-gray-600">
                                   {c.finalizadas}/{c.total_tarefas} concluídas
                                 </span>
+                                <button
+                                  onClick={() => setAddTarefaFor(addTarefaFor === c.id_cliente ? null : c.id_cliente)}
+                                  className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
+                                >
+                                  + Tarefa
+                                </button>
                               </div>
                             </div>
                             <TabelaTarefas
@@ -731,6 +762,80 @@ export default function PipelinePage() {
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                             />
+
+                            {/* ── Formulário de nova tarefa ── */}
+                            {addTarefaFor === c.id_cliente && (
+                              <div
+                                className="mt-3 p-4 rounded-xl bg-[#1a1a2e] border border-[#333] space-y-3"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Nova tarefa</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  <input
+                                    placeholder="Etapa"
+                                    value={addTarefaForm.etapa}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))}
+                                    className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666]"
+                                  />
+                                  <input
+                                    placeholder="O que fazer? *"
+                                    value={addTarefaForm.o_que}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))}
+                                    className="col-span-2 bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666]"
+                                  />
+                                  <select
+                                    value={addTarefaForm.tipo}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))}
+                                    className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
+                                  >
+                                    <option>Marry Me</option>
+                                    <option>Cliente</option>
+                                  </select>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  <select
+                                    value={addTarefaForm.quem}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))}
+                                    className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
+                                  >
+                                    <option value="">Quem?</option>
+                                    {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => <option key={r}>{r}</option>)}
+                                    <option>Cliente</option>
+                                  </select>
+                                  <input
+                                    type="date"
+                                    value={addTarefaForm.prazo}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))}
+                                    className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666]"
+                                  />
+                                  <select
+                                    value={addTarefaForm.status}
+                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, status: e.target.value }))}
+                                    className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
+                                  >
+                                    <option>Não iniciado</option>
+                                    <option>Em andamento</option>
+                                    <option>Finalizado</option>
+                                  </select>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => handleAddTarefa(c.id_cliente)}
+                                      disabled={savingTarefa || !addTarefaForm.o_que.trim()}
+                                      className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium"
+                                    >
+                                      {savingTarefa ? "Salvando…" : "Salvar"}
+                                    </button>
+                                    <button
+                                      onClick={() => setAddTarefaFor(null)}
+                                      className="text-xs px-3 py-1.5 rounded-lg border border-[#444] text-gray-500 hover:text-gray-300 transition"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="mt-4 pt-3 border-t border-[#2a2a2a] flex items-center gap-3"
                               onClick={(e) => e.stopPropagation()}
                             >

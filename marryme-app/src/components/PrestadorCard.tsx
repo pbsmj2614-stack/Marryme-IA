@@ -7,7 +7,7 @@ import ExportarButton from "@/components/ExportarButton";
 import type { Categoria } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 
-const FASES = ["Onboarding", "Captação", "Produção", "Entrega", "Pós-venda"];
+const FASES = ["Onboarding", "Planejamento de Metas", "Voo de Cruzeiro", "Renovação", "Pausado", "Churn"];
 
 const PLANO_COLORS: Record<string, string> = {
   essencial:  "bg-pink-50 text-pink-700 border-pink-100",
@@ -28,11 +28,12 @@ const PLANO_LABEL: Record<string, string> = {
 
 // Cores da borda + texto do select de fase por etapa
 const FASE_COLORS: Record<string, string> = {
-  "Onboarding": "border-sky-300 text-sky-700",
-  "Captação":   "border-violet-300 text-violet-700",
-  "Produção":   "border-amber-300 text-amber-700",
-  "Entrega":    "border-green-300 text-green-700",
-  "Pós-venda":  "border-rose-300 text-rose-700",
+  "Onboarding":           "border-green-400 text-green-700",
+  "Planejamento de Metas":"border-sky-400 text-sky-700",
+  "Voo de Cruzeiro":      "border-violet-400 text-violet-700",
+  "Renovação":            "border-amber-400 text-amber-700",
+  "Pausado":              "border-pink-400 text-pink-700",
+  "Churn":                "border-zinc-500 text-zinc-500",
 };
 
 interface Props {
