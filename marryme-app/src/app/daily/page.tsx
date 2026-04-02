@@ -386,7 +386,7 @@ export default function DailyPage() {
     const result: TarefaComCliente[] = [];
     for (const t of tarefas) {
       if (!clienteMap[t.cliente_id]) continue;
-      if (/encerr/i.test(clienteMap[t.cliente_id].status ?? "")) continue;
+      if (/paus|encerr/i.test(clienteMap[t.cliente_id].status ?? "")) continue;
       const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);

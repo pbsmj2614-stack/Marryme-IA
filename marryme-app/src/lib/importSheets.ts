@@ -159,12 +159,26 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
-  // ── 3a. Snapshot de clientes Encerrados manualmente (preservar após delete) ──
+  // ── 3a. Snapshots manuais (preservar após delete) ──
+
+  // Clientes Encerrados manualmente
   const { data: encerradosExistentes } = await supabase
     .from("mm_clientes")
     .select("id_cliente")
     .eq("status", "Encerrado");
   const encerradosSet = new Set((encerradosExistentes ?? []).map((c: { id_cliente: string }) => c.id_cliente));
+
+  // Checks manuais feitos no app (check_feito=true que a planilha ainda não reflete)
+  const { data: checksExistentes } = await supabase
+    .from("mm_tarefas")
+    .select("cliente_id, o_que, prazo, etapa")
+    .eq("check_feito", true);
+  const checksSet = new Set(
+    (checksExistentes ?? []).map(
+      (t: { cliente_id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
+        `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`
+    )
+  );
 
   // ── 3. Limpa tarefas e clientes antigos ──
   // Tarefas primeiro (referência a mm_clientes via cliente_id)
@@ -272,6 +286,27 @@ export async function importarPlanilha(): Promise<ImportResult> {
       erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${errInsert.message}`);
     } else {
       totalTarefas += tarefasPayload.length;
+    }
+  }
+
+  // ── 8. Re-aplica checks manuais que a planilha ainda não reflete ──
+  if (checksSet.size > 0) {
+    const { data: tarefasInseridas } = await supabase
+      .from("mm_tarefas")
+      .select("id, cliente_id, o_que, prazo, etapa")
+      .eq("check_feito", false);
+
+    const idsParaMarcar = (tarefasInseridas ?? [])
+      .filter((t: { id: string; cliente_id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
+        checksSet.has(`${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`)
+      )
+      .map((t: { id: string }) => t.id);
+
+    if (idsParaMarcar.length > 0) {
+      await supabase
+        .from("mm_tarefas")
+        .update({ check_feito: true, status: "Finalizado", atualizado_em: new Date().toISOString() })
+        .in("id", idsParaMarcar);
     }
   }
 

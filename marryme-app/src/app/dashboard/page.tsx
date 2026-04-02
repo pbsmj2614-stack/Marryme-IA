@@ -324,8 +324,8 @@ export default function DashboardBIPage() {
   // ── Filtered + sorted ──
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
-      if (/encerr/i.test(c.status ?? "")) return false;
-      if (filtro === "Em risco")   return c.statusScore === "Em risco"  && !/paus/i.test(c.status ?? "");
+      if (/paus|encerr/i.test(c.status ?? "") && filtro !== "Pausados") return false;
+      if (filtro === "Em risco")   return c.statusScore === "Em risco";
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
       if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
       if (filtro === "Pausados")   return /paus/i.test(c.status ?? "");
