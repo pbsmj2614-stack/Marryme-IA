@@ -44,7 +44,7 @@ Regras:
 - Campos de texto: máximo 2 frases diretas
 - diferenciais_chave e gatilhos_emocionais: máximo 4 itens de 1 frase cada
 
-Retorne JSON válido. Nenhum texto fora do JSON.
+Retorne APENAS JSON válido, sem texto antes ou depois.
 Campos: posicionamento_final, publico_alvo, nivel_mercado, diferenciais_chave (array), tom_comunicacao, gatilhos_emocionais (array)
 
 ENTREVISTA:
@@ -57,13 +57,13 @@ Regras:
 - Linguagem falada, jamais narrada ou corporativa
 - Cite nome, número, lugar ou história real da entrevista em ao menos 3 cenas
 - Proibido expressões genéricas ou frases motivacionais
-- "texto": máximo 3 parágrafos curtos separados por \\n\\n
+- "texto": 2 a 3 parágrafos curtos separados por \\n\\n
 - "legenda_sugerida": 1 frase
 - "orientacao_captacao": 1 frase objetiva
 
 Cenas: 1-Hook emocional, 2-Apresentação+autoridade, 3-Diferenciais reais, 4-Forma de trabalho, 5-Encerramento+CTA
 
-Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
+Retorne APENAS JSON válido neste formato:
 { "roteiro": [ { "cena": 1, "titulo": "...", "texto": "...", "legenda_sugerida": "...", "orientacao_captacao": "..." }, ... ] }
 
 DADOS:
@@ -75,48 +75,61 @@ Regras:
 - Ancore cada anúncio em um dado concreto da análise (número, diferencial real, história)
 - Proibido linguagem genérica ou corporativa
 - "headline": 1 frase impactante
-- "copy": máximo 4 linhas de texto corrido, sem bullets
-- "cta": máximo 5 palavras
+- "copy": 3 a 4 linhas de texto corrido, sem bullets
+- "cta": até 5 palavras
 
 Variações: emocional, direto, premium
 
-Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
-{ "anuncios": [ { "tipo": "emocional", "headline": "...", "copy": "...", "cta": "..." }, { "tipo": "direto", ... }, { "tipo": "premium", ... } ] }
+Retorne APENAS JSON válido neste formato:
+{ "anuncios": [ { "tipo": "emocional", "headline": "...", "copy": "...", "cta": "..." }, { "tipo": "direto", "headline": "...", "copy": "...", "cta": "..." }, { "tipo": "premium", "headline": "...", "copy": "...", "cta": "..." } ] }
 
 DADOS:
 {{DADOS}}`;
 
-const PROMPT_DIRECAO = `Crie exatamente 3 sugestões de direção criativa para vídeos do profissional abaixo.
+const PROMPT_DIRECAO = `Crie 3 sugestões de direção criativa para vídeos do profissional abaixo.
 {{FOCO}}
 
 Regras:
 - Cada sugestão deve ser específica para o perfil real — sem cenas genéricas de casamento
-- Cada campo (ambientacao, enquadramento, estilo_edicao, legenda_sugerida): máximo 2 linhas
+- Cada campo (ambientacao, enquadramento, estilo_edicao, legenda_sugerida): 1 a 2 frases
 
-Retorne JSON válido com exatamente este formato — nenhum texto fora do JSON:
+Retorne APENAS JSON válido neste formato:
 { "direcao": [ { "tipo_cena": "...", "ambientacao": "...", "enquadramento": "...", "estilo_edicao": "...", "legenda_sugerida": "..." }, { ... }, { ... } ] }
 
 DADOS:
 {{DADOS}}`;
 
-// max_tokens por seção — evita desperdício
+// ─── max_tokens calibrado por prompt ─────────────────────────────────────────
 const MAX_TOKENS: Record<Secao, number> = {
-  analise_estrategica: 700,
-  roteiro_sugerido:    2048,
-  copy_anuncios:       900,
-  direcao_criativa:    700,
+  analise_estrategica: 1600,
+  roteiro_sugerido:    2200,
+  copy_anuncios:       1400,
+  direcao_criativa:    1000,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Extrai JSON de uma resposta do Claude — suporta fences e texto puro */
+/** Extrai JSON de uma resposta do Claude — suporta fences ```json e texto puro */
 function extrairJSON(texto: string): unknown {
-  const match = texto.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const raw = match ? match[1].trim() : texto.trim();
+  let json = texto.trim();
+
+  if (json.startsWith("```json")) {
+    json = json.slice(7);
+    const end = json.lastIndexOf("```");
+    if (end !== -1) json = json.slice(0, end);
+  } else if (json.startsWith("```")) {
+    json = json.slice(3);
+    const end = json.lastIndexOf("```");
+    if (end !== -1) json = json.slice(0, end);
+  }
+
+  json = json.trim();
+
   try {
-    return JSON.parse(raw);
+    return JSON.parse(json);
   } catch {
-    throw new Error(`JSON inválido retornado pelo modelo:\n${raw.slice(0, 300)}`);
+    console.error("JSON inválido. Primeiros 400 chars:", texto.substring(0, 400));
+    throw new Error(`JSON inválido retornado pelo modelo: ${texto.substring(0, 200)}`);
   }
 }
 
@@ -127,21 +140,12 @@ function extrairJSON(texto: string): unknown {
 function normalizarSaida(secao: Secao, dado: unknown): unknown {
   if (!dado || typeof dado !== "object") return dado;
 
-  // Se Claude retornou o array diretamente sem wrapper
-  if (secao === "roteiro_sugerido" && Array.isArray(dado)) {
-    return { roteiro: dado };
-  }
-  if (secao === "copy_anuncios" && Array.isArray(dado)) {
-    return { anuncios: dado };
-  }
-  if (secao === "direcao_criativa" && Array.isArray(dado)) {
-    return { direcao: dado };
-  }
+  if (secao === "roteiro_sugerido" && Array.isArray(dado)) return { roteiro: dado };
+  if (secao === "copy_anuncios" && Array.isArray(dado)) return { anuncios: dado };
+  if (secao === "direcao_criativa" && Array.isArray(dado)) return { direcao: dado };
 
-  // Se é objeto mas sem a chave esperada, tenta recuperar
   const obj = dado as Record<string, unknown>;
   if (secao === "roteiro_sugerido" && !obj.roteiro) {
-    // Tenta achar qualquer chave que seja array
     const arr = Object.values(obj).find(Array.isArray);
     if (arr) return { roteiro: arr };
   }
@@ -174,13 +178,17 @@ async function chamarClaude(
   try {
     response = await client.messages.create(params);
   } catch (apiErr) {
-    // Expõe a mensagem real da API Anthropic (ex: chave inválida, rate limit)
     const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
     throw new Error(`Anthropic API: ${msg}`);
   }
 
   if (!response.content || response.content.length === 0) {
     throw new Error(`Anthropic retornou resposta vazia (stop_reason: ${response.stop_reason})`);
+  }
+
+  // Detecta truncamento antes de tentar parsear
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(`Resposta truncada pelo modelo no prompt: ${prompt.substring(0, 80)}...`);
   }
 
   const block = response.content[0];
@@ -191,36 +199,71 @@ async function chamarClaude(
   return extrairJSON(block.text);
 }
 
-/** Monta system prompt combinando instruções fixas + few-shot da categoria */
+/** Retry com backoff exponencial para sobrecarga (529) e rate limit (429) */
+async function chamarClaudeComRetry(
+  client: Anthropic,
+  prompt: string,
+  maxTokens: number,
+  system?: string,
+  tentativas = 3,
+): Promise<unknown> {
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await chamarClaude(client, prompt, maxTokens, system);
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any;
+      const retentar =
+        e?.message?.includes("overloaded") ||
+        e?.message?.includes("529") ||
+        e?.message?.includes("429") ||
+        e?.status === 529 ||
+        e?.status === 429;
+      if (!retentar || i === tentativas - 1) throw err;
+      const espera = 1000 * Math.pow(2, i + 1);
+      console.log(`Tentativa ${i + 1} falhou (${e?.status ?? e?.message}). Aguardando ${espera}ms...`);
+      await new Promise((r) => setTimeout(r, espera));
+    }
+  }
+  throw new Error("Número máximo de tentativas atingido");
+}
+
+/** Monta system prompt compacto com resumo dos exemplos aprovados */
 function buildSystemPrompt(
   exemplos: Record<string, unknown>[],
   categoria: string,
-  campo: Secao | "completo",
 ): string {
-  const blocos: string[] = [INSTRUCOES_MARRYME];
+  if (exemplos.length === 0) return INSTRUCOES_MARRYME;
 
-  if (exemplos.length > 0) {
-    const exemplosStr = exemplos
-      .map((e, i) => {
-        const dados =
-          campo === "completo"
-            ? {
-                analise_estrategica: e.analise_estrategica,
-                roteiro_sugerido: e.roteiro_sugerido,
-                copy_anuncios: e.copy_anuncios,
-                direcao_criativa: e.direcao_criativa,
-              }
-            : { [campo]: e[campo] };
-        return `--- EXEMPLO APROVADO ${i + 1} ---\n${JSON.stringify(dados, null, 2)}`;
-      })
-      .join("\n\n");
+  const exemplosStr = exemplos
+    .map((e, i) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const analise = e.analise_estrategica as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const roteiro = e.roteiro_sugerido as any;
+      const resumo = {
+        posicionamento: analise?.posicionamento_final,
+        tom: analise?.tom_comunicacao,
+        diferenciais: analise?.diferenciais_chave?.slice(0, 3),
+        cenas_exemplo: roteiro?.roteiro?.slice(0, 2)?.map((c: Record<string, string>) => ({
+          titulo: c.titulo,
+          texto: c.texto?.substring(0, 200),
+        })),
+      };
+      return `--- EXEMPLO ${i + 1} APROVADO ---\n${JSON.stringify(resumo)}`;
+    })
+    .join("\n\n");
 
-    blocos.push(
-      `\n${exemplos.length} roteiro(s) aprovado(s) pela equipe MarryMe para categoria "${categoria}":\n\n${exemplosStr}\n\nSiga o mesmo nível de qualidade e especificidade. Adapte para o novo perfil — não copie.`,
-    );
-  }
+  return `${INSTRUCOES_MARRYME}
 
-  return blocos.join("\n\n---\n\n");
+---
+
+Especialista em marketing para casamentos no Brasil — MarryMe.
+
+Referências aprovadas para categoria "${categoria}":
+${exemplosStr}
+
+Mantenha o mesmo nível de qualidade e especificidade. Adapte ao perfil do novo cliente.`;
 }
 
 function errResponse(msg: string, status = 500): Response {
@@ -285,13 +328,13 @@ serve(async (req) => {
 
     const listaExemplos = (exemplos ?? []) as Record<string, unknown>[];
     const exemplosUsados = listaExemplos.length;
+    const systemPrompt = buildSystemPrompt(listaExemplos, categoria);
 
     // ── 3A. Geração de seção única ────────────────────────────────────────────
     if (secao) {
       const secaoTyped = secao as Secao;
       console.log(`Gerando seção: ${secaoTyped}`);
 
-      // Para seções 2-4, precisamos da análise como base
       let analiseBase: unknown = null;
       if (secaoTyped !== "analise_estrategica") {
         if (roteiro_id) {
@@ -304,51 +347,49 @@ serve(async (req) => {
         }
         if (!analiseBase) {
           console.log("Gerando análise estratégica como base...");
-          const system = buildSystemPrompt(listaExemplos, categoria, "analise_estrategica");
-          analiseBase = await chamarClaude(
+          analiseBase = await chamarClaudeComRetry(
             anthropic,
             PROMPT_ESTRATEGIA.replace("{{FOCO}}", foco).replace("{{CLIENTE}}", JSON.stringify(dadosCliente, null, 2)),
             MAX_TOKENS.analise_estrategica,
-            system,
+            systemPrompt,
           );
         }
       }
 
       const dadosStr = analiseBase ? JSON.stringify(analiseBase) : "";
-      const system = buildSystemPrompt(listaExemplos, categoria, secaoTyped);
 
       let resultado: unknown;
       switch (secaoTyped) {
         case "analise_estrategica":
-          resultado = await chamarClaude(
+          resultado = await chamarClaudeComRetry(
             anthropic,
             PROMPT_ESTRATEGIA.replace("{{FOCO}}", foco).replace("{{CLIENTE}}", JSON.stringify(dadosCliente, null, 2)),
             MAX_TOKENS.analise_estrategica,
-            system,
+            systemPrompt,
           );
           break;
         case "roteiro_sugerido":
-          resultado = normalizarSaida("roteiro_sugerido", await chamarClaude(
+          resultado = normalizarSaida("roteiro_sugerido", await chamarClaudeComRetry(
             anthropic,
             PROMPT_ROTEIRO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.roteiro_sugerido,
-            system,
+            systemPrompt,
           ));
           break;
         case "copy_anuncios":
-          resultado = normalizarSaida("copy_anuncios", await chamarClaude(
+          resultado = normalizarSaida("copy_anuncios", await chamarClaudeComRetry(
             anthropic,
             PROMPT_ADS.replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.copy_anuncios,
-            system,
+            systemPrompt,
           ));
           break;
         case "direcao_criativa":
-          resultado = normalizarSaida("direcao_criativa", await chamarClaude(
+          resultado = normalizarSaida("direcao_criativa", await chamarClaudeComRetry(
             anthropic,
             PROMPT_DIRECAO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
             MAX_TOKENS.direcao_criativa,
-            system,
+            systemPrompt,
           ));
           break;
         default:
@@ -381,27 +422,45 @@ serve(async (req) => {
       return okResponse({ ok: true });
     }
 
-    // ── 3B. Geração completa (4 passos) ──────────────────────────────────────
+    // ── 3B. Geração completa (4 passos sequenciais com delay) ────────────────
     console.log("Passo 1/4: Análise estratégica...");
-    const systemCompleto = buildSystemPrompt(listaExemplos, categoria, "completo");
-
-    const analise = await chamarClaude(
+    const analise = await chamarClaudeComRetry(
       anthropic,
       PROMPT_ESTRATEGIA.replace("{{FOCO}}", foco).replace("{{CLIENTE}}", JSON.stringify(dadosCliente, null, 2)),
       MAX_TOKENS.analise_estrategica,
-      systemCompleto,
+      systemPrompt,
     );
     const dadosStr = JSON.stringify(analise);
 
-    console.log("Passos 2-4/4: Roteiro, anúncios e direção em paralelo...");
-    const [roteiroRaw, adsRaw, direcaoRaw] = await Promise.all([
-      chamarClaude(anthropic, PROMPT_ROTEIRO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr), MAX_TOKENS.roteiro_sugerido, systemCompleto),
-      chamarClaude(anthropic, PROMPT_ADS.replace("{{DADOS}}", dadosStr), MAX_TOKENS.copy_anuncios, systemCompleto),
-      chamarClaude(anthropic, PROMPT_DIRECAO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr), MAX_TOKENS.direcao_criativa, systemCompleto),
-    ]);
-    const roteiro  = normalizarSaida("roteiro_sugerido",  roteiroRaw);
-    const ads      = normalizarSaida("copy_anuncios",     adsRaw);
-    const direcao  = normalizarSaida("direcao_criativa",  direcaoRaw);
+    console.log("Passo 2/4: Roteiro sugerido...");
+    const roteiroRaw = await chamarClaudeComRetry(
+      anthropic,
+      PROMPT_ROTEIRO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
+      MAX_TOKENS.roteiro_sugerido,
+      systemPrompt,
+    );
+    await new Promise((r) => setTimeout(r, 800));
+
+    console.log("Passo 3/4: Copy de anúncios...");
+    const adsRaw = await chamarClaudeComRetry(
+      anthropic,
+      PROMPT_ADS.replace("{{DADOS}}", dadosStr),
+      MAX_TOKENS.copy_anuncios,
+      systemPrompt,
+    );
+    await new Promise((r) => setTimeout(r, 800));
+
+    console.log("Passo 4/4: Direção criativa...");
+    const direcaoRaw = await chamarClaudeComRetry(
+      anthropic,
+      PROMPT_DIRECAO.replace("{{FOCO}}", foco).replace("{{DADOS}}", dadosStr),
+      MAX_TOKENS.direcao_criativa,
+      systemPrompt,
+    );
+
+    const roteiro = normalizarSaida("roteiro_sugerido", roteiroRaw);
+    const ads     = normalizarSaida("copy_anuncios",    adsRaw);
+    const direcao = normalizarSaida("direcao_criativa", direcaoRaw);
 
     const { data: novoRoteiro, error: errInsert } = await supabase
       .from("roteiros")

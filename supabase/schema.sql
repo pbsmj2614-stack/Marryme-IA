@@ -93,3 +93,41 @@ create index if not exists idx_entrevistas_prestador on entrevistas(prestador_id
 create index if not exists idx_roteiros_prestador    on roteiros(prestador_id);
 create index if not exists idx_roteiros_categoria    on roteiros(categoria);
 create index if not exists idx_roteiros_aprovado     on roteiros(aprovado) where aprovado = true;
+
+-- ============================================================
+-- META ADS — Colunas em prestadores
+-- ============================================================
+alter table prestadores add column if not exists meta_ad_account_id text;
+alter table prestadores add column if not exists meta_ultima_sync    timestamp with time zone;
+alter table prestadores add column if not exists meta_sync_status    text default 'pendente';
+
+-- ============================================================
+-- TABELA: relatorios_campanha
+-- ============================================================
+create table if not exists relatorios_campanha (
+  id             uuid primary key default gen_random_uuid(),
+  prestador_id   uuid not null references prestadores(id) on delete cascade,
+  periodo_inicio date not null,
+  periodo_fim    date not null,
+  dados_json     jsonb not null,
+  health_score   int,
+  status         text default 'gerado',
+  pdf_url        text,
+  gerado_em      timestamp with time zone default now()
+);
+
+alter table relatorios_campanha enable row level security;
+
+create policy "Usuários autenticados podem ler relatórios"
+  on relatorios_campanha for select
+  using (auth.role() = 'authenticated');
+
+create policy "Usuários autenticados podem inserir relatórios"
+  on relatorios_campanha for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Usuários autenticados podem atualizar relatórios"
+  on relatorios_campanha for update
+  using (auth.role() = 'authenticated');
+
+create index if not exists idx_relatorios_prestador on relatorios_campanha(prestador_id, gerado_em desc);

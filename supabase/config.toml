@@ -44,3 +44,6 @@ enable_confirmations = false
 
 [edge_runtime]
 enabled = true
+
+[functions.gerar-roteiro]
+verify_jwt = false

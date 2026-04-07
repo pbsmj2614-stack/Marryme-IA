@@ -1,6 +1,24 @@
-﻿node_modules/
+﻿# ── Dependências ──
+node_modules/
+frontend/node_modules/
+
+# ── Variáveis de ambiente (nunca commitar) ──
 .env
 .env.local
-marryme-app/.env.local
-marryme-app/.next/
-marryme-app/node_modules/
+frontend/.env.local
+frontend/.env
+backend/.env
+
+# ── Build / Cache Next.js ──
+frontend/.next/
+frontend/tsconfig.tsbuildinfo
+
+# ── Credenciais Google ──
+backend/credenciais.json
+
+# ── Outputs gerados pelo script Python ──
+backend/outputs/
+
+# ── Supabase local ──
+supabase/.temp/
+

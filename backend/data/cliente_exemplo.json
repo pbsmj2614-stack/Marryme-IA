@@ -1,0 +1,20 @@
+{
+  "nome_artistico": "Fotógrafo Exemplo",
+  "categoria": "fotografo",
+  "cidade": "São Paulo",
+  "anos_experiencia": 5,
+  "especialidade": "casamentos ao ar livre",
+  "diferenciais": [
+    "Edição em 7 dias",
+    "Drone incluso",
+    "Album impresso de brinde"
+  ],
+  "historia": "Comecei em casamentos de amigos e hoje já fotografei mais de 200 eventos.",
+  "publico_alvo": "Casais entre 25 e 35 anos, classe B, que valorizam memórias autênticas",
+  "preco_medio": "R$ 3.500 o pacote completo",
+  "redes_sociais": {
+    "instagram": "@fotografo_exemplo",
+    "seguidores": 8500
+  },
+  "depoimento_destaque": "Capturou exatamente o que eu sentia naquele dia — Noiva Camila, 2024"
+}
