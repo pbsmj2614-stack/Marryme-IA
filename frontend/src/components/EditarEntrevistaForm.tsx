@@ -147,7 +147,7 @@ export default function EditarEntrevistaForm({
 
     try {
       // ── 1. Atualiza prestador ──
-      const { error: errP } = await supabase
+      const { data: prestadorAtualizado, error: errP } = await supabase
         .from("prestadores")
         .update({
           nome_artistico: dados.nome_artistico.trim(),
@@ -157,21 +157,33 @@ export default function EditarEntrevistaForm({
           cidade_base:    dados.cidade_base || null,
           instagram:      dados.instagram   || null,
         })
-        .eq("id", prestadorId);
+        .eq("id", prestadorId)
+        .select("id, whatsapp")
+        .maybeSingle();
 
       if (errP) throw new Error("Erro ao atualizar prestador: " + errP.message);
+      if (!prestadorAtualizado) throw new Error("Prestador não encontrado ou sem permissão para editar.");
 
-      // ── 2. Cria ou atualiza entrevista ──
+      // ── 2. Cria ou atualiza entrevista (sincroniza campos de contato com prestadores) ──
+      const dadosSinc = {
+        ...dados,
+        // Garante que dados_json reflita exatamente o que foi salvo em prestadores
+        nome_artistico: dados.nome_artistico.trim(),
+        whatsapp:       dados.whatsapp    || "",
+        email:          dados.email       || "",
+        cidade_base:    dados.cidade_base || "",
+        instagram:      dados.instagram   || "",
+      };
       if (entrevistaId) {
         const { error: errE } = await supabase
           .from("entrevistas")
-          .update({ dados_json: dados })
+          .update({ dados_json: dadosSinc })
           .eq("id", entrevistaId);
         if (errE) throw new Error("Erro ao atualizar entrevista: " + errE.message);
       } else {
         const { error: errE } = await supabase
           .from("entrevistas")
-          .insert({ prestador_id: prestadorId, dados_json: dados });
+          .insert({ prestador_id: prestadorId, dados_json: dadosSinc });
         if (errE) throw new Error("Erro ao criar entrevista: " + errE.message);
       }
 
