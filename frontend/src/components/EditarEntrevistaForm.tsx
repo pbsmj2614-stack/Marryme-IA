@@ -147,7 +147,7 @@ export default function EditarEntrevistaForm({
 
     try {
       // ── 1. Atualiza prestador ──
-      const { data: prestadorAtualizado, error: errP } = await supabase
+      const { error: errP } = await supabase
         .from("prestadores")
         .update({
           nome_artistico: dados.nome_artistico.trim(),
@@ -157,12 +157,9 @@ export default function EditarEntrevistaForm({
           cidade_base:    dados.cidade_base || null,
           instagram:      dados.instagram   || null,
         })
-        .eq("id", prestadorId)
-        .select("id, whatsapp")
-        .maybeSingle();
+        .eq("id", prestadorId);
 
       if (errP) throw new Error("Erro ao atualizar prestador: " + errP.message);
-      if (!prestadorAtualizado) throw new Error("Prestador não encontrado ou sem permissão para editar.");
 
       // ── 2. Cria ou atualiza entrevista (sincroniza campos de contato com prestadores) ──
       const dadosSinc = {
