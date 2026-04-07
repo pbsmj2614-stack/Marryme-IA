@@ -240,6 +240,7 @@ export default function NovoPage() {
 
       // ── 3. Criar aba no Sheets + cadastrar no mm_clientes (best-effort) ──
       setStatus("Criando aba na planilha...");
+      let abortarCadastro = false;
       try {
         const segmentoLabel = CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
         const res = await fetch("/api/sheets/novo-cliente", {
@@ -260,6 +261,7 @@ export default function NovoPage() {
         const sheetData = await res.json();
         if (res.status === 409 || sheetData.duplicado) {
           // Cliente já existe — desfaz o cadastro do prestador e bloqueia
+          abortarCadastro = true;
           await supabase.from("entrevistas").delete().eq("id", entrevista.id);
           await supabase.from("prestadores").delete().eq("id", prestador.id);
           throw new Error(sheetData.error ?? "Cliente já cadastrado.");
@@ -272,15 +274,14 @@ export default function NovoPage() {
               .update({ dados_json: { ...dados, mm_id: sheetData.id } })
               .eq("id", entrevista.id);
           }
-          const info = `Planilha: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`;
-          setSheetsAviso(info);
-          if (sheetData.aviso) setSheetsAviso(info + " ⚠ " + sheetData.aviso);
+          setSheetsAviso(`Planilha: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`);
         } else {
           // Não bloqueia — apenas registra no aviso
           setSheetsAviso(`Aviso Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
         }
       } catch (sheetsErr) {
-        // Sheets falhou mas não impede o cadastro
+        if (abortarCadastro) throw sheetsErr; // duplicata — propaga para o catch externo
+        // Outros erros de Sheets não impedem o cadastro
         setSheetsAviso(`Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`);
       }
 

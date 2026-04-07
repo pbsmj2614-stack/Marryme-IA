@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import ExportarButton from "@/components/ExportarButton";
 import type { Categoria } from "@/lib/types";

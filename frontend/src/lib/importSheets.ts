@@ -231,19 +231,40 @@ export async function importarPlanilha(): Promise<ImportResult> {
     };
   });
 
+  // ── 4b. Desduplicar por nome_empresa (mantém o menor ID MM) ──
+  // Evita duplicatas quando a planilha tem a mesma empresa com IDs diferentes
+  const seenNomes = new Map<string, typeof clientesPayload[0]>();
+  for (const c of clientesPayload) {
+    const key = c.nome_empresa.toLowerCase().trim();
+    const existing = seenNomes.get(key);
+    if (!existing) {
+      seenNomes.set(key, c);
+    } else {
+      const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      if (newNum < existNum) seenNomes.set(key, c); // mantém o ID mais antigo (menor número)
+    }
+  }
+  const clientesPayloadDedup = Array.from(seenNomes.values());
+
+  const duplicatasRemovidas = clientesPayload.length - clientesPayloadDedup.length;
+  if (duplicatasRemovidas > 0) {
+    erros.push(`Aviso: ${duplicatasRemovidas} entrada(s) duplicada(s) por nome_empresa removida(s) da importação (mantido o menor ID).`);
+  }
+
   // ── 5. Insere clientes frescos ──
   const { error: errClientes } = await supabase
     .from("mm_clientes")
-    .insert(clientesPayload);
+    .insert(clientesPayloadDedup);
 
   if (errClientes) {
     erros.push(`Erro ao salvar clientes: ${errClientes.message}`);
     return vazio();
   }
-  totalClientes = clientesPayload.length;
+  totalClientes = clientesPayloadDedup.length;
 
   // ── 6. Busca TODAS as tarefas em batchGet ──
-  const abasComCliente = clientesPayload
+  const abasComCliente = clientesPayloadDedup
     .filter((c) => c.sheets_aba)
     .map((c) => ({ id_cliente: c.id_cliente, sheets_aba: c.sheets_aba as string, nome_empresa: c.nome_empresa }));
 

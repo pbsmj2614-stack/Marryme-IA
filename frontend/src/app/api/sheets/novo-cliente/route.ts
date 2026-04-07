@@ -239,21 +239,46 @@ export async function POST(req: NextRequest) {
     ) as { values?: string[][] };
     const cadastroRows: string[][] = cadastroData.values ?? [];
 
-    const existingNums = cadastroRows
+    const sheetNums = cadastroRows
       .flat()
       .map((c) => { const m = String(c ?? "").match(/^MM(\d+)$/i); return m ? parseInt(m[1], 10) : NaN; })
       .filter((n) => !isNaN(n));
-    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1;
+
+    // Também verifica o max ID no Supabase (fonte de verdade — pode estar à frente da planilha)
+    const supabaseUrl2 = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const supabaseKey2 = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    let supabaseNums: number[] = [];
+    if (supabaseUrl2 && supabaseKey2) {
+      const sbId = createClient(supabaseUrl2, supabaseKey2);
+      const { data: idsData } = await sbId.from("mm_clientes").select("id_cliente");
+      supabaseNums = (idsData ?? [])
+        .map((r: { id_cliente: string }) => {
+          const m = r.id_cliente.match(/^MM(\d+)$/i);
+          return m ? parseInt(m[1], 10) : NaN;
+        })
+        .filter((n: number) => !isNaN(n));
+    }
+
+    const allNums = [...sheetNums, ...supabaseNums];
+    const nextNum = allNums.length > 0 ? Math.max(...allNums) + 1 : 1;
     const newId   = `MM${String(nextNum).padStart(3, "0")}`;
 
-    // ── 5. Verificar duplicata pelo nome ──
+    // ── 5. Verificar duplicata pelo nome da aba (bloqueia se já existir) ──
     const nomeTrimmed = nome_empresa.trim();
     const nomeSlug    = nomeTrimmed.toLowerCase().replace(/\s+/g, "");
     const jaExiste    = abas.some((s) => {
       const al = s.properties.title.toLowerCase().replace(/[^a-z0-9]/g, "");
       return al.includes(nomeSlug) || nomeSlug.includes(al);
     });
-    // Não bloqueia — apenas avisa no response
+    if (jaExiste) {
+      return NextResponse.json(
+        {
+          error: `Já existe uma aba com nome similar a "${nomeTrimmed}". Verifique se o cliente já foi cadastrado.`,
+          duplicado: true,
+        },
+        { status: 409 }
+      );
+    }
 
     // ── 6. Nome da nova aba ──
     const novaAba = `${newId}_${slugify(nomeTrimmed)}`;
@@ -353,7 +378,7 @@ export async function POST(req: NextRequest) {
         nome_empresa:    nomeTrimmed,
         segmento:        segmento?.trim()       || null,
         cidade:          cidade?.trim()         || null,
-        whatsapp:        whatsapp?.trim()       || null,
+        whatsapp:        normalizePhone(whatsapp ?? "") || null,
         email:           email?.trim()          || null,
         plano:           plano?.trim()          || null,
         status:          "Ativo",
@@ -369,12 +394,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok:       true,
-      id:       newId,
-      aba:      novaAba,
-      aviso:    jaExiste ? `Já existe uma aba com nome similar a "${nomeTrimmed}". Verifique se não é duplicata.` : null,
-      tarefas:  prazoUpdates.length,
-      message:  `${nomeTrimmed} cadastrado como ${newId} · aba "${novaAba}" criada com ${prazoUpdates.length} tarefa(s) com prazo em ${prazoD7}.`,
+      ok:      true,
+      id:      newId,
+      aba:     novaAba,
+      tarefas: prazoUpdates.length,
+      message: `${nomeTrimmed} cadastrado como ${newId} · aba "${novaAba}" criada com ${prazoUpdates.length} tarefa(s) com prazo em ${prazoD7}.`,
     });
 
   } catch (err) {
