@@ -339,7 +339,22 @@ export default function PipelinePage() {
       return true;
     });
 
-    const resultado: ClienteComMetricas[] = (clientesData ?? []).map((c: Cliente) => {
+    // Desduplicar clientes por nome_empresa — mantém o menor ID MM
+    const seenNomes = new Map<string, Cliente>();
+    for (const c of (clientesData ?? []) as Cliente[]) {
+      const key = c.nome_empresa.toLowerCase().trim();
+      const existing = seenNomes.get(key);
+      if (!existing) {
+        seenNomes.set(key, c);
+      } else {
+        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        if (newNum < existNum) seenNomes.set(key, c);
+      }
+    }
+    const clientesDedup = Array.from(seenNomes.values());
+
+    const resultado: ClienteComMetricas[] = clientesDedup.map((c: Cliente) => {
       const tCliente    = tarefas.filter((t) => t.cliente_id === c.id_cliente);
       const hoje = new Date().toISOString().split("T")[0];
       const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;

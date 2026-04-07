@@ -306,7 +306,21 @@ export default function DailyPage() {
       supabase.from("mm_clientes").select("*"),
       supabase.from("mm_tarefas").select("*"),
     ]);
-    setClientes((c ?? []) as Cliente[]);
+    // Desduplicar clientes por nome_empresa — mantém o menor ID MM
+    const rawClientes = (c ?? []) as Cliente[];
+    const seenNomes = new Map<string, Cliente>();
+    for (const cli of rawClientes) {
+      const key = cli.nome_empresa.toLowerCase().trim();
+      const existing = seenNomes.get(key);
+      if (!existing) {
+        seenNomes.set(key, cli);
+      } else {
+        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        const newNum   = parseInt(cli.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        if (newNum < existNum) seenNomes.set(key, cli);
+      }
+    }
+    setClientes(Array.from(seenNomes.values()));
     setTarefas((t ?? []) as Tarefa[]);
     setLoading(false);
   }, []);
