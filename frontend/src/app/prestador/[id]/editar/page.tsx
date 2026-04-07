@@ -30,14 +30,9 @@ export default async function EditarPage({ params }: { params: Promise<{ id: str
 
   const p = prestador as Prestador;
 
-  // Monta dados iniciais: entrevista existente ou campos básicos do prestador
+  // Monta dados iniciais: entrevista carrega primeiro, prestadores sobrescreve campos de contato
+  // (prestadores é a fonte de verdade para whatsapp, email, cidade_base, instagram, nome_artistico)
   const initialData: DadosEntrevista = {
-    nome_artistico:        p.nome_artistico ?? "",
-    categoria:             p.categoria      ?? "musico",
-    whatsapp:              p.whatsapp       ?? "",
-    email:                 p.email          ?? "",
-    cidade_base:           p.cidade_base    ?? "",
-    instagram:             p.instagram      ?? "",
     anos_experiencia:      "",
     especialidade:         "",
     preco_medio:           "",
@@ -53,8 +48,15 @@ export default async function EditarPage({ params }: { params: Promise<{ id: str
     plano:          "Essencial",
     fase_projeto:   "Onboarding",
     responsavel_mm: "",
-    // Sobrescreve com dados da entrevista se existir
+    // Campos da entrevista (inclui tudo do dados_json)
     ...(entrevista?.dados_json ?? {}),
+    // Campos de contato do prestador sempre prevalecem — são a fonte de verdade
+    nome_artistico: p.nome_artistico ?? "",
+    categoria:      p.categoria      ?? "musico",
+    whatsapp:       p.whatsapp       ?? "",
+    email:          p.email          ?? "",
+    cidade_base:    p.cidade_base    ?? "",
+    instagram:      p.instagram      ?? "",
   };
 
   return (
