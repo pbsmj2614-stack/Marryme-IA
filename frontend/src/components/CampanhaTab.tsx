@@ -195,7 +195,7 @@ function GastoChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
           <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9ca3af" }} angle={-30} textAnchor="end" interval={0} />
           <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `R$${v}`} width={50} />
           <Tooltip
-            formatter={(value: number) => [fmtBRL(value), "Gasto"]}
+            formatter={(value) => [fmtBRL(Number(value)), "Gasto"]}
             contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
           />
           <Bar dataKey="gasto" radius={[4, 4, 0, 0]}>

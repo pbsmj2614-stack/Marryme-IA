@@ -92,6 +92,34 @@ async function metaGet(path: string, params: Record<string, string>): Promise<un
   return json;
 }
 
+// ─── Action helpers (module-level to avoid strict-mode function-in-block error) ─
+
+type ActionArr = Array<{ action_type: string; value: string }>;
+
+function extractAction(arr: unknown, types: string[]): number {
+  const actions = arr as ActionArr | undefined;
+  if (!actions?.length) return 0;
+  for (const t of types) {
+    const found = actions.find((a) => a.action_type === t);
+    if (found) return parseFloat(found.value) || 0;
+  }
+  return 0;
+}
+
+function extractVideoAction(arr: unknown): number {
+  const actions = arr as ActionArr | undefined;
+  if (!actions?.length) return 0;
+  return parseFloat(actions[0]?.value ?? "0") || 0;
+}
+
+const MESSAGE_TYPES = [
+  "onsite_conversion.messaging_conversation_started_7d",
+  "messaging_conversation_started_7d",
+  "lead",
+  "offsite_conversion.fb_pixel_lead",
+  "onsite_conversion.lead_grouped",
+];
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -169,34 +197,6 @@ export async function POST(req: NextRequest) {
     }) as { data?: Array<Record<string, unknown>> };
 
     const kpisData = kpisRaw.data?.[0] ?? {};
-
-    // Extrai valor de arrays de ações: [{action_type, value}]
-    type ActionArr = Array<{ action_type: string; value: string }>;
-
-    function extractAction(arr: unknown, types: string[]): number {
-      const actions = arr as ActionArr | undefined;
-      if (!actions?.length) return 0;
-      for (const t of types) {
-        const found = actions.find((a) => a.action_type === t);
-        if (found) return parseFloat(found.value) || 0;
-      }
-      return 0;
-    }
-
-    function extractVideoAction(arr: unknown): number {
-      const actions = arr as ActionArr | undefined;
-      if (!actions?.length) return 0;
-      return parseFloat(actions[0]?.value ?? "0") || 0;
-    }
-
-    // Mensagens iniciadas (resultado principal para casamentos com WhatsApp)
-    const MESSAGE_TYPES = [
-      "onsite_conversion.messaging_conversation_started_7d",
-      "messaging_conversation_started_7d",
-      "lead",
-      "offsite_conversion.fb_pixel_lead",
-      "onsite_conversion.lead_grouped",
-    ];
 
     const impressions     = parseFloat(String(kpisData.impressions ?? "0"));
     const spend           = parseFloat(String(kpisData.spend       ?? "0"));
