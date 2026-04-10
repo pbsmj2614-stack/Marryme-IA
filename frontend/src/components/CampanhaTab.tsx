@@ -6,18 +6,19 @@ import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
-import type { RelatorioCampanha, CampanhaInsight } from "@/lib/types";
+import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha } from "@/lib/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmt(n: number, decimals = 0) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function fmt(n: number | null | undefined, dec = 0) {
+  const v = n ?? 0;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
-function fmtBRL(n: number) {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function fmtBRL(n: number | null | undefined) {
+  return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-function fmtPct(n: number) {
-  return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+function fmtPct(n: number | null | undefined) {
+  return `${(n ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 function scoreColor(score: number): { ring: string; text: string; bg: string; label: string } {
@@ -28,24 +29,16 @@ function scoreColor(score: number): { ring: string; text: string; bg: string; la
 
 function HealthGauge({ score }: { score: number }) {
   const { ring, text, bg, label } = scoreColor(score);
-  const r = 40;
-  const circ = 2 * Math.PI * r;
+  const r = 40; const circ = 2 * Math.PI * r;
   const dash = (score / 100) * circ;
-
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative w-28 h-28">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r={r} fill="none" stroke="#e5e7eb" strokeWidth="10" />
-          <circle
-            cx="50" cy="50" r={r}
-            fill="none"
-            className={ring}
-            strokeWidth="10"
-            strokeDasharray={`${dash} ${circ - dash}`}
-            strokeLinecap="round"
-            style={{ transition: "stroke-dasharray 0.6s ease" }}
-          />
+          <circle cx="50" cy="50" r={r} fill="none" className={ring} strokeWidth="10"
+            strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
+            style={{ transition: "stroke-dasharray 0.6s ease" }} />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`text-3xl font-bold ${text}`}>{score}</span>
@@ -59,17 +52,55 @@ function HealthGauge({ score }: { score: number }) {
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function KpiCard({
+  label, value, sub, highlight,
+}: {
+  label: string; value: string; sub?: string; highlight?: "good" | "warn" | "bad" | null;
+}) {
+  const hlCls =
+    highlight === "good" ? "border-green-200 bg-green-50" :
+    highlight === "warn" ? "border-yellow-200 bg-yellow-50" :
+    highlight === "bad"  ? "border-red-200 bg-red-50" :
+    "border-gray-100 bg-gray-50";
+  const valCls =
+    highlight === "good" ? "text-green-700" :
+    highlight === "warn" ? "text-yellow-700" :
+    highlight === "bad"  ? "text-red-700"   :
+    "text-gray-900";
   return (
-    <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+    <div className={`border rounded-xl px-4 py-3 ${hlCls}`}>
       <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className="text-lg font-bold text-gray-900">{value}</p>
+      <p className={`text-lg font-bold ${valCls}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
 
-// ─── Campaigns table ──────────────────────────────────────────────────────────
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">{children}</p>
+  );
+}
+
+// ─── Retenção de vídeo ────────────────────────────────────────────────────────
+
+function RetencaoBar({ label, value, base }: { label: string; value: number; base: number }) {
+  const pct = base > 0 ? Math.min(100, Math.round((value / base) * 100)) : 0;
+  const color = pct >= 50 ? "#22c55e" : pct >= 25 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-gray-500 w-8 shrink-0">{label}</span>
+      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-xs font-semibold text-gray-700 w-16 text-right">
+        {fmt(value)} <span className="text-gray-400 font-normal">({pct}%)</span>
+      </span>
+    </div>
+  );
+}
+
+// ─── Tabela de campanhas ──────────────────────────────────────────────────────
 
 function CampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
   if (campanhas.length === 0) {
@@ -80,35 +111,61 @@ function CampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100">
-            <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Campanha</th>
-            <th className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Impressões</th>
-            <th className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Cliques</th>
-            <th className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">CTR</th>
-            <th className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">CPM</th>
-            <th className="text-right py-2 px-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Gasto</th>
-            <th className="text-right py-2 pl-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">Resultados</th>
+            {["Campanha", "Impressões", "Alcance", "CTR Link", "CPC", "CPM", "Freq.", "Mensagens", "Custo/Msg", "Hook Rate", "ThruPlay", "Gasto"].map((h) => (
+              <th key={h} className="text-left py-2 pr-3 text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
           {campanhas.map((c) => (
             <tr key={c.campaign_id} className="hover:bg-gray-50 transition">
-              <td className="py-2.5 pr-4 text-gray-800 font-medium max-w-[200px] truncate" title={c.campaign_name}>
+              <td className="py-2.5 pr-3 text-gray-800 font-medium max-w-[180px] truncate" title={c.campaign_name}>
                 {c.campaign_name}
               </td>
-              <td className="py-2.5 px-2 text-right text-gray-600">{fmt(c.impressions)}</td>
-              <td className="py-2.5 px-2 text-right text-gray-600">{fmt(c.clicks)}</td>
-              <td className="py-2.5 px-2 text-right">
-                <span className={`font-medium ${c.ctr >= 1 ? "text-green-600" : c.ctr >= 0.5 ? "text-yellow-600" : "text-red-500"}`}>
-                  {fmtPct(c.ctr)}
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">{fmt(c.impressions)}</td>
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">{fmt(c.reach)}</td>
+              {/* CTR link */}
+              <td className="py-2.5 pr-3 whitespace-nowrap">
+                <span className={`font-medium ${(c.link_ctr ?? c.ctr) >= 1 ? "text-green-600" : (c.link_ctr ?? c.ctr) >= 0.5 ? "text-yellow-600" : "text-red-500"}`}>
+                  {fmtPct(c.link_ctr ?? c.ctr)}
                 </span>
               </td>
-              <td className="py-2.5 px-2 text-right text-gray-600">{fmtBRL(c.cpm)}</td>
-              <td className="py-2.5 px-2 text-right text-gray-700 font-medium">{fmtBRL(c.spend)}</td>
-              <td className="py-2.5 pl-2 text-right">
+              {/* CPC */}
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">{c.cpc > 0 ? fmtBRL(c.cpc) : "—"}</td>
+              {/* CPM */}
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">{fmtBRL(c.cpm)}</td>
+              {/* Frequência */}
+              <td className="py-2.5 pr-3 whitespace-nowrap">
+                <span className={c.frequency <= 2 ? "text-green-600" : c.frequency <= 3.5 ? "text-yellow-600" : "text-red-500"}>
+                  {fmt(c.frequency, 1)}x
+                </span>
+              </td>
+              {/* Mensagens */}
+              <td className="py-2.5 pr-3 whitespace-nowrap">
                 <span className="bg-brand-50 text-brand-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                   {fmt(c.results)}
                 </span>
               </td>
+              {/* Custo/mensagem */}
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">
+                {c.cost_per_result > 0 ? fmtBRL(c.cost_per_result) : "—"}
+              </td>
+              {/* Hook Rate */}
+              <td className="py-2.5 pr-3 whitespace-nowrap">
+                {c.hook_rate > 0 ? (
+                  <span className={c.hook_rate >= 12 ? "text-green-600 font-medium" : c.hook_rate >= 6 ? "text-yellow-600" : "text-red-500"}>
+                    {fmtPct(c.hook_rate)}
+                  </span>
+                ) : <span className="text-gray-300">—</span>}
+              </td>
+              {/* ThruPlay */}
+              <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">
+                {c.thruplay > 0 ? fmt(c.thruplay) : <span className="text-gray-300">—</span>}
+              </td>
+              {/* Gasto */}
+              <td className="py-2.5 pr-3 text-gray-700 font-medium whitespace-nowrap">{fmtBRL(c.spend)}</td>
             </tr>
           ))}
         </tbody>
@@ -117,7 +174,7 @@ function CampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
   );
 }
 
-// ─── Chart ────────────────────────────────────────────────────────────────────
+// ─── Gráfico gasto por campanha ───────────────────────────────────────────────
 
 function GastoChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
   if (campanhas.length === 0) return null;
@@ -127,21 +184,15 @@ function GastoChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
     .map((c) => ({
       name: c.campaign_name.length > 18 ? c.campaign_name.slice(0, 18) + "…" : c.campaign_name,
       gasto: parseFloat(c.spend.toFixed(2)),
-      ctr: parseFloat(c.ctr.toFixed(2)),
+      ctr: parseFloat(((c.link_ctr ?? c.ctr) ?? 0).toFixed(2)),
     }));
 
   return (
     <div className="mt-4">
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Gasto por campanha (R$)</p>
+      <SectionTitle>Gasto por campanha (R$)</SectionTitle>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart data={data} barSize={28} margin={{ top: 0, right: 0, left: 0, bottom: 30 }}>
-          <XAxis
-            dataKey="name"
-            tick={{ fontSize: 10, fill: "#9ca3af" }}
-            angle={-30}
-            textAnchor="end"
-            interval={0}
-          />
+          <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9ca3af" }} angle={-30} textAnchor="end" interval={0} />
           <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `R$${v}`} width={50} />
           <Tooltip
             formatter={(value: number) => [fmtBRL(value), "Gasto"]}
@@ -154,7 +205,9 @@ function GastoChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      <p className="text-xs text-gray-300 mt-1 text-center">Cor: roxo = CTR &ge;1% · amarelo = CTR 0.5-1% · vermelho = CTR &lt;0.5%</p>
+      <p className="text-xs text-gray-300 mt-1 text-center">
+        Cor: roxo = CTR ≥1% · amarelo = 0.5–1% · vermelho = &lt;0.5%
+      </p>
     </div>
   );
 }
@@ -173,7 +226,6 @@ interface Props {
 
 export default function CampanhaTab({
   prestadorId,
-  prestadorNome,
   metaAccountId,
   metaSyncStatus,
   metaUltimaSync,
@@ -182,7 +234,7 @@ export default function CampanhaTab({
 }: Props) {
   const router = useRouter();
   const [sincronizando, setSincronizando] = useState(false);
-  const [erroSync,     setErroSync]       = useState<string | null>(null);
+  const [erroSync,      setErroSync]      = useState<string | null>(null);
 
   async function handleSincronizar() {
     setSincronizando(true);
@@ -220,49 +272,60 @@ export default function CampanhaTab({
           href={`/prestador/${prestadorId}/configurar`}
           className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
           Configurar Meta Ads
         </Link>
       </div>
     );
   }
 
-  const rel = ultimoRelatorio;
-  const kpis = rel?.dados_json.kpis;
-  const campanhas = rel?.dados_json.campanhas ?? [];
-  const score = rel?.health_score ?? null;
+  const rel      = ultimoRelatorio;
+  const kpis     = rel?.dados_json?.kpis as KPIsCampanha | undefined;
+  const campanhas = rel?.dados_json?.campanhas ?? [];
+  const score    = rel?.health_score ?? null;
+
+  // helpers de highlight
+  function ctrHL(v: number | null | undefined): "good" | "warn" | "bad" | null {
+    if (!v) return null;
+    return v >= 1 ? "good" : v >= 0.5 ? "warn" : "bad";
+  }
+  function freqHL(v: number | null | undefined): "good" | "warn" | "bad" | null {
+    if (!v) return null;
+    return v <= 1.5 ? "good" : v <= 3 ? "warn" : "bad";
+  }
+  function cpmHL(v: number | null | undefined): "good" | "warn" | "bad" | null {
+    if (!v) return null;
+    return v <= 15 ? "good" : v <= 30 ? "warn" : "bad";
+  }
+  function hookHL(v: number | null | undefined): "good" | "warn" | "bad" | null {
+    if (!v) return null;
+    return v >= 12 ? "good" : v >= 6 ? "warn" : "bad";
+  }
 
   return (
     <div className="space-y-4">
 
-      {/* ── Header: status + botões ─────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-base font-bold text-gray-900">Relatório de Campanha</h3>
+              <h3 className="text-base font-bold text-gray-900">Relatório de Campanha · Meta Ads</h3>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                 metaSyncStatus === "ok"            ? "bg-green-100 text-green-700" :
-                metaSyncStatus === "erro"          ? "bg-red-100 text-red-700" :
-                metaSyncStatus === "sincronizando" ? "bg-blue-100 text-blue-700" :
+                metaSyncStatus === "erro"          ? "bg-red-100 text-red-700"    :
+                metaSyncStatus === "sincronizando" ? "bg-blue-100 text-blue-700"  :
                 "bg-gray-100 text-gray-500"
               }`}>
-                {metaSyncStatus === "ok"            ? "Sincronizado" :
-                 metaSyncStatus === "erro"          ? "Erro na sync" :
-                 metaSyncStatus === "sincronizando" ? "Sincronizando…" :
-                 "Pendente"}
+                {metaSyncStatus === "ok" ? "Sincronizado" :
+                 metaSyncStatus === "erro" ? "Erro na sync" :
+                 metaSyncStatus === "sincronizando" ? "Sincronizando…" : "Pendente"}
               </span>
             </div>
             <p className="text-xs text-gray-400">
               Conta: <span className="font-mono">act_{metaAccountId}</span>
-              {metaUltimaSync && (
-                <> · Atualizado em {new Date(metaUltimaSync).toLocaleString("pt-BR")}</>
-              )}
+              {metaUltimaSync && <> · {new Date(metaUltimaSync).toLocaleString("pt-BR")}</>}
             </p>
           </div>
-
           <div className="flex items-center gap-2">
             <Link
               href={`/prestador/${prestadorId}/configurar`}
@@ -280,7 +343,7 @@ export default function CampanhaTab({
                   <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" strokeLinecap="round" strokeLinejoin="round" />
                   <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                Exportar PDF
+                PDF
               </Link>
             )}
             <button
@@ -303,7 +366,6 @@ export default function CampanhaTab({
             </button>
           </div>
         </div>
-
         {erroSync && (
           <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
             {erroSync}
@@ -311,10 +373,10 @@ export default function CampanhaTab({
         )}
       </div>
 
-      {/* ── Sem dados ainda ─────────────────────────────────────────────────── */}
+      {/* ── Sem dados ─────────────────────────────────────────────────────── */}
       {!rel && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-          <p className="text-gray-500 text-sm mb-4">Nenhum relatório gerado ainda. Clique em "Atualizar dados" para buscar as métricas.</p>
+          <p className="text-gray-500 text-sm">Nenhum relatório gerado. Clique em "Atualizar dados".</p>
         </div>
       )}
 
@@ -325,89 +387,134 @@ export default function CampanhaTab({
             <div className="flex items-center gap-6 flex-wrap">
               {score !== null && <HealthGauge score={score} />}
               <div className="flex-1 min-w-[200px]">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Período analisado</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Período</p>
                 <p className="text-sm text-gray-700 font-medium">
                   {new Date(rel.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
                   {" → "}
                   {new Date(rel.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                 </p>
-                <div className="mt-3 space-y-1.5 text-xs text-gray-500">
-                  <p>• <strong className="text-gray-700">CTR alto</strong> (&ge;1%) e frequência baixa (&le;2) = campanha saudável</p>
-                  <p>• <strong className="text-gray-700">CPM baixo</strong> (&le;R$20) indica segmentação eficiente</p>
+                <div className="mt-3 space-y-1 text-xs text-gray-500">
+                  <p><strong className="text-gray-600">CTR link ≥ 1%</strong> · frequência ≤ 2 · hook rate ≥ 12% = saudável</p>
+                  <p><strong className="text-gray-600">Score:</strong> CTR (40%) · Frequência (20%) · CPM (20%) · Hook Rate (20%)</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── Bloco 2: KPIs ─────────────────────────────────────────────── */}
+          {/* ── Bloco 2: Entrega + Clique ──────────────────────────────────── */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Métricas do período</p>
+            <SectionTitle>Entrega e clique</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <KpiCard label="Impressões"    value={fmt(kpis.impressions)}        />
-              <KpiCard label="Alcance"       value={fmt(kpis.reach)}              />
-              <KpiCard label="Cliques"       value={fmt(kpis.clicks)}             />
-              <KpiCard label="CTR"           value={fmtPct(kpis.ctr)}            sub="cliques / impressões" />
-              <KpiCard label="CPM"           value={fmtBRL(kpis.cpm)}            sub="custo por mil impressões" />
-              <KpiCard label="Frequência"    value={fmt(kpis.frequency, 2)}       sub="impressões por pessoa" />
-              <KpiCard label="Gasto total"   value={fmtBRL(kpis.spend)}          />
-              <KpiCard
-                label="Resultados"
-                value={fmt(kpis.results)}
-                sub={kpis.results > 0 ? `CPA: ${fmtBRL(kpis.cost_per_result)}` : undefined}
-              />
+              <KpiCard label="Impressões"   value={fmt(kpis.impressions)} />
+              <KpiCard label="Alcance"      value={fmt(kpis.reach)} />
+              <KpiCard label="Frequência"   value={fmt(kpis.frequency, 2)} sub="impressões / pessoa" highlight={freqHL(kpis.frequency)} />
+              <KpiCard label="CPM"          value={fmtBRL(kpis.cpm)} sub="custo por mil impressões" highlight={cpmHL(kpis.cpm)} />
+              <KpiCard label="CTR do link"  value={fmtPct(kpis.link_ctr || kpis.ctr)} sub="cliques no link / impressões" highlight={ctrHL(kpis.link_ctr || kpis.ctr)} />
+              <KpiCard label="Cliques link" value={fmt(kpis.link_clicks || kpis.clicks)} />
+              <KpiCard label="CPC"          value={kpis.cpc > 0 ? fmtBRL(kpis.cpc) : "—"} sub="custo por clique no link" />
+              <KpiCard label="Gasto total"  value={fmtBRL(kpis.spend)} />
             </div>
           </div>
 
-          {/* ── Bloco 3: Tabela de campanhas ──────────────────────────────── */}
+          {/* ── Bloco 3: Resultados ───────────────────────────────────────── */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">
-              Campanhas ({campanhas.length})
-            </p>
-            <CampanhasTable campanhas={campanhas} />
+            <SectionTitle>Resultado principal (mensagens iniciadas)</SectionTitle>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <KpiCard
+                label="Mensagens iniciadas"
+                value={fmt(kpis.results)}
+                highlight={kpis.results > 0 ? "good" : null}
+              />
+              <KpiCard
+                label="Custo por mensagem"
+                value={kpis.cost_per_result > 0 ? fmtBRL(kpis.cost_per_result) : "—"}
+              />
+              <KpiCard label="Gasto total" value={fmtBRL(kpis.spend)} />
+            </div>
           </div>
 
-          {/* ── Bloco 4: Gráfico ──────────────────────────────────────────── */}
-          {campanhas.length > 1 && (
+          {/* ── Bloco 4: Vídeo ────────────────────────────────────────────── */}
+          {(kpis.thruplay > 0 || kpis.video_3s > 0 || kpis.hook_rate > 0) && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <SectionTitle>Métricas de vídeo</SectionTitle>
+
+              {/* Hook rate + ThruPlay */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <KpiCard
+                  label="Hook Rate"
+                  value={fmtPct(kpis.hook_rate)}
+                  sub="3s views / impressões"
+                  highlight={hookHL(kpis.hook_rate)}
+                />
+                <KpiCard label="Views 3s"       value={fmt(kpis.video_3s)} />
+                <KpiCard label="ThruPlay"        value={fmt(kpis.thruplay)} sub="15s ou 100% do vídeo" />
+                <KpiCard
+                  label="Custo / ThruPlay"
+                  value={kpis.cost_per_thruplay > 0 ? fmtBRL(kpis.cost_per_thruplay) : "—"}
+                />
+              </div>
+
+              {/* Retenção */}
+              {kpis.video_p25 > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                    Retenção do vídeo (base: impressões {fmt(kpis.impressions)})
+                  </p>
+                  <div className="space-y-2.5">
+                    <RetencaoBar label="25%"  value={kpis.video_p25}  base={kpis.impressions} />
+                    <RetencaoBar label="50%"  value={kpis.video_p50}  base={kpis.impressions} />
+                    <RetencaoBar label="75%"  value={kpis.video_p75}  base={kpis.impressions} />
+                    <RetencaoBar label="100%" value={kpis.video_p100} base={kpis.impressions} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Bloco 5: Campanhas ────────────────────────────────────────── */}
+          {campanhas.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">
+                Campanhas ({campanhas.length})
+              </p>
+              <CampanhasTable campanhas={campanhas} />
               <GastoChart campanhas={campanhas} />
             </div>
           )}
-        </>
-      )}
 
-      {/* ── Bloco 5: Histórico ──────────────────────────────────────────────── */}
-      {historico.length > 1 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Histórico de relatórios</p>
-          <div className="space-y-2">
-            {historico.map((h, i) => {
-              const sc = h.health_score;
-              const colors = sc !== null ? scoreColor(sc) : null;
-              return (
-                <div key={h.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 w-5">{i + 1}.</span>
-                    <span className="text-sm text-gray-700">
+          {/* ── Bloco 6: Histórico ────────────────────────────────────────── */}
+          {historico.length > 1 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
+                Histórico de relatórios
+              </p>
+              <div className="space-y-2">
+                {historico.map((h) => (
+                  <div key={h.id} className="flex items-center justify-between text-sm py-2 border-b border-gray-50 last:border-0">
+                    <span className="text-gray-500 text-xs">
                       {new Date(h.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
                       {" — "}
                       {new Date(h.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {sc !== null && colors && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colors.bg} ${colors.text}`}>
-                        {sc}/100
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold" style={{
+                        color: h.health_score !== null && h.health_score >= 70 ? "#16a34a" :
+                               h.health_score !== null && h.health_score >= 40 ? "#d97706" : "#dc2626",
+                      }}>
+                        HS {h.health_score ?? "—"}
                       </span>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {new Date(h.gerado_em).toLocaleDateString("pt-BR")}
-                    </span>
+                      {h.dados_json?.kpis && (
+                        <span className="text-xs text-gray-400">
+                          Gasto: {fmtBRL(h.dados_json.kpis.spend)} · Msgs: {fmt(h.dados_json.kpis.results)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
