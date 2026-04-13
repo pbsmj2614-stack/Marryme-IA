@@ -406,6 +406,7 @@ export default function DashboardBIPage() {
   const [expandedId,    setExpandedId]    = useState<string | null>(null);
   const [sincronizandoId, setSincronizandoId] = useState<string | null>(null);
   const [tableExpanded, setTableExpanded] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const TABLE_LIMIT = 8;
 
   const loadData = useCallback(async () => {
@@ -429,11 +430,15 @@ export default function DashboardBIPage() {
       entrevistas: Array<{ dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null; criado_em: string }>;
       relatorios_campanha: RelatorioRow[];
     };
-    const mmIdMap = new Map<string, PrestRaw>();
+    const mmIdMap  = new Map<string, PrestRaw>();
+    const nomeMap  = new Map<string, PrestRaw>(); // fallback: nome_artistico normalizado
     for (const p of (prestData ?? []) as PrestRaw[]) {
       const ents = (p.entrevistas ?? []).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
       const mmId = ents[0]?.dados_json?.mm_id;
       if (mmId) mmIdMap.set(mmId.toUpperCase().trim(), p);
+      // Always build name map (first occurrence wins; mmIdMap takes priority later)
+      const nomeKey = p.nome_artistico.toLowerCase().trim();
+      if (!nomeMap.has(nomeKey)) nomeMap.set(nomeKey, p);
     }
 
     // ── 4. Desduplicar mm_clientes por nome_empresa ─────────────────────────────
@@ -454,7 +459,9 @@ export default function DashboardBIPage() {
 
     // ── 5. Construir rows unificados ────────────────────────────────────────────
     const rows: PrestadorRow[] = clientesDedup.map((c) => {
-      const prest = mmIdMap.get(c.id_cliente.toUpperCase().trim()) ?? null;
+      const prest = mmIdMap.get(c.id_cliente.toUpperCase().trim())
+        ?? nomeMap.get(c.nome_empresa.toLowerCase().trim())
+        ?? null;
       const relatorios = (prest?.relatorios_campanha ?? []) as RelatorioRow[];
       const ultimoRel  = relatorios.sort((a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime())[0] ?? null;
 
@@ -497,19 +504,23 @@ export default function DashboardBIPage() {
   async function handleSincronizar(prestadorId: string) {
     if (!prestadorId) return;
     setSincronizandoId(prestadorId);
+    setToast(null);
     try {
       const res  = await fetch("/api/meta/sincronizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prestador_id: prestadorId }),
       });
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      const data = await res.json().catch(() => ({} as { ok?: boolean; error?: string; health_score?: number })) as { ok?: boolean; error?: string; health_score?: number };
       if (!res.ok || !data.ok) {
-        console.error("[sincronizar]", data.error ?? res.status);
+        const msg = data.error ?? `Erro HTTP ${res.status}`;
+        setToast({ type: "error", msg: `Falha na sincronização: ${msg}` });
+      } else {
+        setToast({ type: "success", msg: `Dados atualizados · Health Score: ${data.health_score ?? "—"}` });
+        await loadData();
       }
-      await loadData();
     } catch (e) {
-      console.error("[sincronizar]", e);
+      setToast({ type: "error", msg: e instanceof Error ? e.message : "Erro de rede ao sincronizar" });
     } finally {
       setSincronizandoId(null);
     }
@@ -853,6 +864,21 @@ export default function DashboardBIPage() {
         )}
 
       </main>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium transition-all ${
+            toast.type === "success"
+              ? "bg-green-950 border-green-700 text-green-300"
+              : "bg-red-950 border-red-700 text-red-300"
+          }`}
+        >
+          <span>{toast.type === "success" ? "✓" : "✕"}</span>
+          <span>{toast.msg}</span>
+          <button onClick={() => setToast(null)} className="ml-2 opacity-60 hover:opacity-100 text-xs">✕</button>
+        </div>
+      )}
     </div>
   );
 }

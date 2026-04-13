@@ -55,7 +55,7 @@ interface ClienteComMetricas extends Cliente {
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados", "Encerrados"];
-const RESPONSAVEIS               = ["Todos", "Paulo", "Murilo", "Kauê"];
+const RESPONSAVEIS               = ["Todos", "Paulo", "Murilo", "Kauê", "Giovanni"];
 const TODAY                      = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -194,17 +194,46 @@ function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
 
 // ─── Expanded task table ──────────────────────────────────────────────────────
 
+type EditForm = { etapa: string; quem: string; prazo: string; status: string; observacoes: string };
+
 function TabelaTarefas({
   tarefas,
   clienteId,
   onCheckChange,
+  onUpdate,
 }: {
   tarefas: Tarefa[];
   clienteId: string;
-  onCheckChange: (tarefaId: string, checked: boolean) => void;
+  onCheckChange: (tarefa: Tarefa, checked: boolean) => void;
+  onUpdate: (tarefa: Tarefa, updates: EditForm) => Promise<void>;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm,  setEditForm]  = useState<EditForm>({ etapa: "", quem: "", prazo: "", status: "", observacoes: "" });
+  const [saving,    setSaving]    = useState(false);
+
+  function startEdit(t: Tarefa) {
+    setEditingId(t.id);
+    setEditForm({
+      etapa:       t.etapa       ?? "",
+      quem:        t.quem        ?? "",
+      prazo:       t.prazo       ?? "",  // YYYY-MM-DD
+      status:      t.status      ?? "Não iniciado",
+      observacoes: t.observacoes ?? "",
+    });
+  }
+
+  async function saveEdit(t: Tarefa) {
+    setSaving(true);
+    await onUpdate(t, editForm);
+    setSaving(false);
+    setEditingId(null);
+  }
+
   if (tarefas.length === 0)
     return <p className="text-gray-500 text-sm py-2">Nenhuma tarefa importada para este cliente.</p>;
+
+  const inputCls = "bg-[#111] border border-[#444] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-[#666] w-full";
+  const selectCls = inputCls + " cursor-pointer";
 
   return (
     <div className="overflow-x-auto rounded-lg border border-[#2a2a2a]">
@@ -218,56 +247,132 @@ function TabelaTarefas({
             <th className="px-3 py-2 text-left">Quem</th>
             <th className="px-3 py-2 text-left">Prazo</th>
             <th className="px-3 py-2 text-left">Status</th>
+            <th className="px-2 py-2 w-16"></th>
           </tr>
         </thead>
         <tbody>
           {tarefas.map((t) => {
-            const vencida = isPrazoVencido(t.prazo, t.status);
+            const vencida  = isPrazoVencido(t.prazo, t.status);
+            const isEdit   = editingId === t.id;
+            const rowClass = t.check_feito
+              ? "border-t border-[#2a2a2a] opacity-50"
+              : `border-t border-[#2a2a2a] ${isEdit ? "bg-[#1a1a2e]" : "hover:bg-[#1e1e2e] transition-colors"}`;
             return (
-              <tr
-                key={t.id}
-                className="border-t border-[#2a2a2a] hover:bg-[#1e1e2e] transition-colors"
-              >
-                {/* Check */}
-                <td className="px-3 py-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={t.check_feito}
-                    onChange={(e) => onCheckChange(t.id, e.target.checked)}
-                    className="w-3.5 h-3.5 accent-green-500 cursor-pointer"
-                    title="Marcar como concluído"
-                  />
-                </td>
-                {/* Etapa */}
-                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                  {t.etapa ?? "—"}
-                </td>
-                {/* O que */}
-                <td className="px-3 py-2 text-gray-200">
-                  {t.o_que}
-                </td>
-                {/* Tipo */}
-                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                  {t.tipo ?? "—"}
-                </td>
-                {/* Quem */}
-                <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
-                  {t.quem ?? "—"}
-                </td>
-                {/* Prazo */}
-                <td
-                  className={`px-3 py-2 whitespace-nowrap font-medium ${
-                    vencida ? "text-red-400" : "text-gray-400"
-                  }`}
-                >
-                  {formatDate(t.prazo)}
-                  {vencida && <span className="ml-1 text-red-500">!</span>}
-                </td>
-                {/* Status */}
-                <td className="px-3 py-2">
-                  <TarefaStatusBadge status={t.status} />
-                </td>
-              </tr>
+              <React.Fragment key={t.id}>
+                <tr className={rowClass}>
+                  {/* Check */}
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={t.check_feito}
+                      onChange={(e) => { if (!isEdit) onCheckChange(t, e.target.checked); }}
+                      className="w-3.5 h-3.5 accent-green-500 cursor-pointer"
+                      title="Marcar como concluído"
+                    />
+                  </td>
+                  {/* Etapa */}
+                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                    {t.etapa ?? "—"}
+                  </td>
+                  {/* O que */}
+                  <td className="px-3 py-2 text-gray-200">
+                    {t.o_que}
+                  </td>
+                  {/* Tipo */}
+                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                    {t.tipo ?? "—"}
+                  </td>
+                  {/* Quem */}
+                  <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
+                    {t.quem ?? "—"}
+                  </td>
+                  {/* Prazo */}
+                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${vencida ? "text-red-400" : "text-gray-400"}`}>
+                    {formatDate(t.prazo)}
+                    {vencida && <span className="ml-1 text-red-500">!</span>}
+                  </td>
+                  {/* Status */}
+                  <td className="px-3 py-2">
+                    <TarefaStatusBadge status={t.status} />
+                  </td>
+                  {/* Ações */}
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    {isEdit ? (
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-gray-500 hover:text-gray-300 px-1"
+                        title="Cancelar"
+                      >✕</button>
+                    ) : (
+                      <button
+                        onClick={() => startEdit(t)}
+                        className="text-gray-600 hover:text-gray-300 px-1 transition"
+                        title="Editar tarefa"
+                      >✎</button>
+                    )}
+                  </td>
+                </tr>
+
+                {/* Linha de edição inline */}
+                {isEdit && (
+                  <tr className="bg-[#131325] border-t border-[#333]">
+                    <td />
+                    <td className="px-2 py-2">
+                      <input
+                        className={inputCls}
+                        placeholder="Etapa"
+                        value={editForm.etapa}
+                        onChange={(e) => setEditForm((f) => ({ ...f, etapa: e.target.value }))}
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-xs italic">{t.o_que}</td>
+                    <td />
+                    <td className="px-2 py-2">
+                      <select
+                        className={selectCls}
+                        value={editForm.quem}
+                        onChange={(e) => setEditForm((f) => ({ ...f, quem: e.target.value }))}
+                      >
+                        <option value="">—</option>
+                        {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => (
+                          <option key={r}>{r}</option>
+                        ))}
+                        <option>Cliente</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="date"
+                        className={inputCls}
+                        value={editForm.prazo}
+                        onChange={(e) => setEditForm((f) => ({ ...f, prazo: e.target.value }))}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        className={selectCls}
+                        value={editForm.status}
+                        onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                      >
+                        <option>Não iniciado</option>
+                        <option>Em andamento</option>
+                        <option>Finalizado</option>
+                        <option>Atrasado</option>
+                        <option>Cancelado</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        onClick={() => saveEdit(t)}
+                        disabled={saving}
+                        className="text-xs px-3 py-1 rounded bg-brand-700 hover:bg-brand-600 text-white disabled:opacity-40 transition whitespace-nowrap"
+                      >
+                        {saving ? "…" : "Salvar"}
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
         </tbody>
@@ -415,35 +520,105 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Check toggle ──
-  async function handleCheckChange(tarefaId: string, checked: boolean) {
+  // ── Check toggle — atualiza Supabase + Sheets ──
+  async function handleCheckChange(tarefa: Tarefa, checked: boolean) {
+    const hoje       = new Date().toISOString().split("T")[0];
+    const newStatus  = checked
+      ? "Finalizado"
+      : tarefa.prazo && tarefa.prazo < hoje ? "Atrasado" : "Não iniciado";
+
+    // Optimistic update (check + status)
+    setClientes((prev) =>
+      prev.map((c) => ({
+        ...c,
+        tarefas: c.tarefas.map((t) =>
+          t.id === tarefa.id ? { ...t, check_feito: checked, status: newStatus } : t
+        ),
+      }))
+    );
+
+    try {
+      const res  = await fetch("/api/sheets/update-tarefa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id:             tarefa.id,
+          id_cliente:     tarefa.cliente_id,
+          o_que_original: tarefa.o_que,
+          prazo_original: tarefa.prazo,
+          etapa_original: tarefa.etapa,
+          check_feito:    checked,
+          status:         newStatus,
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar");
+    } catch (err) {
+      // Revert
+      setClientes((prev) =>
+        prev.map((c) => ({
+          ...c,
+          tarefas: c.tarefas.map((t) =>
+            t.id === tarefa.id ? { ...t, check_feito: !checked, status: tarefa.status } : t
+          ),
+        }))
+      );
+      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
+    }
+  }
+
+  // ── Atualizar campos de tarefa — atualiza Supabase + Sheets ──
+  async function handleUpdateTarefa(tarefa: Tarefa, updates: EditForm): Promise<void> {
     // Optimistic update
     setClientes((prev) =>
       prev.map((c) => ({
         ...c,
         tarefas: c.tarefas.map((t) =>
-          t.id === tarefaId ? { ...t, check_feito: checked } : t
+          t.id === tarefa.id
+            ? {
+                ...t,
+                etapa:       updates.etapa       || null,
+                quem:        updates.quem        || null,
+                prazo:       updates.prazo        || null,
+                status:      updates.status,
+                observacoes: updates.observacoes  || null,
+              }
+            : t
         ),
       }))
     );
 
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("mm_tarefas")
-      .update({ check_feito: checked, atualizado_em: new Date().toISOString() })
-      .eq("id", tarefaId);
-
-    if (error) {
-      // Revert on failure
+    try {
+      const res  = await fetch("/api/sheets/update-tarefa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id:             tarefa.id,
+          id_cliente:     tarefa.cliente_id,
+          o_que_original: tarefa.o_que,
+          prazo_original: tarefa.prazo,
+          etapa_original: tarefa.etapa,
+          etapa:          updates.etapa,
+          quem:           updates.quem,
+          prazo:          updates.prazo,
+          status:         updates.status,
+          observacoes:    updates.observacoes,
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar");
+      setToast({ type: "success", msg: "Tarefa atualizada na planilha" });
+    } catch (err) {
+      // Revert
       setClientes((prev) =>
         prev.map((c) => ({
           ...c,
           tarefas: c.tarefas.map((t) =>
-            t.id === tarefaId ? { ...t, check_feito: !checked } : t
+            t.id === tarefa.id ? tarefa : t
           ),
         }))
       );
-      setToast({ type: "error", msg: `Erro ao salvar: ${error.message}` });
+      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao atualizar" });
     }
   }
 
@@ -776,6 +951,7 @@ export default function PipelinePage() {
                               tarefas={c.tarefas}
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
+                              onUpdate={handleUpdateTarefa}
                             />
 
                             {/* ── Formulário de nova tarefa ── */}

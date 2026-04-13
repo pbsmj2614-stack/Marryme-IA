@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3000\")",
+      "Bash(taskkill /PID 13632 /F)",
+      "Bash(cmd /c \"taskkill /PID 13632 /F\")",
+      "Bash(cmd /c \"netstat -ano | findstr :3000\")",
+      "Bash(cmd /c \"netstat -ano | findstr LISTENING | findstr :3000\")",
+      "Bash(cmd /c \"netstat -ano 2>nul | findstr :3000 | findstr LISTENING\")",
+      "Bash(cmd /c \"for /f \\\\\"tokens=5\\\\\" %a in \\('netstat -aon ^| findstr :3001 ^| findstr LISTENING'\\) do taskkill /PID %a /F\")",
+      "Bash(cmd /c \"netstat -ano 2>nul | findstr :300\")",
+      "Bash(cmd /c \"start /min cmd /k \\\\\"cd /d \\\\\"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\\" && npm run dev\\\\\"\")",
+      "Bash(cmd /c \"start /min cmd /k cd /d C:\\\\Users\\\\bolau\\\\OneDrive\\\\^\"^Área de Trabalho^\"\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend ^&^& npm run dev\")",
+      "Bash(powershell -Command \"Start-Process powershell -ArgumentList '-NoExit', '-Command', 'Set-Location ''C:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend''; npm run dev'\" -WindowStyle Minimized\" 2>&1)",
+      "Bash(node_modules/.bin/next dev:*)",
+      "Bash(echo \"PID=$!\")",
+      "Read(//tmp/**)",
+      "Bash(cmd /c \"netstat -ano 2>nul | findstr :3000\")",
+      "Bash(grep -v \"^C:\\\\\\\\\")",
+      "Bash(cmd /c \"netstat -ano 2>nul\")",
+      "Bash(netstat -tlnp)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s http://localhost:3001/dashboard)",
+      "Bash(cmd /c \"netstat -ano\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3000,3001 -State Listen | Select-Object LocalPort, OwningProcess | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Stop-Process -Id 13632, 3740 -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Get-NetTCPConnection -LocalPort 3000,3001 -State Listen -ErrorAction SilentlyContinue | Select-Object LocalPort, OwningProcess\")",
+      "Bash(powershell -Command \"Stop-Process -Id 13632 -Force; Stop-Process -Id 3740 -Force\")",
+      "Bash(curl -s http://localhost:3000/dashboard)",
+      "Bash(nohup node_modules/.bin/next dev --port 3000)",
+      "Bash(echo \"Servidor iniciando com PID $!\")",
+      "Bash(xargs grep:*)",
+      "Bash(find \"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"sheets/add-tarefa\" {} \\\\;)",
+      "Bash(find \"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"quem\\\\|responsavel\\\\|delegat\\\\|assign\" {} \\\\;)"
+    ]
+  }
+}

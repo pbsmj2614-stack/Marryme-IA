@@ -16,7 +16,7 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
 
 const PLANOS = ["Essencial", "Growth", "Enterprise"];
 const FASES  = ["Onboarding", "Planejamento de Metas", "Voo de Cruzeiro", "Renovação", "Pausado", "Churn"];
-const RESPS  = ["Paulo", "Murilo", "Kauê"];
+const RESPS  = ["Paulo", "Murilo", "Kauê", "Giovanni"];
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 

@@ -79,15 +79,34 @@ function calcHealthScore(kpis: KPIsCampanha): number {
 
 // ─── Meta API helpers ─────────────────────────────────────────────────────────
 
+/** Classifica erros da Meta API em mensagens amigáveis */
+function friendlyMetaError(rawMessage: string): string {
+  const msg = rawMessage.toLowerCase();
+  if (msg.includes("session has expired") || msg.includes("access token") || msg.includes("invalid oauth")) {
+    return "TOKEN_EXPIRADO";
+  }
+  if (msg.includes("(#200)") || msg.includes("permission")) {
+    return "TOKEN_SEM_PERMISSAO";
+  }
+  if (msg.includes("(#100)") || msg.includes("does not exist") || msg.includes("no such ad account")) {
+    return "CONTA_NAO_ENCONTRADA";
+  }
+  if (msg.includes("rate limit") || msg.includes("too many calls")) {
+    return "RATE_LIMIT";
+  }
+  return rawMessage;
+}
+
 async function metaGet(path: string, params: Record<string, string>): Promise<unknown> {
   const url = new URL(`${META_BASE}${path}`);
   url.searchParams.set("access_token", META_TOKEN);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString());
-  const json = await res.json() as { error?: { message: string }; data?: unknown };
+  const res  = await fetch(url.toString());
+  const json = await res.json() as { error?: { message: string; code?: number }; data?: unknown };
   if (!res.ok || json.error) {
-    throw new Error(`Meta API ${path}: ${json.error?.message ?? res.status}`);
+    const raw = json.error?.message ?? String(res.status);
+    throw new Error(friendlyMetaError(raw));
   }
   return json;
 }
@@ -320,8 +339,17 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[meta/sincronizar]", msg);
+    const raw = err instanceof Error ? err.message : String(err);
+    console.error("[meta/sincronizar]", raw);
+
+    // Traduz códigos internos em mensagens legíveis
+    const MENSAGENS: Record<string, string> = {
+      TOKEN_EXPIRADO:       "Token da Meta API expirado. Gere um novo token permanente em business.facebook.com → Configurações → Usuários do sistema e atualize META_ACCESS_TOKEN no .env.local",
+      TOKEN_SEM_PERMISSAO:  "Token sem permissão de leitura de anúncios (ads_read). Verifique as permissões do token no Meta Business.",
+      CONTA_NAO_ENCONTRADA: "Conta de anúncios não encontrada. Verifique o ID configurado no prestador.",
+      RATE_LIMIT:           "Limite de requisições da Meta API atingido. Aguarde alguns minutos e tente novamente.",
+    };
+    const msg = MENSAGENS[raw] ?? raw;
 
     // Marca como erro no prestador
     try {

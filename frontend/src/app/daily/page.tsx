@@ -47,7 +47,7 @@ interface ClienteComMetricas extends Cliente {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê"];
+const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê", "Giovanni"];
 
 const TODAY = new Date().toISOString().split("T")[0];
 const WEEK_END = (() => {
@@ -336,19 +336,43 @@ export default function DailyPage() {
     init();
   }, [router, loadData]);
 
-  // ── Check toggle (optimistic) ──
+  // ── Check toggle — atualiza Supabase + Sheets ──
   const handleCheckChange = useCallback(async (id: string, val: boolean) => {
-    setTarefas((prev) => prev.map((t) => t.id === id ? { ...t, check_feito: val } : t));
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("mm_tarefas")
-      .update({ check_feito: val, atualizado_em: new Date().toISOString() })
-      .eq("id", id);
-    if (error) {
-      setTarefas((prev) => prev.map((t) => t.id === id ? { ...t, check_feito: !val } : t));
-      setToast({ type: "error", msg: `Erro: ${error.message}` });
+    const tarefa    = tarefas.find((t) => t.id === id);
+    if (!tarefa) return;
+    const newStatus = val
+      ? "Finalizado"
+      : tarefa.prazo && tarefa.prazo < TODAY ? "Atrasado" : "Não iniciado";
+
+    // Optimistic
+    setTarefas((prev) =>
+      prev.map((t) => t.id === id ? { ...t, check_feito: val, status: newStatus } : t)
+    );
+
+    try {
+      const res  = await fetch("/api/sheets/update-tarefa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          id_cliente:     tarefa.cliente_id,
+          o_que_original: tarefa.o_que,
+          prazo_original: tarefa.prazo,
+          etapa_original: tarefa.etapa,
+          check_feito:    val,
+          status:         newStatus,
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro");
+    } catch (err) {
+      // Revert
+      setTarefas((prev) =>
+        prev.map((t) => t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t)
+      );
+      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
     }
-  }, []);
+  }, [tarefas]);
 
   // ── Sync ──
   async function handleSync() {
