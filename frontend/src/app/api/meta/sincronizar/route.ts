@@ -434,7 +434,7 @@ export async function POST(req: NextRequest) {
     const MENSAGENS: Record<string, string> = {
       TOKEN_EXPIRADO:       "Token da Meta API expirado. Gere um novo token permanente em business.facebook.com → Configurações → Usuários do sistema e atualize META_ACCESS_TOKEN no .env.local",
       TOKEN_SEM_PERMISSAO:  "Token sem permissão de leitura de anúncios (ads_read). Verifique as permissões do token no Meta Business.",
-      CONTA_NAO_ENCONTRADA: "Conta de anúncios não encontrada. Verifique o ID configurado no prestador.",
+      CONTA_NAO_ENCONTRADA: "Conta não encontrada ou sem acesso. O token não tem permissão para esta conta de anúncios — verifique se o usuário que gerou o token é administrador desta conta no Meta Business Manager.",
       RATE_LIMIT:           "Limite de requisições da Meta API atingido. Aguarde alguns minutos e tente novamente.",
     };
     const msg = MENSAGENS[raw] ?? raw;

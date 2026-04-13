@@ -1,0 +1,121 @@
+/**
+ * GET /api/meta/verificar?account_id=XXXXXXXXXX
+ *
+ * Diagnóstico completo do token e acesso à conta de anúncios.
+ * Retorna informações sobre o token ativo e se ele tem acesso ao account_id.
+ */
+
+export const runtime = "nodejs";
+
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const META_VERSION   = process.env.META_API_VERSION ?? "v18.0";
+const META_BASE      = `https://graph.facebook.com/${META_VERSION}`;
+const META_APP_ID    = process.env.META_APP_ID    ?? "";
+const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
+
+function supabaseAdmin() {
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  return createClient(url, key);
+}
+
+async function getTokenFromDB(): Promise<string | null> {
+  try {
+    const { data } = await supabaseAdmin()
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "meta_access_token")
+      .maybeSingle();
+    return data?.valor ?? null;
+  } catch { return null; }
+}
+
+export async function GET(req: NextRequest) {
+  const accountId = req.nextUrl.searchParams.get("account_id")?.replace(/^act_/i, "") ?? "";
+
+  const tokenDB  = await getTokenFromDB();
+  const tokenEnv = process.env.META_ACCESS_TOKEN ?? "";
+  const token    = tokenDB || tokenEnv;
+
+  if (!token) {
+    return NextResponse.json({ ok: false, erro: "Nenhum token configurado (DB nem env)." });
+  }
+
+  const resultado: Record<string, unknown> = {
+    token_fonte:  tokenDB ? "supabase_db" : "env_var",
+    token_inicio: token.slice(0, 12) + "...",
+  };
+
+  // 1. Verifica identidade do token (/me)
+  try {
+    const res  = await fetch(`${META_BASE}/me?fields=id,name&access_token=${token}`);
+    const json = await res.json() as { id?: string; name?: string; error?: { message: string } };
+    if (json.error) {
+      resultado.token_valido = false;
+      resultado.token_erro   = json.error.message;
+      return NextResponse.json({ ok: false, ...resultado });
+    }
+    resultado.token_valido    = true;
+    resultado.token_usuario   = json.name ?? json.id;
+    resultado.token_usuario_id = json.id;
+  } catch (e) {
+    resultado.token_valido = false;
+    resultado.token_erro   = String(e);
+    return NextResponse.json({ ok: false, ...resultado });
+  }
+
+  // 2. Debug token: validade e permissões
+  if (META_APP_ID && META_APP_SECRET) {
+    try {
+      const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
+      const res  = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(appToken)}`);
+      const json = await res.json() as { data?: { expires_at?: number; scopes?: string[]; is_valid?: boolean } };
+      const d    = json.data ?? {};
+      resultado.token_expira_em = d.expires_at
+        ? (d.expires_at === 0 ? "nunca" : new Date(d.expires_at * 1000).toLocaleString("pt-BR"))
+        : "desconhecido";
+      resultado.token_permissoes = d.scopes ?? [];
+      resultado.token_tem_ads_read = (d.scopes ?? []).includes("ads_read");
+    } catch { resultado.token_debug_erro = "Não foi possível verificar detalhes do token"; }
+  }
+
+  // 3. Lista contas de anúncios acessíveis
+  try {
+    const res  = await fetch(`${META_BASE}/me/adaccounts?fields=id,name,account_status&access_token=${token}`);
+    const json = await res.json() as { data?: Array<{ id: string; name: string; account_status: number }>; error?: { message: string } };
+    if (json.error) {
+      resultado.contas_erro = json.error.message;
+    } else {
+      resultado.contas_acessiveis = (json.data ?? []).map((c) => ({
+        id:     c.id.replace("act_", ""),
+        nome:   c.name,
+        status: c.account_status === 1 ? "Ativa" : `Inativa (${c.account_status})`,
+      }));
+    }
+  } catch (e) { resultado.contas_erro = String(e); }
+
+  // 4. Verifica conta específica (se account_id foi informado)
+  if (accountId) {
+    resultado.account_id_testado = accountId;
+    try {
+      const res  = await fetch(`${META_BASE}/act_${accountId}?fields=id,name,account_status&access_token=${token}`);
+      const json = await res.json() as { id?: string; name?: string; account_status?: number; error?: { message: string } };
+      if (json.error) {
+        resultado.conta_acessivel  = false;
+        resultado.conta_erro       = json.error.message;
+        resultado.conta_sugestao   = "O token não tem acesso a esta conta. Verifique se o usuário que gerou o token é administrador desta conta de anúncios no Meta Business Manager.";
+      } else {
+        resultado.conta_acessivel  = true;
+        resultado.conta_nome       = json.name;
+        resultado.conta_status     = json.account_status === 1 ? "Ativa" : `Inativa (${json.account_status})`;
+      }
+    } catch (e) { resultado.conta_erro = String(e); }
+  }
+
+  const ok = resultado.token_valido === true &&
+    (!accountId || resultado.conta_acessivel === true);
+
+  return NextResponse.json({ ok, ...resultado });
+}

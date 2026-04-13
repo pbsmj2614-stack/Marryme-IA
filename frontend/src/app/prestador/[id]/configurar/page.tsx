@@ -5,6 +5,21 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
+type DiagResult = {
+  ok: boolean;
+  token_valido?: boolean;
+  token_usuario?: string;
+  token_expira_em?: string;
+  token_tem_ads_read?: boolean;
+  token_erro?: string;
+  conta_acessivel?: boolean;
+  conta_nome?: string;
+  conta_status?: string;
+  conta_erro?: string;
+  conta_sugestao?: string;
+  contas_acessiveis?: Array<{ id: string; nome: string; status: string }>;
+};
+
 export default function ConfigurarMetaPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
@@ -16,6 +31,8 @@ export default function ConfigurarMetaPage() {
   const [saving,      setSaving]      = useState(false);
   const [erro,        setErro]        = useState<string | null>(null);
   const [sucesso,     setSucesso]     = useState(false);
+  const [verificando, setVerificando] = useState(false);
+  const [diag,        setDiag]        = useState<DiagResult | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -32,6 +49,21 @@ export default function ConfigurarMetaPage() {
     }
     load();
   }, [id]);
+
+  async function handleVerificar() {
+    const cleaned = accountId.trim().replace(/^act_/i, "");
+    setVerificando(true);
+    setDiag(null);
+    try {
+      const res  = await fetch(`/api/meta/verificar?account_id=${cleaned}`);
+      const data = await res.json() as DiagResult;
+      setDiag(data);
+    } catch {
+      setDiag({ ok: false, token_erro: "Erro de rede ao verificar" });
+    } finally {
+      setVerificando(false);
+    }
+  }
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault();
@@ -136,6 +168,58 @@ export default function ConfigurarMetaPage() {
                 Apenas dígitos — sem o prefixo "act_"
               </p>
             </div>
+
+            {/* Botão verificar */}
+            <button
+              type="button"
+              onClick={handleVerificar}
+              disabled={verificando || !accountId.trim()}
+              className="w-full py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition disabled:opacity-50"
+            >
+              {verificando ? "Verificando..." : "🔍 Verificar conexão com Meta"}
+            </button>
+
+            {/* Resultado diagnóstico */}
+            {diag && (
+              <div className={`rounded-xl border p-4 text-sm space-y-2 ${diag.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+                <p className={`font-semibold ${diag.ok ? "text-green-800" : "text-red-800"}`}>
+                  {diag.ok ? "✓ Tudo certo — pronto para sincronizar" : "✕ Problema encontrado"}
+                </p>
+                {diag.token_usuario && (
+                  <p className="text-gray-700">Token pertence a: <strong>{diag.token_usuario}</strong></p>
+                )}
+                {diag.token_expira_em && (
+                  <p className="text-gray-700">Expira em: <strong>{diag.token_expira_em}</strong></p>
+                )}
+                {diag.token_tem_ads_read === false && (
+                  <p className="text-red-700">⚠ Token sem permissão <code>ads_read</code> — gere um novo token com essa permissão</p>
+                )}
+                {diag.token_erro && (
+                  <p className="text-red-700">Erro no token: {diag.token_erro}</p>
+                )}
+                {diag.conta_acessivel === true && (
+                  <p className="text-green-700">✓ Conta <strong>{diag.conta_nome}</strong> ({diag.conta_status}) acessível</p>
+                )}
+                {diag.conta_acessivel === false && (
+                  <div className="space-y-1">
+                    <p className="text-red-700">✕ Conta não acessível: {diag.conta_erro}</p>
+                    {diag.conta_sugestao && <p className="text-orange-700">{diag.conta_sugestao}</p>}
+                    {diag.contas_acessiveis && diag.contas_acessiveis.length > 0 && (
+                      <div>
+                        <p className="text-gray-700 font-medium mt-2">Contas que o token SÍ acessa:</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {diag.contas_acessiveis.map((c) => (
+                            <li key={c.id} className="text-gray-600 font-mono text-xs">
+                              {c.id} — {c.nome} ({c.status})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {erro && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
