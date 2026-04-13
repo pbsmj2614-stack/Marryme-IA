@@ -27,14 +27,18 @@ interface RelatorioRow {
 }
 
 interface PrestadorRow {
-  id: string;
-  nome_artistico: string;
-  categoria: string;
+  // chave única = id_cliente do mm_clientes (ex: MM001)
+  id_cliente: string;
+  nome: string;                      // nome_empresa (mm_clientes)
+  plano: string | null;
+  fase_projeto: string | null;
+  status_cliente: string;            // Ativo / Pausado / Encerrado
+  // campos do prestador (nullable — nem todo mm_cliente tem prestador)
+  id: string | null;                 // prestador uuid
+  categoria: string | null;
   meta_ad_account_id: string | null;
   meta_sync_status: string | null;
   meta_ultima_sync: string | null;
-  plano: string | null;
-  fase_projeto: string | null;
   relatorio: RelatorioRow | null;
 }
 
@@ -234,6 +238,20 @@ function ExpandedRow({
   const kpis  = rel?.dados_json?.kpis ?? null;
   const camps = rel?.dados_json?.campanhas ?? [];
 
+  if (!prestador.id) {
+    return (
+      <div className="flex items-center gap-3 flex-wrap">
+        <p className="text-sm text-gray-500">Cliente não cadastrado no sistema de roteiros.</p>
+        <Link
+          href="/novo"
+          className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition"
+        >
+          + Cadastrar prestador
+        </Link>
+      </div>
+    );
+  }
+
   if (!prestador.meta_ad_account_id) {
     return (
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -253,7 +271,7 @@ function ExpandedRow({
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-gray-500">Nenhum relatório gerado ainda.</p>
         <button
-          onClick={() => onSincronizar(prestador.id)}
+          onClick={() => onSincronizar(prestador.id!)}
           disabled={sincronizando}
           className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition disabled:opacity-50 flex items-center gap-1.5"
         >
@@ -283,7 +301,7 @@ function ExpandedRow({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onSincronizar(prestador.id)}
+            onClick={() => onSincronizar(prestador.id!)}
             disabled={sincronizando}
             className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition disabled:opacity-50 flex items-center gap-1.5"
           >
@@ -393,33 +411,70 @@ export default function DashboardBIPage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
 
-    // Busca prestadores com última entrevista (para plano/fase) e último relatório
+    // ── 1. mm_clientes (source of truth para contagem) ──────────────────────────
+    const { data: clientesData } = await supabase
+      .from("mm_clientes")
+      .select("id_cliente, nome_empresa, plano, fase_projeto, status")
+      .order("id_cliente");
+
+    // ── 2. prestadores + entrevistas (mm_id) + relatórios ──────────────────────
     const { data: prestData } = await supabase
       .from("prestadores")
-      .select("id, nome_artistico, categoria, meta_ad_account_id, meta_sync_status, meta_ultima_sync, entrevistas(dados_json, criado_em), relatorios_campanha(id, health_score, dados_json, periodo_inicio, periodo_fim, gerado_em)")
-      .order("nome_artistico");
+      .select("id, nome_artistico, categoria, meta_ad_account_id, meta_sync_status, meta_ultima_sync, entrevistas(dados_json, criado_em), relatorios_campanha(id, health_score, dados_json, periodo_inicio, periodo_fim, gerado_em)");
 
-    const rows: PrestadorRow[] = (prestData ?? []).map((p) => {
-      // Última entrevista (para plano/fase)
-      const entrevistas = (p.entrevistas ?? []) as Array<{ dados_json: { plano?: string; fase_projeto?: string } | null; criado_em: string }>;
-      const ultimaEnt   = entrevistas.sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())[0];
-      const plano       = ultimaEnt?.dados_json?.plano ?? null;
-      const fase        = ultimaEnt?.dados_json?.fase_projeto ?? null;
+    // ── 3. Montar mapa mm_id → prestador ────────────────────────────────────────
+    type PrestRaw = {
+      id: string; nome_artistico: string; categoria: string;
+      meta_ad_account_id: string | null; meta_sync_status: string | null; meta_ultima_sync: string | null;
+      entrevistas: Array<{ dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null; criado_em: string }>;
+      relatorios_campanha: RelatorioRow[];
+    };
+    const mmIdMap = new Map<string, PrestRaw>();
+    for (const p of (prestData ?? []) as PrestRaw[]) {
+      const ents = (p.entrevistas ?? []).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+      const mmId = ents[0]?.dados_json?.mm_id;
+      if (mmId) mmIdMap.set(mmId.toUpperCase().trim(), p);
+    }
 
-      // Último relatório
-      const relatorios = (p.relatorios_campanha ?? []) as RelatorioRow[];
+    // ── 4. Desduplicar mm_clientes por nome_empresa ─────────────────────────────
+    type ClienteRaw = { id_cliente: string; nome_empresa: string; plano: string | null; fase_projeto: string | null; status: string | null };
+    const seenNomes = new Map<string, ClienteRaw>();
+    for (const c of (clientesData ?? [])) {
+      const key = c.nome_empresa.toLowerCase().trim();
+      const existing = seenNomes.get(key);
+      if (!existing) {
+        seenNomes.set(key, c);
+      } else {
+        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+        if (newNum < existNum) seenNomes.set(key, c);
+      }
+    }
+    const clientesDedup = Array.from(seenNomes.values());
+
+    // ── 5. Construir rows unificados ────────────────────────────────────────────
+    const rows: PrestadorRow[] = clientesDedup.map((c) => {
+      const prest = mmIdMap.get(c.id_cliente.toUpperCase().trim()) ?? null;
+      const relatorios = (prest?.relatorios_campanha ?? []) as RelatorioRow[];
       const ultimoRel  = relatorios.sort((a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime())[0] ?? null;
 
+      // plano/fase: preferir mm_clientes, depois entrevista do prestador
+      const ents = (prest?.entrevistas ?? []).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+      const planoFinal = c.plano ?? ents[0]?.dados_json?.plano ?? null;
+      const faseFinal  = c.fase_projeto ?? ents[0]?.dados_json?.fase_projeto ?? null;
+
       return {
-        id: p.id,
-        nome_artistico: p.nome_artistico,
-        categoria: p.categoria,
-        meta_ad_account_id: p.meta_ad_account_id,
-        meta_sync_status: p.meta_sync_status,
-        meta_ultima_sync: p.meta_ultima_sync,
-        plano,
-        fase_projeto: fase,
-        relatorio: ultimoRel,
+        id_cliente:         c.id_cliente,
+        nome:               c.nome_empresa,
+        plano:              planoFinal,
+        fase_projeto:       faseFinal,
+        status_cliente:     c.status ?? "Ativo",
+        id:                 prest?.id ?? null,
+        categoria:          prest?.categoria ?? null,
+        meta_ad_account_id: prest?.meta_ad_account_id ?? null,
+        meta_sync_status:   prest?.meta_sync_status ?? null,
+        meta_ultima_sync:   prest?.meta_ultima_sync ?? null,
+        relatorio:          ultimoRel,
       };
     });
 
@@ -438,8 +493,9 @@ export default function DashboardBIPage() {
     init();
   }, [router, loadData]);
 
-  // ── Sincronizar individual ──
+  // ── Sincronizar individual (recebe prestador uuid, não id_cliente) ──
   async function handleSincronizar(prestadorId: string) {
+    if (!prestadorId) return;
     setSincronizandoId(prestadorId);
     try {
       const res  = await fetch("/api/meta/sincronizar", {
@@ -487,7 +543,7 @@ export default function DashboardBIPage() {
     if (sortKey) {
       lista = [...lista].sort((a, b) => {
         let av: number | string = 0, bv: number | string = 0;
-        if (sortKey === "nome")         { av = a.nome_artistico; bv = b.nome_artistico; }
+        if (sortKey === "nome")         { av = a.nome; bv = b.nome; }
         else if (sortKey === "plano")   { av = a.plano ?? ""; bv = b.plano ?? ""; }
         else if (sortKey === "health_score") { av = a.relatorio?.health_score ?? -1; bv = b.relatorio?.health_score ?? -1; }
         else if (sortKey === "ctr")     { av = a.relatorio?.dados_json?.kpis?.link_ctr ?? -1; bv = b.relatorio?.dados_json?.kpis?.link_ctr ?? -1; }
@@ -512,7 +568,7 @@ export default function DashboardBIPage() {
       .filter((p) => p.relatorio != null && p.relatorio.health_score != null)
       .sort((a, b) => (a.relatorio?.health_score ?? 0) - (b.relatorio?.health_score ?? 0))
       .map((p) => ({
-        nome:  p.nome_artistico.length > 18 ? p.nome_artistico.slice(0, 18) + "…" : p.nome_artistico,
+        nome:  p.nome.length > 18 ? p.nome.slice(0, 18) + "…" : p.nome,
         score: p.relatorio?.health_score ?? 0,
         color: scoreColor(p.relatorio?.health_score ?? null),
       })),
@@ -632,17 +688,20 @@ export default function DashboardBIPage() {
                     const score = rel?.health_score ?? null;
 
                     return (
-                      <React.Fragment key={p.id}>
+                      <React.Fragment key={p.id_cliente}>
                         <tr
-                          onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                          onClick={() => setExpandedId(expandedId === p.id_cliente ? null : p.id_cliente)}
                           className={`cursor-pointer border-t border-[#2a2a2a] transition-colors ${
                             i % 2 === 0 ? "bg-[#1e1e1e]" : "bg-[#222]"
                           } hover:bg-[#2c2c2c]`}
                         >
                           {/* Cliente */}
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-white whitespace-nowrap">{p.nome_artistico}</p>
-                            <p className="text-xs text-gray-500">{CATEGORIA_LABEL[p.categoria] ?? p.categoria}</p>
+                            <p className="font-semibold text-white whitespace-nowrap">{p.nome}</p>
+                            <p className="text-xs text-gray-500">
+                              {p.id_cliente}
+                              {p.categoria ? ` · ${CATEGORIA_LABEL[p.categoria] ?? p.categoria}` : ""}
+                            </p>
                           </td>
                           {/* Plano */}
                           <td className="px-4 py-3">
@@ -696,17 +755,17 @@ export default function DashboardBIPage() {
                           </td>
                           {/* Expand icon */}
                           <td className="px-4 py-3 text-gray-500 text-center">
-                            {expandedId === p.id ? "▲" : "▼"}
+                            {expandedId === p.id_cliente ? "▲" : "▼"}
                           </td>
                         </tr>
 
                         {/* Expanded */}
-                        {expandedId === p.id && (
+                        {expandedId === p.id_cliente && (
                           <tr>
                             <td colSpan={9} className="px-6 py-5 bg-[#161620] border-t border-[#1a1a1a]">
                               <div className="flex items-center justify-between mb-4">
                                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
-                                  Campanha Meta Ads · {p.nome_artistico}
+                                  Campanha Meta Ads · {p.nome}
                                 </p>
                                 {p.fase_projeto && (
                                   <span className="text-xs text-blue-400 bg-blue-950 px-2 py-0.5 rounded-full">
