@@ -128,8 +128,8 @@ function CampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
               <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">{fmt(c.reach)}</td>
               {/* CTR link */}
               <td className="py-2.5 pr-3 whitespace-nowrap">
-                <span className={`font-medium ${(c.link_ctr ?? c.ctr) >= 1 ? "text-green-600" : (c.link_ctr ?? c.ctr) >= 0.5 ? "text-yellow-600" : "text-red-500"}`}>
-                  {fmtPct(c.link_ctr ?? c.ctr)}
+                <span className={`font-medium ${((c.link_ctr ?? 0) || (c.ctr ?? 0)) >= 1 ? "text-green-600" : ((c.link_ctr ?? 0) || (c.ctr ?? 0)) >= 0.5 ? "text-yellow-600" : "text-red-500"}`}>
+                  {fmtPct((c.link_ctr ?? 0) || (c.ctr ?? 0))}
                 </span>
               </td>
               {/* CPC */}
@@ -184,7 +184,7 @@ function GastoChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
     .map((c) => ({
       name: c.campaign_name.length > 18 ? c.campaign_name.slice(0, 18) + "…" : c.campaign_name,
       gasto: parseFloat(c.spend.toFixed(2)),
-      ctr: parseFloat(((c.link_ctr ?? c.ctr) ?? 0).toFixed(2)),
+      ctr: parseFloat(((c.link_ctr ?? 0) || (c.ctr ?? 0)).toFixed(2)),
     }));
 
   return (
@@ -409,8 +409,8 @@ export default function CampanhaTab({
               <KpiCard label="Alcance"      value={fmt(kpis.reach)} />
               <KpiCard label="Frequência"   value={fmt(kpis.frequency, 2)} sub="impressões / pessoa" highlight={freqHL(kpis.frequency)} />
               <KpiCard label="CPM"          value={fmtBRL(kpis.cpm)} sub="custo por mil impressões" highlight={cpmHL(kpis.cpm)} />
-              <KpiCard label="CTR do link"  value={fmtPct(kpis.link_ctr || kpis.ctr)} sub="cliques no link / impressões" highlight={ctrHL(kpis.link_ctr || kpis.ctr)} />
-              <KpiCard label="Cliques link" value={fmt(kpis.link_clicks || kpis.clicks)} />
+              <KpiCard label="CTR do link"  value={fmtPct((kpis.link_ctr ?? 0) || (kpis.ctr ?? 0))} sub="cliques no link / impressões" highlight={ctrHL((kpis.link_ctr ?? 0) || (kpis.ctr ?? 0))} />
+              <KpiCard label="Cliques link" value={fmt((kpis.link_clicks ?? 0) || (kpis.clicks ?? 0))} />
               <KpiCard label="CPC"          value={kpis.cpc > 0 ? fmtBRL(kpis.cpc) : "—"} sub="custo por clique no link" />
               <KpiCard label="Gasto total"  value={fmtBRL(kpis.spend)} />
             </div>

@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (rErr) throw new Error(`Erro ao salvar relatório: ${rErr.message}`);
+    if (rErr || !relatorio) throw new Error(`Erro ao salvar relatório: ${rErr?.message ?? "sem dados retornados"}`);
 
     // ── 5. Atualizar prestador ─────────────────────────────────────────────────
     await supabase

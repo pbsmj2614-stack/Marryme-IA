@@ -442,12 +442,18 @@ export default function DashboardBIPage() {
   async function handleSincronizar(prestadorId: string) {
     setSincronizandoId(prestadorId);
     try {
-      await fetch("/api/meta/sincronizar", {
+      const res  = await fetch("/api/meta/sincronizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prestador_id: prestadorId }),
       });
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        console.error("[sincronizar]", data.error ?? res.status);
+      }
       await loadData();
+    } catch (e) {
+      console.error("[sincronizar]", e);
     } finally {
       setSincronizandoId(null);
     }
@@ -455,13 +461,13 @@ export default function DashboardBIPage() {
 
   // ── Métricas agregadas ──
   const metrics = useMemo(() => {
-    const comDados    = prestadores.filter((p) => p.relatorio?.health_score !== null && p.relatorio?.health_score !== undefined);
-    const semDados    = prestadores.filter((p) => !p.relatorio?.health_score);
-    const emRisco     = comDados.filter((p) => (p.relatorio!.health_score ?? 0) < 40);
-    const emAtencao   = comDados.filter((p) => { const s = p.relatorio!.health_score ?? 0; return s >= 40 && s < 70; });
-    const saudaveis   = comDados.filter((p) => (p.relatorio!.health_score ?? 0) >= 70);
+    const comDados    = prestadores.filter((p) => p.relatorio != null && p.relatorio.health_score != null);
+    const semDados    = prestadores.filter((p) => p.relatorio == null || p.relatorio.health_score == null);
+    const emRisco     = comDados.filter((p) => (p.relatorio?.health_score ?? 0) < 40);
+    const emAtencao   = comDados.filter((p) => { const s = p.relatorio?.health_score ?? 0; return s >= 40 && s < 70; });
+    const saudaveis   = comDados.filter((p) => (p.relatorio?.health_score ?? 0) >= 70);
     const avgScore    = comDados.length > 0
-      ? Math.round(comDados.reduce((s, p) => s + (p.relatorio!.health_score ?? 0), 0) / comDados.length)
+      ? Math.round(comDados.reduce((s, p) => s + (p.relatorio?.health_score ?? 0), 0) / comDados.length)
       : 0;
     const configurados = prestadores.filter((p) => p.meta_ad_account_id).length;
     return { avgScore, emRisco: emRisco.length, emAtencao: emAtencao.length, saudaveis: saudaveis.length, semDados: semDados.length, configurados, total: prestadores.length };
@@ -484,10 +490,10 @@ export default function DashboardBIPage() {
         if (sortKey === "nome")         { av = a.nome_artistico; bv = b.nome_artistico; }
         else if (sortKey === "plano")   { av = a.plano ?? ""; bv = b.plano ?? ""; }
         else if (sortKey === "health_score") { av = a.relatorio?.health_score ?? -1; bv = b.relatorio?.health_score ?? -1; }
-        else if (sortKey === "ctr")     { av = a.relatorio?.dados_json?.kpis.link_ctr ?? -1; bv = b.relatorio?.dados_json?.kpis.link_ctr ?? -1; }
-        else if (sortKey === "cpm")     { av = a.relatorio?.dados_json?.kpis.cpm ?? 999999; bv = b.relatorio?.dados_json?.kpis.cpm ?? 999999; }
-        else if (sortKey === "frequency") { av = a.relatorio?.dados_json?.kpis.frequency ?? 999999; bv = b.relatorio?.dados_json?.kpis.frequency ?? 999999; }
-        else if (sortKey === "spend")   { av = a.relatorio?.dados_json?.kpis.spend ?? -1; bv = b.relatorio?.dados_json?.kpis.spend ?? -1; }
+        else if (sortKey === "ctr")     { av = a.relatorio?.dados_json?.kpis?.link_ctr ?? -1; bv = b.relatorio?.dados_json?.kpis?.link_ctr ?? -1; }
+        else if (sortKey === "cpm")     { av = a.relatorio?.dados_json?.kpis?.cpm ?? 999999; bv = b.relatorio?.dados_json?.kpis?.cpm ?? 999999; }
+        else if (sortKey === "frequency") { av = a.relatorio?.dados_json?.kpis?.frequency ?? 999999; bv = b.relatorio?.dados_json?.kpis?.frequency ?? 999999; }
+        else if (sortKey === "spend")   { av = a.relatorio?.dados_json?.kpis?.spend ?? -1; bv = b.relatorio?.dados_json?.kpis?.spend ?? -1; }
 
         if (typeof av === "number" && typeof bv === "number")
           return sortDir === "asc" ? av - bv : bv - av;
@@ -503,12 +509,12 @@ export default function DashboardBIPage() {
   // ── Chart ──
   const chartData = useMemo(() =>
     prestadores
-      .filter((p) => p.relatorio?.health_score !== null)
-      .sort((a, b) => (a.relatorio!.health_score ?? 0) - (b.relatorio!.health_score ?? 0))
+      .filter((p) => p.relatorio != null && p.relatorio.health_score != null)
+      .sort((a, b) => (a.relatorio?.health_score ?? 0) - (b.relatorio?.health_score ?? 0))
       .map((p) => ({
         nome:  p.nome_artistico.length > 18 ? p.nome_artistico.slice(0, 18) + "…" : p.nome_artistico,
-        score: p.relatorio!.health_score ?? 0,
-        color: scoreColor(p.relatorio!.health_score),
+        score: p.relatorio?.health_score ?? 0,
+        color: scoreColor(p.relatorio?.health_score ?? null),
       })),
   [prestadores]);
 
