@@ -238,51 +238,81 @@ export default function NovoPage() {
 
       if (errEntrevista || !entrevista) throw new Error("Erro ao salvar entrevista: " + errEntrevista?.message);
 
-      // ── 3. Criar aba no Sheets + cadastrar no mm_clientes (best-effort) ──
-      setStatus("Criando aba na planilha...");
-      let abortarCadastro = false;
-      try {
-        const segmentoLabel = CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
-        const res = await fetch("/api/sheets/novo-cliente", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({
-            nome_empresa:   dados.nome_artistico.trim(),
-            segmento:       segmentoLabel,
-            cidade:         dados.cidade_base           || "",
-            whatsapp:       dados.whatsapp              || "",
-            email:          dados.email                 || "",
-            plano:          dados.plano                 || "Essencial",
-            fase_projeto:   dados.fase_projeto          || "Onboarding",
-            responsavel_mm: dados.responsavel_mm        || "",
-            observacoes:    dados.informacoes_adicionais || "",
-          }),
-        });
-        const sheetData = await res.json();
-        if (res.status === 409 || sheetData.duplicado) {
-          // Cliente já existe — desfaz o cadastro do prestador e bloqueia
-          abortarCadastro = true;
-          await supabase.from("entrevistas").delete().eq("id", entrevista.id);
-          await supabase.from("prestadores").delete().eq("id", prestador.id);
-          throw new Error(sheetData.error ?? "Cliente já cadastrado.");
-        }
-        if (sheetData.ok) {
-          // Salva mm_id na entrevista para vincular prestador ↔ planilha
-          if (sheetData.id) {
-            await supabase
-              .from("entrevistas")
-              .update({ dados_json: { ...dados, mm_id: sheetData.id } })
-              .eq("id", entrevista.id);
+      // ── 3. Verificar se cliente já existe na pipeline ──────────────────────
+      setStatus("Verificando pipeline...");
+      const nomeBusca = dados.nome_artistico.trim();
+
+      const { data: candidatos } = await supabase
+        .from("mm_clientes")
+        .select("id_cliente, nome_empresa")
+        .ilike("nome_empresa", nomeBusca);
+
+      // Pega o de menor ID MM caso haja duplicatas residuais
+      const clienteExistente = (candidatos ?? [])
+        .sort((a, b) => {
+          const na = parseInt(a.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+          const nb = parseInt(b.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+          return na - nb;
+        })[0] ?? null;
+
+      if (clienteExistente) {
+        // ── Já existe na pipeline — só vincula o mm_id, sem criar duplicata ──
+        await supabase
+          .from("entrevistas")
+          .update({ dados_json: { ...dados, mm_id: clienteExistente.id_cliente } })
+          .eq("id", entrevista.id);
+        setSheetsAviso(
+          `✓ Vinculado ao cliente existente: ${clienteExistente.nome_empresa} (${clienteExistente.id_cliente}). Nenhuma entrada duplicada criada.`
+        );
+      } else {
+        // ── Novo cliente — criar pipeline completa (Sheets + mm_clientes) ──
+        setStatus("Criando pipeline completa (planilha + tarefas)...");
+        let abortarCadastro = false;
+        try {
+          const segmentoLabel = CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
+          const res = await fetch("/api/sheets/novo-cliente", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+              nome_empresa:   nomeBusca,
+              segmento:       segmentoLabel,
+              cidade:         dados.cidade_base            || "",
+              whatsapp:       dados.whatsapp               || "",
+              email:          dados.email                  || "",
+              plano:          dados.plano                  || "Essencial",
+              fase_projeto:   dados.fase_projeto           || "Onboarding",
+              responsavel_mm: dados.responsavel_mm         || "",
+              observacoes:    dados.informacoes_adicionais || "",
+            }),
+          });
+          const sheetData = await res.json();
+
+          if (res.status === 409 || sheetData.duplicado) {
+            // Sheets achou duplicata que o Supabase não tinha — desfaz e aborta
+            abortarCadastro = true;
+            await supabase.from("entrevistas").delete().eq("id", entrevista.id);
+            await supabase.from("prestadores").delete().eq("id", prestador.id);
+            throw new Error(sheetData.error ?? "Cliente já cadastrado na planilha.");
           }
-          setSheetsAviso(`Planilha: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`);
-        } else {
-          // Não bloqueia — apenas registra no aviso
-          setSheetsAviso(`Aviso Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
+
+          if (sheetData.ok) {
+            // Salva mm_id na entrevista para vincular prestador ↔ pipeline
+            if (sheetData.id) {
+              await supabase
+                .from("entrevistas")
+                .update({ dados_json: { ...dados, mm_id: sheetData.id } })
+                .eq("id", entrevista.id);
+            }
+            setSheetsAviso(
+              `✓ Pipeline criada: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`
+            );
+          } else {
+            setSheetsAviso(`Aviso Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
+          }
+        } catch (sheetsErr) {
+          if (abortarCadastro) throw sheetsErr;
+          setSheetsAviso(`Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`);
         }
-      } catch (sheetsErr) {
-        if (abortarCadastro) throw sheetsErr; // duplicata — propaga para o catch externo
-        // Outros erros de Sheets não impedem o cadastro
-        setSheetsAviso(`Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`);
       }
 
       // ── 4a. Só cadastrar ──
@@ -328,7 +358,8 @@ export default function NovoPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Novo Prestador</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Cadastra o perfil, cria a aba na planilha e pode gerar os roteiros de IA em um clique.
+            Se o cliente já existe na pipeline, apenas cria o card de roteiro vinculado.
+            Se for novo, cria a pipeline completa (planilha + tarefas) e o card.
           </p>
         </div>
 
@@ -603,9 +634,9 @@ export default function NovoPage() {
 
           {/* ── Aviso de pré-requisito Sheets ── */}
           <p className="text-xs text-gray-400 text-center">
-            A criação da aba na planilha requer{" "}
+            Se o cliente já existe na pipeline, nenhuma entrada nova é criada na planilha.
+            Para novos clientes, é necessário{" "}
             <span className="font-mono text-gray-500">GOOGLE_SERVICE_ACCOUNT_JSON</span> configurado.
-            Se ausente, o prestador ainda é cadastrado normalmente.
           </p>
 
           {/* ── Botões ── */}
