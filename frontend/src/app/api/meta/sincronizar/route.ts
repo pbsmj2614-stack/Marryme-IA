@@ -5,11 +5,12 @@
  * Busca dados de campanha da Meta Marketing API para um prestador,
  * calcula o health score e salva em relatorios_campanha.
  *
- * Env necessárias:
- *   META_ACCESS_TOKEN           — User/System token com ads_read
- *   META_API_VERSION            — ex: "v18.0" (default)
- *   SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
+ * Token management:
+ *   1. Lê META_ACCESS_TOKEN do Supabase (tabela configuracoes, chave "meta_access_token")
+ *   2. Fallback para variável de ambiente META_ACCESS_TOKEN
+ *   3. Antes de cada sync verifica expiração via /debug_token
+ *   4. Se faltam < 7 dias OU token expirado, renova automaticamente com app credentials
+ *   5. Salva novo token no Supabase para próximas chamadas
  */
 
 export const runtime = "nodejs";
@@ -18,15 +19,103 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { CampanhaInsight, KPIsCampanha, DadosRelatorio } from "@/lib/types";
 
-const META_VERSION = process.env.META_API_VERSION ?? "v18.0";
-const META_BASE    = `https://graph.facebook.com/${META_VERSION}`;
-const META_TOKEN   = process.env.META_ACCESS_TOKEN ?? "";
+const META_VERSION  = process.env.META_API_VERSION  ?? "v18.0";
+const META_BASE     = `https://graph.facebook.com/${META_VERSION}`;
+const META_APP_ID   = process.env.META_APP_ID       ?? "";
+const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
 
 function supabaseAdmin() {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY não configurados.");
   return createClient(url, key);
+}
+
+// ─── Token dinâmico (Supabase → env fallback) ─────────────────────────────────
+
+async function getTokenFromDB(supabase: ReturnType<typeof supabaseAdmin>): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "meta_access_token")
+      .maybeSingle();
+    return data?.valor ?? null;
+  } catch { return null; }
+}
+
+async function saveTokenToDB(supabase: ReturnType<typeof supabaseAdmin>, token: string): Promise<void> {
+  try {
+    await supabase.from("configuracoes").upsert(
+      { chave: "meta_access_token", valor: token, atualizado_em: new Date().toISOString() },
+      { onConflict: "chave" }
+    );
+  } catch { /* non-fatal */ }
+}
+
+/** Verifica expiração via /debug_token. Retorna unix timestamp ou null se inválido. */
+async function checkTokenExpiry(token: string): Promise<{ expiresAt: number | null; isValid: boolean }> {
+  if (!META_APP_ID || !META_APP_SECRET) return { expiresAt: null, isValid: true }; // sem credenciais, assume válido
+  try {
+    const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
+    const url = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(appToken)}`;
+    const res  = await fetch(url);
+    const json = await res.json() as { data?: { is_valid?: boolean; expires_at?: number } };
+    const data = json.data ?? {};
+    return {
+      isValid:   data.is_valid ?? false,
+      expiresAt: data.expires_at ?? null,  // 0 = nunca expira (tokens de sistema)
+    };
+  } catch { return { expiresAt: null, isValid: true }; }
+}
+
+/** Troca o token atual por um de longa duração (~60 dias) via fb_exchange_token. */
+async function refreshLongLivedToken(currentToken: string): Promise<string> {
+  if (!META_APP_ID || !META_APP_SECRET) throw new Error("META_APP_ID / META_APP_SECRET não configurados.");
+  const url = `https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${encodeURIComponent(currentToken)}`;
+  const res  = await fetch(url);
+  const json = await res.json() as { access_token?: string; error?: { message: string } };
+  if (!res.ok || !json.access_token) {
+    throw new Error(`Falha ao renovar token: ${json.error?.message ?? res.status}`);
+  }
+  return json.access_token;
+}
+
+/**
+ * Obtém o token ativo, renovando automaticamente se necessário.
+ * Ordem: DB → env → lança erro.
+ * Auto-renova se expirado ou expirando em < 7 dias.
+ */
+async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promise<string> {
+  const tokenDB  = await getTokenFromDB(supabase);
+  const tokenEnv = process.env.META_ACCESS_TOKEN ?? "";
+  const token    = tokenDB || tokenEnv;
+
+  if (!token) throw new Error("META_ACCESS_TOKEN não configurado.");
+
+  // Verifica expiração
+  const { isValid, expiresAt } = await checkTokenExpiry(token);
+  const now     = Math.floor(Date.now() / 1000);
+  const SETE_DIAS = 7 * 86400;
+
+  const estaExpirando = expiresAt !== null && expiresAt !== 0 && (expiresAt - now) < SETE_DIAS;
+  const estaExpirado  = !isValid || (expiresAt !== null && expiresAt !== 0 && expiresAt < now);
+
+  if (estaExpirado || estaExpirando) {
+    console.log(`[meta/token] Token ${estaExpirado ? "expirado" : "expirando em breve"} — renovando...`);
+    try {
+      const novoToken = await refreshLongLivedToken(token);
+      await saveTokenToDB(supabase, novoToken);
+      console.log("[meta/token] Token renovado e salvo no Supabase.");
+      return novoToken;
+    } catch (err) {
+      if (estaExpirado) throw err; // se já expirou, não tem como continuar
+      console.warn("[meta/token] Falha ao renovar token (ainda válido):", err);
+      return token; // ainda válido, continua com o atual
+    }
+  }
+
+  return token;
 }
 
 // ─── Health score (0–100) ─────────────────────────────────────────────────────
@@ -97,9 +186,9 @@ function friendlyMetaError(rawMessage: string): string {
   return rawMessage;
 }
 
-async function metaGet(path: string, params: Record<string, string>): Promise<unknown> {
+async function metaGet(token: string, path: string, params: Record<string, string>): Promise<unknown> {
   const url = new URL(`${META_BASE}${path}`);
-  url.searchParams.set("access_token", META_TOKEN);
+  url.searchParams.set("access_token", token);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res  = await fetch(url.toString());
@@ -143,10 +232,6 @@ const MESSAGE_TYPES = [
 
 export async function POST(req: NextRequest) {
   try {
-    if (!META_TOKEN) {
-      return NextResponse.json({ error: "META_ACCESS_TOKEN não configurado." }, { status: 503 });
-    }
-
     const body = await req.json().catch(() => null);
     if (!body?.prestador_id) {
       return NextResponse.json({ error: "prestador_id obrigatório." }, { status: 400 });
@@ -165,6 +250,9 @@ export async function POST(req: NextRequest) {
     const fim = periodo_fim ?? hoje.toISOString().slice(0, 10);
 
     const supabase = supabaseAdmin();
+
+    // Obtém token ativo (renova automaticamente se necessário)
+    const activeToken = await getActiveToken(supabase);
 
     // Buscar ad_account_id do prestador
     const { data: prestador, error: pErr } = await supabase
@@ -210,7 +298,7 @@ export async function POST(req: NextRequest) {
     ].join(",");
 
     // ── 1. KPIs consolidados da conta ──────────────────────────────────────────
-    const kpisRaw = await metaGet(`/act_${accountId}/insights`, {
+    const kpisRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
       fields: INSIGHT_FIELDS,
       time_range: timeRange,
     }) as { data?: Array<Record<string, unknown>> };
@@ -254,7 +342,7 @@ export async function POST(req: NextRequest) {
     };
 
     // ── 2. Insights por campanha ───────────────────────────────────────────────
-    const campanhasRaw = await metaGet(`/act_${accountId}/insights`, {
+    const campanhasRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
       fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
       level: "campaign",
       time_range: timeRange,
