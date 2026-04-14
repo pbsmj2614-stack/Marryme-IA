@@ -32,7 +32,8 @@
       "Bash(echo \"Servidor iniciando com PID $!\")",
       "Bash(xargs grep:*)",
       "Bash(find \"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"sheets/add-tarefa\" {} \\\\;)",
-      "Bash(find \"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"quem\\\\|responsavel\\\\|delegat\\\\|assign\" {} \\\\;)"
+      "Bash(find \"c:\\\\Users\\\\bolau\\\\OneDrive\\\\Área de Trabalho\\\\Coisas\\\\Python\\\\MarryMeIA_claude\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"quem\\\\|responsavel\\\\|delegat\\\\|assign\" {} \\\\;)",
+      "Bash(grep -v \"^#\\\\|^$\" \"c:/Users/bolau/OneDrive/Área de Trabalho/Coisas/Python/MarryMeIA_claude/frontend/.env.local\")"
     ]
   }
 }
