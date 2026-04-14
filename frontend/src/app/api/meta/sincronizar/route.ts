@@ -307,9 +307,8 @@ export async function POST(req: NextRequest) {
       "clicks", "ctr",
       // Ações (mensagens iniciadas + conversões)
       "actions", "cost_per_action_type",
-      // Vídeo
+      // Vídeo (video_3_sec_watched_actions depreciado no v18+)
       "video_thruplay_watched_actions",
-      "video_3_sec_watched_actions",
       "video_p25_watched_actions",
       "video_p50_watched_actions",
       "video_p75_watched_actions",
@@ -327,7 +326,7 @@ export async function POST(req: NextRequest) {
     const impressions     = parseFloat(String(kpisData.impressions ?? "0"));
     const spend           = parseFloat(String(kpisData.spend       ?? "0"));
     const thruplay        = extractVideoAction(kpisData.video_thruplay_watched_actions);
-    const video3s         = extractVideoAction(kpisData.video_3_sec_watched_actions);
+    const video3s         = 0; // video_3_sec_watched_actions depreciado no Meta API v18+
     const results         = extractAction(kpisData.actions, MESSAGE_TYPES);
     const costPerResult   = extractAction(kpisData.cost_per_action_type, MESSAGE_TYPES);
 
@@ -371,7 +370,7 @@ export async function POST(req: NextRequest) {
       const cImpressions   = parseFloat(String(c.impressions ?? "0"));
       const cSpend         = parseFloat(String(c.spend       ?? "0"));
       const cThruplay      = extractVideoAction(c.video_thruplay_watched_actions);
-      const cVideo3s       = extractVideoAction(c.video_3_sec_watched_actions);
+      const cVideo3s       = 0; // video_3_sec_watched_actions depreciado no Meta API v18+
       const cResults       = extractAction(c.actions, MESSAGE_TYPES);
       const cCostPerResult = extractAction(c.cost_per_action_type, MESSAGE_TYPES);
       return {
