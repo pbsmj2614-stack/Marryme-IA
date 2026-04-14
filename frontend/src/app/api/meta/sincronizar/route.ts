@@ -447,6 +447,16 @@ export async function POST(req: NextRequest) {
       })
       .eq("id", prestador_id);
 
+    // ── Debug: lista campanhas da conta para diagnóstico ─────────────────────
+    let debugCampanhasList: unknown[] = [];
+    try {
+      const listRaw = await metaGet(activeToken, `/act_${accountId}/campaigns`, {
+        fields: "id,name,status,effective_status,daily_budget,lifetime_budget",
+        limit: "10",
+      }) as { data?: unknown[] };
+      debugCampanhasList = listRaw.data ?? [];
+    } catch { /* não bloqueia */ }
+
     return NextResponse.json({
       ok:           true,
       relatorio_id: relatorio.id,
@@ -455,12 +465,13 @@ export async function POST(req: NextRequest) {
       kpis,
       campanhas:    campanhas.length,
       debug: {
-        usou_date_preset:   usouDatePreset,
-        meta_data_count:    kpisRaw.data?.length ?? 0,
+        usou_date_preset:     usouDatePreset,
+        meta_data_count:      kpisRaw.data?.length ?? 0,
         meta_campanhas_count: campanhasRaw.data?.length ?? 0,
-        meta_raw_kpis:      kpisData,
-        account_id:         accountId,
-        time_range:         timeRange,
+        meta_raw_kpis:        kpisData,
+        account_id:           accountId,
+        time_range:           timeRange,
+        campanhas_na_conta:   debugCampanhasList,
       },
     });
 
