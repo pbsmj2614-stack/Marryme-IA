@@ -210,8 +210,9 @@ async function metaGet(token: string, path: string, params: Record<string, strin
   const res  = await fetch(url.toString());
   const json = await res.json() as { error?: { message: string; code?: number }; data?: unknown };
   if (!res.ok || json.error) {
-    const raw = json.error?.message ?? String(res.status);
-    throw new Error(friendlyMetaError(raw));
+    const rawMeta = json.error?.message ?? String(res.status);
+    // Lança com prefixo RAW: para preservar o erro original no catch
+    throw new Error(`RAW:${rawMeta}`);
   }
   return json;
 }
@@ -445,17 +446,19 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    console.error("[meta/sincronizar]", raw);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    // Extrai erro original da Meta (prefixo RAW:) ou usa o erro direto
+    const rawMeta = errMsg.startsWith("RAW:") ? errMsg.slice(4) : errMsg;
+    const codigo  = friendlyMetaError(rawMeta);
+    console.error("[meta/sincronizar] erro raw:", rawMeta);
 
-    // Traduz códigos internos em mensagens legíveis
     const MENSAGENS: Record<string, string> = {
-      TOKEN_EXPIRADO:       "Token da Meta API expirado. Gere um novo token permanente em business.facebook.com → Configurações → Usuários do sistema e atualize META_ACCESS_TOKEN no .env.local",
+      TOKEN_EXPIRADO:       "Token da Meta API expirado. Gere um novo token permanente em business.facebook.com → Configurações → Usuários do sistema.",
       TOKEN_SEM_PERMISSAO:  "Token sem permissão de leitura de anúncios (ads_read). Verifique as permissões do token no Meta Business.",
       CONTA_NAO_ENCONTRADA: "Conta não encontrada ou sem acesso. O token não tem permissão para esta conta de anúncios — verifique se o usuário que gerou o token é administrador desta conta no Meta Business Manager.",
       RATE_LIMIT:           "Limite de requisições da Meta API atingido. Aguarde alguns minutos e tente novamente.",
     };
-    const msg = MENSAGENS[raw] ?? raw;
+    const msg = MENSAGENS[codigo] ?? rawMeta;
 
     // Marca como erro no prestador (usa prestador_id_global — req.json() já foi consumido)
     if (prestador_id_global) {
@@ -467,6 +470,6 @@ export async function POST(req: NextRequest) {
       } catch { /* silencia erro secundário */ }
     }
 
-    return NextResponse.json({ error: msg, debug_erro_raw: raw }, { status: 500 });
+    return NextResponse.json({ error: msg, debug_erro_raw: rawMeta }, { status: 500 });
   }
 }
