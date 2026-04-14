@@ -53,23 +53,35 @@ async function saveTokenToDB(supabase: ReturnType<typeof supabaseAdmin>, token: 
   } catch { /* non-fatal */ }
 }
 
-/** Verifica expiração via /debug_token. Retorna unix timestamp ou null se inválido. */
+/**
+ * Verifica expiração via /debug_token.
+ * - expiresAt === 0  → token permanente (Usuário do Sistema)
+ * - expiresAt > 0    → token com prazo definido
+ * - expiresAt === null → não foi possível verificar (assume válido)
+ * - isValid === false → somente quando Meta explicitamente retorna is_valid: false
+ */
 async function checkTokenExpiry(token: string): Promise<{ expiresAt: number | null; isValid: boolean }> {
-  if (!META_APP_ID || !META_APP_SECRET) return { expiresAt: null, isValid: true }; // sem credenciais, assume válido
+  if (!META_APP_ID || !META_APP_SECRET) return { expiresAt: null, isValid: true };
   try {
     const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
     const url = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(appToken)}`;
     const res  = await fetch(url);
-    const json = await res.json() as { data?: { is_valid?: boolean; expires_at?: number } };
-    const data = json.data ?? {};
+    const json = await res.json() as { data?: { is_valid?: boolean; expires_at?: number }; error?: unknown };
+
+    // Se a própria chamada de debug retornou erro, não sabemos — assume válido
+    if (json.error || !json.data) return { expiresAt: null, isValid: true };
+
+    const data = json.data;
     return {
-      isValid:   data.is_valid ?? false,
-      expiresAt: data.expires_at ?? null,  // 0 = nunca expira (tokens de sistema)
+      // Só marca inválido se Meta EXPLICITAMENTE disse is_valid: false
+      isValid:   data.is_valid !== false,
+      expiresAt: data.expires_at ?? null, // 0 = nunca expira (token de sistema)
     };
   } catch { return { expiresAt: null, isValid: true }; }
 }
 
-/** Troca o token atual por um de longa duração (~60 dias) via fb_exchange_token. */
+/** Troca o token atual por um de longa duração (~60 dias) via fb_exchange_token.
+ *  Só funciona com tokens de usuário pessoal — NÃO com tokens de Usuário do Sistema. */
 async function refreshLongLivedToken(currentToken: string): Promise<string> {
   if (!META_APP_ID || !META_APP_SECRET) throw new Error("META_APP_ID / META_APP_SECRET não configurados.");
   const url = `https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${encodeURIComponent(currentToken)}`;
@@ -82,9 +94,10 @@ async function refreshLongLivedToken(currentToken: string): Promise<string> {
 }
 
 /**
- * Obtém o token ativo, renovando automaticamente se necessário.
- * Ordem: DB → env → lança erro.
- * Auto-renova se expirado ou expirando em < 7 dias.
+ * Obtém o token ativo, renovando automaticamente apenas quando necessário.
+ * - Token permanente (expires_at=0): nunca renova
+ * - Token com prazo: renova só se expirado ou < 7 dias para expirar
+ * - Se não conseguiu verificar: usa o token como está
  */
 async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promise<string> {
   const tokenDB  = await getTokenFromDB(supabase);
@@ -93,13 +106,16 @@ async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promi
 
   if (!token) throw new Error("META_ACCESS_TOKEN não configurado.");
 
-  // Verifica expiração
   const { isValid, expiresAt } = await checkTokenExpiry(token);
-  const now     = Math.floor(Date.now() / 1000);
+  const now      = Math.floor(Date.now() / 1000);
   const SETE_DIAS = 7 * 86400;
 
-  const estaExpirando = expiresAt !== null && expiresAt !== 0 && (expiresAt - now) < SETE_DIAS;
-  const estaExpirado  = !isValid || (expiresAt !== null && expiresAt !== 0 && expiresAt < now);
+  // Token permanente (Usuário do Sistema) — nunca precisa renovar
+  if (expiresAt === 0) return token;
+
+  // Só renova se temos data de expiração concreta e ela está próxima/passada
+  const estaExpirado  = !isValid && expiresAt !== null; // Meta disse explicitamente que é inválido
+  const estaExpirando = expiresAt !== null && expiresAt > 0 && (expiresAt - now) < SETE_DIAS;
 
   if (estaExpirado || estaExpirando) {
     console.log(`[meta/token] Token ${estaExpirado ? "expirado" : "expirando em breve"} — renovando...`);
@@ -109,9 +125,9 @@ async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promi
       console.log("[meta/token] Token renovado e salvo no Supabase.");
       return novoToken;
     } catch (err) {
-      if (estaExpirado) throw err; // se já expirou, não tem como continuar
-      console.warn("[meta/token] Falha ao renovar token (ainda válido):", err);
-      return token; // ainda válido, continua com o atual
+      if (estaExpirado) throw err;
+      console.warn("[meta/token] Falha ao renovar (token ainda válido):", err);
+      return token;
     }
   }
 
