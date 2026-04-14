@@ -133,6 +133,7 @@ export async function GET(req: NextRequest) {
   }
 
   const ok = resultado.token_valido === true &&
+    resultado.token_tem_ads_read !== false &&
     (!accountId || resultado.conta_acessivel === true);
 
   return NextResponse.json({ ok, ...resultado });
