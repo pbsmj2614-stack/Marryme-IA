@@ -236,6 +236,12 @@ export default function CampanhaTab({
   const [sincronizando, setSincronizando] = useState(false);
   const [erroSync,      setErroSync]      = useState<string | null>(null);
 
+  // Período padrão: últimos 30 dias
+  const hoje = new Date().toISOString().slice(0, 10);
+  const trintaDiasAtras = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+  const [periodoInicio, setPeriodoInicio] = useState(trintaDiasAtras);
+  const [periodoFim,    setPeriodoFim]    = useState(hoje);
+
   async function handleSincronizar() {
     setSincronizando(true);
     setErroSync(null);
@@ -243,7 +249,11 @@ export default function CampanhaTab({
       const res = await fetch("/api/meta/sincronizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prestador_id: prestadorId }),
+        body: JSON.stringify({
+          prestador_id:    prestadorId,
+          periodo_inicio:  periodoInicio,
+          periodo_fim:     periodoFim,
+        }),
       });
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!data.ok) throw new Error(data.error ?? "Erro ao sincronizar");
@@ -326,7 +336,7 @@ export default function CampanhaTab({
               {metaUltimaSync && <> · {new Date(metaUltimaSync).toLocaleString("pt-BR")}</>}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Link
               href={`/prestador/${prestadorId}/configurar`}
               className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
@@ -346,6 +356,22 @@ export default function CampanhaTab({
                 PDF
               </Link>
             )}
+            {/* Seletor de período */}
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-2 py-1 bg-gray-50">
+              <input
+                type="date"
+                value={periodoInicio}
+                onChange={(e) => setPeriodoInicio(e.target.value)}
+                className="text-xs text-gray-600 bg-transparent outline-none"
+              />
+              <span className="text-gray-300 text-xs">→</span>
+              <input
+                type="date"
+                value={periodoFim}
+                onChange={(e) => setPeriodoFim(e.target.value)}
+                className="text-xs text-gray-600 bg-transparent outline-none"
+              />
+            </div>
             <button
               onClick={handleSincronizar}
               disabled={sincronizando}

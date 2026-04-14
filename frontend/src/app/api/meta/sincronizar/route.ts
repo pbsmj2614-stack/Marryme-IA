@@ -137,46 +137,45 @@ async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promi
 // ─── Health score (0–100) ─────────────────────────────────────────────────────
 
 function calcHealthScore(kpis: KPIsCampanha): number {
+  // Sem impressões = sem dados = score 0
+  if (!kpis.impressions || kpis.impressions === 0) return 0;
+
   let score = 0;
 
-  // ── CTR do link (40 pts) ── clique efetivo no link, não apenas impressão
-  const ctr = kpis.link_ctr > 0 ? kpis.link_ctr : kpis.ctr; // fallback para ctr geral
+  // ── CTR do link (40 pts)
+  const ctr = kpis.link_ctr > 0 ? kpis.link_ctr : kpis.ctr;
   if (ctr >= 2.0)      score += 40;
   else if (ctr >= 1.0) score += 30;
   else if (ctr >= 0.5) score += 18;
   else if (ctr >= 0.2) score += 8;
-  // else 0
 
-  // ── Frequência (20 pts) — menor é melhor (fadiga de anúncio)
+  // ── Frequência (20 pts) — requer impressões reais (freq > 0)
   const freq = kpis.frequency ?? 0;
-  if (freq <= 1.5)      score += 20;
-  else if (freq <= 2.5) score += 15;
-  else if (freq <= 3.5) score += 9;
-  else if (freq <= 5.0) score += 4;
-  // else 0
+  if (freq > 0 && freq <= 1.5)      score += 20;
+  else if (freq > 0 && freq <= 2.5) score += 15;
+  else if (freq > 0 && freq <= 3.5) score += 9;
+  else if (freq > 0 && freq <= 5.0) score += 4;
 
-  // ── CPM (20 pts) — menor é melhor (R$, referência para casamentos BR)
+  // ── CPM (20 pts) — requer gasto real (cpm > 0)
   const cpm = kpis.cpm ?? 0;
   if (cpm > 0 && cpm <= 10)  score += 20;
-  else if (cpm <= 20)         score += 15;
-  else if (cpm <= 35)         score += 9;
-  else if (cpm <= 50)         score += 4;
-  // else 0
+  else if (cpm > 0 && cpm <= 20) score += 15;
+  else if (cpm > 0 && cpm <= 35) score += 9;
+  else if (cpm > 0 && cpm <= 50) score += 4;
 
-  // ── Hook Rate (20 pts) — % que assistiu 3s; só conta se houver dados de vídeo
+  // ── Hook Rate (20 pts) — se vídeo disponível; senão redistribui para CPM
   const hookRate = kpis.hook_rate ?? 0;
   if (hookRate > 0) {
     if (hookRate >= 20)      score += 20;
     else if (hookRate >= 12) score += 15;
     else if (hookRate >= 6)  score += 9;
     else if (hookRate >= 3)  score += 4;
-    // else 0 pontos — hook rate muito baixo penaliza
   } else {
-    // Sem dados de vídeo: redistribui os 20pts para CPM (campanhas de imagem)
-    if (cpm > 0 && cpm <= 10)  score += 20;
-    else if (cpm <= 20)         score += 15;
-    else if (cpm <= 35)         score += 9;
-    else if (cpm <= 50)         score += 4;
+    // Campanha de imagem: CPM recebe os 20pts extras (requer cpm > 0)
+    if (cpm > 0 && cpm <= 10)      score += 20;
+    else if (cpm > 0 && cpm <= 20) score += 15;
+    else if (cpm > 0 && cpm <= 35) score += 9;
+    else if (cpm > 0 && cpm <= 50) score += 4;
   }
 
   return Math.min(100, Math.max(0, score));
