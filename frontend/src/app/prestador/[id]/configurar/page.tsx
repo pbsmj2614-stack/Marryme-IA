@@ -9,15 +9,20 @@ type DiagResult = {
   ok: boolean;
   token_valido?: boolean;
   token_usuario?: string;
+  token_usuario_id?: string;
   token_expira_em?: string;
   token_tem_ads_read?: boolean;
+  token_permissoes?: string[];
   token_erro?: string;
+  token_fonte?: string;
   conta_acessivel?: boolean;
   conta_nome?: string;
   conta_status?: string;
   conta_erro?: string;
   conta_sugestao?: string;
   contas_acessiveis?: Array<{ id: string; nome: string; status: string }>;
+  contas_erro?: string;
+  account_id_testado?: string;
 };
 
 export default function ConfigurarMetaPage() {
@@ -34,6 +39,10 @@ export default function ConfigurarMetaPage() {
   const [verificando, setVerificando] = useState(false);
   const [diag,        setDiag]        = useState<DiagResult | null>(null);
 
+  const [novoToken,       setNovoToken]       = useState("");
+  const [salvandoToken,   setSalvandoToken]   = useState(false);
+  const [tokenMsg,        setTokenMsg]        = useState<{ ok: boolean; texto: string } | null>(null);
+
   useEffect(() => {
     async function load() {
       const { data } = await supabase
@@ -49,6 +58,31 @@ export default function ConfigurarMetaPage() {
     }
     load();
   }, [id]);
+
+  async function handleSalvarToken() {
+    if (!novoToken.trim()) return;
+    setSalvandoToken(true);
+    setTokenMsg(null);
+    try {
+      const res  = await fetch("/api/meta/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: novoToken.trim() }),
+      });
+      const data = await res.json() as { ok: boolean; expira_em?: string; erro?: string };
+      if (data.ok) {
+        setTokenMsg({ ok: true, texto: `Token salvo! Expira em: ${data.expira_em ?? "desconhecido"}` });
+        setNovoToken("");
+        setDiag(null);
+      } else {
+        setTokenMsg({ ok: false, texto: data.erro ?? "Erro ao salvar token" });
+      }
+    } catch {
+      setTokenMsg({ ok: false, texto: "Erro de rede ao salvar token" });
+    } finally {
+      setSalvandoToken(false);
+    }
+  }
 
   async function handleVerificar() {
     const cleaned = accountId.trim().replace(/^act_/i, "");
@@ -181,41 +215,98 @@ export default function ConfigurarMetaPage() {
 
             {/* Resultado diagnóstico */}
             {diag && (
-              <div className={`rounded-xl border p-4 text-sm space-y-2 ${diag.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+              <div className={`rounded-xl border p-4 text-sm space-y-3 ${diag.ok ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
                 <p className={`font-semibold ${diag.ok ? "text-green-800" : "text-red-800"}`}>
                   {diag.ok ? "✓ Tudo certo — pronto para sincronizar" : "✕ Problema encontrado"}
                 </p>
-                {diag.token_usuario && (
-                  <p className="text-gray-700">Token pertence a: <strong>{diag.token_usuario}</strong></p>
-                )}
-                {diag.token_expira_em && (
-                  <p className="text-gray-700">Expira em: <strong>{diag.token_expira_em}</strong></p>
-                )}
-                {diag.token_tem_ads_read === false && (
-                  <p className="text-red-700">⚠ Token sem permissão <code>ads_read</code> — gere um novo token com essa permissão</p>
-                )}
-                {diag.token_erro && (
-                  <p className="text-red-700">Erro no token: {diag.token_erro}</p>
-                )}
+
+                {/* Token info */}
+                <div className="bg-white/60 rounded-lg p-3 space-y-1">
+                  {diag.token_fonte && (
+                    <p className="text-gray-500 text-xs">Fonte do token: <span className="font-mono">{diag.token_fonte}</span></p>
+                  )}
+                  {diag.token_usuario && (
+                    <p className="text-gray-700">Token pertence a: <strong>{diag.token_usuario}</strong>
+                      {diag.token_usuario_id && <span className="text-gray-400 text-xs ml-1">(ID: {diag.token_usuario_id})</span>}
+                    </p>
+                  )}
+                  {diag.token_expira_em && (
+                    <p className="text-gray-700">Expira em: <strong>{diag.token_expira_em}</strong></p>
+                  )}
+                  {diag.token_tem_ads_read === true && (
+                    <p className="text-green-700 text-xs">✓ Permissão ads_read OK</p>
+                  )}
+                  {diag.token_tem_ads_read === false && (
+                    <p className="text-red-700">⚠ Token sem permissão <code>ads_read</code> — gere um novo token com essa permissão</p>
+                  )}
+                  {diag.token_erro && (
+                    <p className="text-red-700">Erro no token: {diag.token_erro}</p>
+                  )}
+                </div>
+
+                {/* Conta testada */}
                 {diag.conta_acessivel === true && (
                   <p className="text-green-700">✓ Conta <strong>{diag.conta_nome}</strong> ({diag.conta_status}) acessível</p>
                 )}
                 {diag.conta_acessivel === false && (
-                  <div className="space-y-1">
-                    <p className="text-red-700">✕ Conta não acessível: {diag.conta_erro}</p>
-                    {diag.conta_sugestao && <p className="text-orange-700">{diag.conta_sugestao}</p>}
-                    {diag.contas_acessiveis && diag.contas_acessiveis.length > 0 && (
-                      <div>
-                        <p className="text-gray-700 font-medium mt-2">Contas que o token SÍ acessa:</p>
-                        <ul className="mt-1 space-y-0.5">
-                          {diag.contas_acessiveis.map((c) => (
-                            <li key={c.id} className="text-gray-600 font-mono text-xs">
-                              {c.id} — {c.nome} ({c.status})
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                  <div className="space-y-2">
+                    <div className="bg-red-100 rounded-lg p-3">
+                      <p className="text-red-800 font-medium">Conta ID {diag.account_id_testado} — sem acesso</p>
+                      <p className="text-red-700 text-xs mt-1">{diag.conta_erro}</p>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 space-y-1">
+                      <p className="font-semibold">Como resolver:</p>
+                      <p>1. Acesse <strong>business.facebook.com → Configurações → Contas de Anúncios</strong></p>
+                      <p>2. Selecione a conta e clique em <strong>"Adicionar Pessoas"</strong></p>
+                      <p>3. Adicione o usuário <strong>{diag.token_usuario ?? "do token"}</strong> como <strong>Admin ou Analista</strong></p>
+                      <p>4. Clique em "Verificar" novamente</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de contas acessíveis */}
+                {diag.contas_acessiveis && diag.contas_acessiveis.length > 0 && (
+                  <div>
+                    <p className="text-gray-700 font-medium">
+                      {diag.conta_acessivel === false
+                        ? "Contas que este token PODE acessar — clique para usar:"
+                        : "Contas acessíveis pelo token:"}
+                    </p>
+                    <ul className="mt-2 space-y-1.5">
+                      {diag.contas_acessiveis.map((c) => (
+                        <li key={c.id}
+                          className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs border ${
+                            c.id === accountId
+                              ? "bg-green-50 border-green-300 text-green-800"
+                              : "bg-white border-gray-200 text-gray-700"
+                          }`}
+                        >
+                          <span>
+                            <span className="font-mono font-bold">{c.id}</span>
+                            <span className="ml-2 text-gray-500">{c.nome}</span>
+                            <span className="ml-1 text-gray-400">({c.status})</span>
+                          </span>
+                          {c.id !== accountId && (
+                            <button
+                              type="button"
+                              onClick={() => setAccountId(c.id)}
+                              className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition shrink-0"
+                            >
+                              Usar este ID
+                            </button>
+                          )}
+                          {c.id === accountId && (
+                            <span className="text-green-700 font-medium shrink-0">✓ selecionado</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {diag.contas_acessiveis?.length === 0 && diag.token_valido && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                    <p className="font-semibold">Token válido mas sem acesso a nenhuma conta de anúncios.</p>
+                    <p className="mt-1">Certifique-se que o usuário <strong>{diag.token_usuario}</strong> foi adicionado como administrador de pelo menos uma conta de anúncios no Meta Business Manager.</p>
                   </div>
                 )}
               </div>
@@ -262,15 +353,38 @@ export default function ConfigurarMetaPage() {
           </form>
         </div>
 
-        {/* Aviso sobre token */}
-        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-sm font-semibold text-amber-800 mb-1">
-            Token de acesso (META_ACCESS_TOKEN)
+        {/* Painel de atualização de token */}
+        <div className="mt-4 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+          <p className="text-sm font-semibold text-gray-800 mb-1">Atualizar token Meta</p>
+          <p className="text-xs text-gray-500 mb-3">
+            Cole aqui um token do <strong>Graph API Explorer</strong>. O sistema converte automaticamente
+            para token de longa duração (~60 dias) e salva no banco — sem precisar editar o servidor.
           </p>
-          <p className="text-sm text-amber-700">
-            O token de acesso é configurado uma vez nas variáveis de ambiente do servidor
-            e funciona para todas as contas vinculadas ao mesmo Business Manager.
-            Não é necessário inserir por prestador.
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="EAAxxxxxx..."
+              value={novoToken}
+              onChange={(e) => setNovoToken(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+            />
+            <button
+              type="button"
+              onClick={handleSalvarToken}
+              disabled={salvandoToken || !novoToken.trim()}
+              className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition shrink-0"
+            >
+              {salvandoToken ? "Salvando..." : "Salvar token"}
+            </button>
+          </div>
+          {tokenMsg && (
+            <p className={`mt-2 text-xs ${tokenMsg.ok ? "text-green-700" : "text-red-700"}`}>
+              {tokenMsg.ok ? "✓" : "✕"} {tokenMsg.texto}
+            </p>
+          )}
+          <p className="text-xs text-gray-400 mt-2">
+            Para nunca mais ter esse problema, crie um <strong>Usuário do Sistema</strong> no Meta Business Manager
+            e gere um token permanente (não expira).
           </p>
         </div>
       </div>

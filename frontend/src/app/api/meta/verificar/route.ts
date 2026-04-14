@@ -99,19 +99,37 @@ export async function GET(req: NextRequest) {
   // 4. Verifica conta específica (se account_id foi informado)
   if (accountId) {
     resultado.account_id_testado = accountId;
-    try {
-      const res  = await fetch(`${META_BASE}/act_${accountId}?fields=id,name,account_status&access_token=${token}`);
-      const json = await res.json() as { id?: string; name?: string; account_status?: number; error?: { message: string } };
-      if (json.error) {
-        resultado.conta_acessivel  = false;
-        resultado.conta_erro       = json.error.message;
-        resultado.conta_sugestao   = "O token não tem acesso a esta conta. Verifique se o usuário que gerou o token é administrador desta conta de anúncios no Meta Business Manager.";
-      } else {
-        resultado.conta_acessivel  = true;
-        resultado.conta_nome       = json.name;
-        resultado.conta_status     = json.account_status === 1 ? "Ativa" : `Inativa (${json.account_status})`;
-      }
-    } catch (e) { resultado.conta_erro = String(e); }
+
+    // Primeiro: verificar se a conta aparece na lista de acessíveis (mais rápido e informativo)
+    const contasAcessiveis = resultado.contas_acessiveis as Array<{ id: string; nome: string; status: string }> | undefined;
+    const contaNaLista = contasAcessiveis?.find((c) => c.id === accountId);
+
+    if (contaNaLista) {
+      // Conta já confirmada pela lista — marca direto sem nova chamada
+      resultado.conta_acessivel = true;
+      resultado.conta_nome      = contaNaLista.nome;
+      resultado.conta_status    = contaNaLista.status;
+    } else {
+      // Tenta chamar a conta diretamente
+      try {
+        const res  = await fetch(`${META_BASE}/act_${accountId}?fields=id,name,account_status&access_token=${token}`);
+        const json = await res.json() as { id?: string; name?: string; account_status?: number; error?: { message: string } };
+        if (json.error) {
+          resultado.conta_acessivel = false;
+          resultado.conta_erro      = json.error.message;
+          // Se temos a lista, mostrar IDs acessíveis para o usuário poder comparar
+          if (contasAcessiveis && contasAcessiveis.length > 0) {
+            resultado.conta_sugestao = `O ID ${accountId} não está entre as contas acessíveis por este token. Selecione um dos IDs da lista abaixo ou adicione o usuário "${resultado.token_usuario}" como admin desta conta no Meta Business Manager.`;
+          } else {
+            resultado.conta_sugestao = `O token não tem acesso a nenhuma conta de anúncios. Certifique-se que o usuário "${resultado.token_usuario}" é administrador de pelo menos uma conta no Meta Business Manager.`;
+          }
+        } else {
+          resultado.conta_acessivel = true;
+          resultado.conta_nome      = json.name;
+          resultado.conta_status    = json.account_status === 1 ? "Ativa" : `Inativa (${json.account_status})`;
+        }
+      } catch (e) { resultado.conta_erro = String(e); }
+    }
   }
 
   const ok = resultado.token_valido === true &&
