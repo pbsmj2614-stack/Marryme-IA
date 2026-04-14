@@ -67,18 +67,26 @@ export async function GET(req: NextRequest) {
   }
 
   // 2. Debug token: validade e permissões
+  // Só marca token_tem_ads_read=false quando temos CERTEZA (scopes retornados explicitamente)
   if (META_APP_ID && META_APP_SECRET) {
     try {
       const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
       const res  = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(appToken)}`);
-      const json = await res.json() as { data?: { expires_at?: number; scopes?: string[]; is_valid?: boolean } };
-      const d    = json.data ?? {};
-      resultado.token_expira_em = d.expires_at
-        ? (d.expires_at === 0 ? "nunca" : new Date(d.expires_at * 1000).toLocaleString("pt-BR"))
-        : "desconhecido";
-      resultado.token_permissoes = d.scopes ?? [];
-      resultado.token_tem_ads_read = (d.scopes ?? []).includes("ads_read");
-    } catch { resultado.token_debug_erro = "Não foi possível verificar detalhes do token"; }
+      const json = await res.json() as { data?: { expires_at?: number; scopes?: string[]; is_valid?: boolean }; error?: unknown };
+      const d    = json.data;
+      if (d && !json.error) {
+        resultado.token_expira_em = d.expires_at !== undefined
+          ? (d.expires_at === 0 ? "nunca" : new Date(d.expires_at * 1000).toLocaleString("pt-BR"))
+          : "desconhecido";
+        resultado.token_permissoes = d.scopes ?? [];
+        // Só avisa sobre ads_read se temos a lista de scopes e ads_read não está nela
+        if (d.scopes !== undefined) {
+          resultado.token_tem_ads_read = d.scopes.includes("ads_read");
+        }
+        // Se scopes não veio mas token é válido, não assumimos nada
+      }
+      // Se debug_token falhou (sem data), não exibimos alertas de permissão
+    } catch { /* não bloqueia */ }
   }
 
   // 3. Lista contas de anúncios acessíveis
@@ -132,8 +140,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ok = token válido + conta acessível
+  // Não falha por ads_read ausente — debug_token pode não retornar scopes para tokens de sistema
   const ok = resultado.token_valido === true &&
-    resultado.token_tem_ads_read !== false &&
     (!accountId || resultado.conta_acessivel === true);
 
   return NextResponse.json({ ok, ...resultado });
