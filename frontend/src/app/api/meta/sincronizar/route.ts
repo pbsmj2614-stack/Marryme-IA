@@ -247,6 +247,7 @@ const MESSAGE_TYPES = [
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  let prestador_id_global = "";
   try {
     const body = await req.json().catch(() => null);
     if (!body?.prestador_id) {
@@ -258,6 +259,7 @@ export async function POST(req: NextRequest) {
       periodo_inicio?: string;
       periodo_fim?: string;
     };
+    prestador_id_global = prestador_id;
 
     // Período padrão: últimos 30 dias
     const hoje = new Date();
@@ -455,17 +457,15 @@ export async function POST(req: NextRequest) {
     };
     const msg = MENSAGENS[raw] ?? raw;
 
-    // Marca como erro no prestador
-    try {
-      const body = await (req as NextRequest).json().catch(() => null);
-      if (body?.prestador_id) {
-        const supabase = supabaseAdmin();
-        await supabase
+    // Marca como erro no prestador (usa prestador_id_global — req.json() já foi consumido)
+    if (prestador_id_global) {
+      try {
+        await supabaseAdmin()
           .from("prestadores")
           .update({ meta_sync_status: "erro" })
-          .eq("id", body.prestador_id);
-      }
-    } catch { /* silencia erro secundário */ }
+          .eq("id", prestador_id_global);
+      } catch { /* silencia erro secundário */ }
+    }
 
     return NextResponse.json({ error: msg }, { status: 500 });
   }
