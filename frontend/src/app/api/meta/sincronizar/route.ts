@@ -309,12 +309,24 @@ export async function POST(req: NextRequest) {
     ].join(",");
 
     // ── 1. KPIs consolidados da conta ──────────────────────────────────────────
-    const kpisRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
+    let kpisRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
       fields: INSIGHT_FIELDS,
       time_range: timeRange,
-    }) as { data?: Array<Record<string, unknown>> };
+    }) as { data?: Array<Record<string, unknown>>; paging?: unknown };
+
+    // Se time_range não retornou dados, tenta date_preset (fallback)
+    const usouDatePreset = !kpisRaw.data?.length;
+    if (usouDatePreset) {
+      console.log("[meta/sincronizar] time_range sem dados, tentando date_preset=last_30d");
+      kpisRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
+        fields: INSIGHT_FIELDS,
+        date_preset: "last_30d",
+      }) as { data?: Array<Record<string, unknown>>; paging?: unknown };
+    }
 
     const kpisData = kpisRaw.data?.[0] ?? {};
+    console.log("[meta/sincronizar] kpisRaw.data length:", kpisRaw.data?.length ?? 0);
+    console.log("[meta/sincronizar] kpisData impressions:", kpisData.impressions);
 
     const impressions     = parseFloat(String(kpisData.impressions ?? "0"));
     const spend           = parseFloat(String(kpisData.spend       ?? "0"));
@@ -352,11 +364,19 @@ export async function POST(req: NextRequest) {
     };
 
     // ── 2. Insights por campanha ───────────────────────────────────────────────
-    const campanhasRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
+    let campanhasRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
       fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
       level: "campaign",
       time_range: timeRange,
     }) as { data?: Array<Record<string, unknown>> };
+
+    if (!campanhasRaw.data?.length) {
+      campanhasRaw = await metaGet(activeToken, `/act_${accountId}/insights`, {
+        fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
+        level: "campaign",
+        date_preset: "last_30d",
+      }) as { data?: Array<Record<string, unknown>> };
+    }
 
     const campanhas: CampanhaInsight[] = (campanhasRaw.data ?? []).map((c) => {
       const cImpressions   = parseFloat(String(c.impressions ?? "0"));
@@ -434,6 +454,14 @@ export async function POST(req: NextRequest) {
       periodo:      { inicio, fim },
       kpis,
       campanhas:    campanhas.length,
+      debug: {
+        usou_date_preset:   usouDatePreset,
+        meta_data_count:    kpisRaw.data?.length ?? 0,
+        meta_campanhas_count: campanhasRaw.data?.length ?? 0,
+        meta_raw_kpis:      kpisData,
+        account_id:         accountId,
+        time_range:         timeRange,
+      },
     });
 
   } catch (err) {
