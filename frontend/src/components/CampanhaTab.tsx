@@ -420,8 +420,8 @@ export default function CampanhaTab({
                   {new Date(rel.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                 </p>
                 <div className="mt-3 space-y-1 text-xs text-gray-500">
-                  <p><strong className="text-gray-600">CTR link ≥ 1%</strong> · frequência ≤ 2 · hook rate ≥ 12% = saudável</p>
-                  <p><strong className="text-gray-600">Score:</strong> CTR (40%) · Frequência (20%) · CPM (20%) · Hook Rate (20%)</p>
+                  <p><strong className="text-gray-600">CTR link ≥ 1%</strong> · frequência ≤ 2 · CPM ≤ R$15 = saudável</p>
+                  <p><strong className="text-gray-600">Score:</strong> CTR (40%) · Frequência (20%) · CPM (40%)</p>
                 </div>
               </div>
             </div>
@@ -459,41 +459,17 @@ export default function CampanhaTab({
             </div>
           </div>
 
-          {/* ── Bloco 4: Vídeo ────────────────────────────────────────────── */}
-          {(kpis.thruplay > 0 || kpis.video_3s > 0 || kpis.hook_rate > 0) && (
+          {/* ── Bloco 4: Vídeo — só exibe se há ThruPlay real ─────────────── */}
+          {kpis.thruplay > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <SectionTitle>Métricas de vídeo</SectionTitle>
-
-              {/* Hook rate + ThruPlay */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                <KpiCard
-                  label="Hook Rate"
-                  value={fmtPct(kpis.hook_rate)}
-                  sub="3s views / impressões"
-                  highlight={hookHL(kpis.hook_rate)}
-                />
-                <KpiCard label="Views 3s"       value={fmt(kpis.video_3s)} />
-                <KpiCard label="ThruPlay"        value={fmt(kpis.thruplay)} sub="15s ou 100% do vídeo" />
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+                <KpiCard label="ThruPlay" value={fmt(kpis.thruplay)} sub="visualizações completas (15s ou 100%)" />
                 <KpiCard
                   label="Custo / ThruPlay"
                   value={kpis.cost_per_thruplay > 0 ? fmtBRL(kpis.cost_per_thruplay) : "—"}
                 />
               </div>
-
-              {/* Retenção */}
-              {kpis.video_p25 > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                    Retenção do vídeo (base: impressões {fmt(kpis.impressions)})
-                  </p>
-                  <div className="space-y-2.5">
-                    <RetencaoBar label="25%"  value={kpis.video_p25}  base={kpis.impressions} />
-                    <RetencaoBar label="50%"  value={kpis.video_p50}  base={kpis.impressions} />
-                    <RetencaoBar label="75%"  value={kpis.video_p75}  base={kpis.impressions} />
-                    <RetencaoBar label="100%" value={kpis.video_p100} base={kpis.impressions} />
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

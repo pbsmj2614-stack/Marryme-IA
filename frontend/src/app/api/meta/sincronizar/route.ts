@@ -299,19 +299,13 @@ export async function POST(req: NextRequest) {
       .eq("id", prestador_id);
 
     // Campos a buscar (conta + campanha)
+    // Nota: video_3_sec_watched_actions e video_p*_watched_actions depreciados no v18+
     const INSIGHT_FIELDS = [
       "impressions", "reach", "frequency", "spend", "cpm",
       "inline_link_clicks", "inline_link_click_ctr", "cost_per_inline_link_click",
-      // Compat
       "clicks", "ctr",
-      // Ações (mensagens iniciadas + conversões)
       "actions", "cost_per_action_type",
-      // Vídeo (video_3_sec_watched_actions depreciado no v18+)
       "video_thruplay_watched_actions",
-      "video_p25_watched_actions",
-      "video_p50_watched_actions",
-      "video_p75_watched_actions",
-      "video_p100_watched_actions",
     ].join(",");
 
     // ── 1. KPIs consolidados da conta ──────────────────────────────────────────
@@ -325,7 +319,6 @@ export async function POST(req: NextRequest) {
     const impressions     = parseFloat(String(kpisData.impressions ?? "0"));
     const spend           = parseFloat(String(kpisData.spend       ?? "0"));
     const thruplay        = extractVideoAction(kpisData.video_thruplay_watched_actions);
-    const video3s         = 0; // video_3_sec_watched_actions depreciado no Meta API v18+
     const results         = extractAction(kpisData.actions, MESSAGE_TYPES);
     const costPerResult   = extractAction(kpisData.cost_per_action_type, MESSAGE_TYPES);
 
@@ -347,12 +340,12 @@ export async function POST(req: NextRequest) {
       // Vídeo
       thruplay,
       cost_per_thruplay: thruplay > 0 ? spend / thruplay : 0,
-      video_3s:          video3s,
-      hook_rate:         impressions > 0 ? (video3s / impressions) * 100 : 0,
-      video_p25:         extractVideoAction(kpisData.video_p25_watched_actions),
-      video_p50:         extractVideoAction(kpisData.video_p50_watched_actions),
-      video_p75:         extractVideoAction(kpisData.video_p75_watched_actions),
-      video_p100:        extractVideoAction(kpisData.video_p100_watched_actions),
+      video_3s:          0,
+      hook_rate:         0, // video_3_sec depreciado no v18+
+      video_p25:         0,
+      video_p50:         0,
+      video_p75:         0,
+      video_p100:        0,
       // Compat
       clicks:            parseFloat(String(kpisData.clicks ?? "0")),
       ctr:               parseFloat(String(kpisData.ctr   ?? "0")),
