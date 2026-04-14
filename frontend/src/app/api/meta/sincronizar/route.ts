@@ -467,6 +467,6 @@ export async function POST(req: NextRequest) {
       } catch { /* silencia erro secundário */ }
     }
 
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg, debug_erro_raw: raw }, { status: 500 });
   }
 }
