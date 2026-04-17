@@ -357,8 +357,8 @@ export default function ConfigurarMetaPage() {
         <div className="mt-4 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
           <p className="text-sm font-semibold text-gray-800 mb-1">Atualizar token Meta</p>
           <p className="text-xs text-gray-500 mb-3">
-            Cole aqui um token do <strong>Graph API Explorer</strong>. O sistema converte automaticamente
-            para token de longa duração (~60 dias) e salva no banco — sem precisar editar o servidor.
+            Cole aqui o token do <strong>Usuário do Sistema</strong> (permanente) ou do Graph API Explorer.
+            O token é validado e salvo no banco — vale para todos os clientes.
           </p>
           <div className="flex gap-2">
             <input

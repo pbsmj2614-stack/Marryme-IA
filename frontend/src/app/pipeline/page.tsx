@@ -423,6 +423,7 @@ export default function PipelinePage() {
   const [sortKey,         setSortKey]         = useState<SortKey | null>(null);
   const [sortDir,         setSortDir]         = useState<"asc" | "desc">("asc");
   const [expandedId,      setExpandedId]      = useState<string | null>(null);
+  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
   const [addTarefaFor,    setAddTarefaFor]    = useState<string | null>(null);
   const [addTarefaForm,   setAddTarefaForm]   = useState({ etapa: "", o_que: "", tipo: "Marry Me", quem: "", prazo: "", status: "Não iniciado", observacoes: "" });
   const [savingTarefa,    setSavingTarefa]    = useState(false);
@@ -939,6 +940,14 @@ export default function PipelinePage() {
                                 <span className="text-xs text-gray-600">
                                   {c.finalizadas}/{c.total_tarefas} concluídas
                                 </span>
+                                {c.finalizadas > 0 && (
+                                  <button
+                                    onClick={() => setMostrarFinalizadas((v) => !v)}
+                                    className="text-xs px-2 py-0.5 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition"
+                                  >
+                                    {mostrarFinalizadas ? "Ocultar concluídas" : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setAddTarefaFor(addTarefaFor === c.id_cliente ? null : c.id_cliente)}
                                   className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
@@ -948,7 +957,7 @@ export default function PipelinePage() {
                               </div>
                             </div>
                             <TabelaTarefas
-                              tarefas={c.tarefas}
+                              tarefas={mostrarFinalizadas ? c.tarefas : c.tarefas.filter((t) => !t.check_feito && t.status !== "Finalizado")}
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                               onUpdate={handleUpdateTarefa}

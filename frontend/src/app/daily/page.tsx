@@ -114,6 +114,10 @@ function ModalTarefas({
   onClose: () => void;
   onCheckChange: (id: string, val: boolean) => void;
 }) {
+  const [mostrarFeitas, setMostrarFeitas] = React.useState(false);
+  const pendentes   = tarefas.filter((t) => !t.check_feito && t.status !== "Finalizado");
+  const finalizadas = tarefas.filter((t) => t.check_feito || t.status === "Finalizado");
+  const lista       = mostrarFeitas ? tarefas : pendentes;
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
@@ -131,6 +135,14 @@ function ModalTarefas({
               {cliente.id_cliente} · Score {cliente.score}% · {cliente.finalizadas}/{tarefas.length} concluídas
             </p>
           </div>
+          {finalizadas.length > 0 && (
+            <button
+              onClick={() => setMostrarFeitas((v) => !v)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition mr-6"
+            >
+              {mostrarFeitas ? "Ocultar concluídas" : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-white text-lg leading-none p-1"
@@ -141,10 +153,10 @@ function ModalTarefas({
 
         {/* Lista de tarefas */}
         <div className="overflow-y-auto flex-1 px-5 py-3 space-y-2">
-          {tarefas.length === 0 ? (
-            <p className="text-gray-500 text-sm py-4">Nenhuma tarefa cadastrada.</p>
+          {lista.length === 0 ? (
+            <p className="text-gray-500 text-sm py-4">Nenhuma tarefa pendente.</p>
           ) : (
-            tarefas.map((t) => {
+            lista.map((t) => {
               const vencida = t.prazo && t.prazo < TODAY && t.status !== "Finalizado";
               return (
                 <div
