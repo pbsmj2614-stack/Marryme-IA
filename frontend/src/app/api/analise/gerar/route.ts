@@ -206,10 +206,14 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Tenta parsear e salva no Supabase
+          // Tenta parsear — remove markdown code fences se existirem
           let analiseJson: Record<string, unknown> = {};
           try {
-            const jsonMatch = fullText.match(/\{[\s\S]*\}/);
+            const stripped = fullText
+              .replace(/^```(?:json)?\s*/i, "")
+              .replace(/\s*```\s*$/, "")
+              .trim();
+            const jsonMatch = stripped.match(/\{[\s\S]*\}/);
             if (jsonMatch) analiseJson = JSON.parse(jsonMatch[0]);
           } catch { /* ignora parse error */ }
 

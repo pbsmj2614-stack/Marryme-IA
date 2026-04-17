@@ -259,6 +259,22 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
     );
   }
 
+  // ── Análise inválida (JSON não parseado corretamente) ─────────────────────
+  if (analise && !analise.resumo_executivo && !analise.nota_geral) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+        <p className="text-sm font-semibold text-red-700 mb-1">Falha ao processar a análise</p>
+        <p className="text-xs text-red-500 mb-4">O modelo retornou um formato inesperado. Tente gerar novamente.</p>
+        <button
+          onClick={gerarAnalise}
+          className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
   // ── Análise exibida ────────────────────────────────────────────────────────
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -274,7 +290,7 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
             <p className="text-sm font-bold text-gray-900">Análise Inteligente · IA</p>
             {analiseEm && <p className="text-xs text-gray-400">Gerada em {analiseEm}</p>}
           </div>
-          <NotaGeral nota={analise.nota_geral} />
+          {analise.nota_geral != null && <NotaGeral nota={analise.nota_geral} />}
         </div>
         <button
           onClick={gerarAnalise}
@@ -324,7 +340,11 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
         {/* KPIs */}
         {tab === "kpis" && (
           <div className="space-y-3">
-            {Object.entries(analise.analise_kpis).map(([key, kpi]) => {
+            {!analise.analise_kpis && (
+              <p className="text-sm text-gray-400">Dados de KPIs não disponíveis.</p>
+            )}
+            {analise.analise_kpis && Object.entries(analise.analise_kpis).map(([key, kpi]) => {
+              const k = kpi as KpiAnalise;
               const labels: Record<string, string> = {
                 ctr: "CTR do link",
                 cpm: "CPM",
@@ -334,12 +354,12 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
               };
               return (
                 <div key={key} className="flex items-start gap-3 border border-gray-100 rounded-xl p-4">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${avaliacaoCls(kpi.avaliacao)}`}>
-                    {avaliacaoLabel(kpi.avaliacao)}
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${avaliacaoCls(k.avaliacao)}`}>
+                    {avaliacaoLabel(k.avaliacao)}
                   </span>
                   <div>
                     <p className="text-xs font-bold text-gray-700">{labels[key] ?? key}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{kpi.comentario}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{k.comentario}</p>
                   </div>
                 </div>
               );
@@ -374,7 +394,10 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
         {/* Diagnóstico */}
         {tab === "diagnostico" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {([
+            {!analise.diagnostico && (
+              <p className="text-sm text-gray-400">Dados de diagnóstico não disponíveis.</p>
+            )}
+            {analise.diagnostico && ([
               { key: "pontos_fortes",  label: "Pontos fortes",  cls: "border-green-200 bg-green-50",  dot: "bg-green-500" },
               { key: "pontos_fracos",  label: "Pontos fracos",  cls: "border-red-200 bg-red-50",      dot: "bg-red-500" },
               { key: "oportunidades",  label: "Oportunidades",  cls: "border-blue-200 bg-blue-50",    dot: "bg-blue-500" },
@@ -383,7 +406,7 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
               <div key={key} className={`border rounded-xl p-4 ${cls}`}>
                 <p className="text-xs font-bold text-gray-700 mb-2">{label}</p>
                 <ul className="space-y-1.5">
-                  {(analise.diagnostico[key] ?? []).map((item, i) => (
+                  {((analise.diagnostico?.[key] as string[]) ?? []).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
                       <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${dot}`} />
                       {item}
