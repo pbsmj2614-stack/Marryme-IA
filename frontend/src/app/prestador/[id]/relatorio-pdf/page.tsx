@@ -2,16 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import type { PrestadorMeta, RelatorioCampanha, CampanhaInsight } from "@/lib/types";
 import PrintButton from "./PrintButton";
-
-function fmt(n: number, d = 0) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
-}
-function fmtBRL(n: number) {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-function fmtPct(n: number) {
-  return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
+import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
 function scoreLabel(s: number) {
   if (s >= 70) return { label: "Saudável",   color: "#16a34a" };

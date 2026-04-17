@@ -8,19 +8,7 @@ import {
 } from "recharts";
 import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha } from "@/lib/types";
 import AnaliseIA from "@/components/AnaliseIA";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmt(n: number | null | undefined, dec = 0) {
-  const v = n ?? 0;
-  return v.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtBRL(n: number | null | undefined) {
-  return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-function fmtPct(n: number | null | undefined) {
-  return `${(n ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
+import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
 function scoreColor(score: number): { ring: string; text: string; bg: string; label: string } {
   if (score >= 70) return { ring: "stroke-green-500",  text: "text-green-600",  bg: "bg-green-100",  label: "Saudável" };

@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import type { User } from "@supabase/supabase-js";
 import type { KPIsCampanha, CampanhaInsight, DadosRelatorio } from "@/lib/types";
+import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,15 +84,6 @@ function scoreColor(score: number | null): string {
   return "#ef4444";
 }
 
-function fmt(n: number, dec = 0) {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtBRL(n: number) {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-function fmtPct(n: number) {
-  return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });

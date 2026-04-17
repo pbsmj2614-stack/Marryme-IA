@@ -432,8 +432,8 @@ export default function PipelinePage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: clientesData }, { data: tarefasData }] = await Promise.all([
-      supabase.from("mm_clientes").select("*").order("id_cliente"),
-      supabase.from("mm_tarefas").select("*"),
+      supabase.from("mm_clientes").select("*").order("id_cliente").limit(500),
+      supabase.from("mm_tarefas").select("*").limit(2000),
     ]);
 
     const rawTarefas = (tarefasData ?? []) as Tarefa[];
@@ -739,7 +739,7 @@ export default function PipelinePage() {
         <Toast toast={toast} onClose={() => setToast(null)} />
       )}
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
 
         {/* ── Cabeçalho ── */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">

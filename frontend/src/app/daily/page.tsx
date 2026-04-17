@@ -323,8 +323,8 @@ export default function DailyPage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: c }, { data: t }] = await Promise.all([
-      supabase.from("mm_clientes").select("*"),
-      supabase.from("mm_tarefas").select("*"),
+      supabase.from("mm_clientes").select("*").limit(500),
+      supabase.from("mm_tarefas").select("*").limit(2000),
     ]);
     // Desduplicar clientes por nome_empresa — mantém o menor ID MM
     const rawClientes = (c ?? []) as Cliente[];
@@ -576,7 +576,7 @@ export default function DailyPage() {
         />
       )}
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-10">
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-10">
 
         {/* ── Título + Filtro ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
