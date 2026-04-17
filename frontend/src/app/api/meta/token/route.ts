@@ -10,16 +10,10 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const META_APP_ID     = process.env.META_APP_ID    ?? "";
 const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
-
-function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  return createClient(url, key);
-}
 
 export async function POST(req: NextRequest) {
   const { token } = await req.json().catch(() => ({})) as { token?: string };

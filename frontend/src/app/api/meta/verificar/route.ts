@@ -8,18 +8,12 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const META_VERSION   = process.env.META_API_VERSION ?? "v18.0";
 const META_BASE      = `https://graph.facebook.com/${META_VERSION}`;
 const META_APP_ID    = process.env.META_APP_ID    ?? "";
 const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
-
-function supabaseAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  return createClient(url, key);
-}
 
 async function getTokenFromDB(): Promise<string | null> {
   try {

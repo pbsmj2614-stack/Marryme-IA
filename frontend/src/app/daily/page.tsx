@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
+import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "@/lib/client-utils";
 import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,21 +64,6 @@ const TOMORROW = (() => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
-
-function formatDateFull(iso: string): string {
-  return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -323,24 +309,10 @@ export default function DailyPage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: c }, { data: t }] = await Promise.all([
-      supabase.from("mm_clientes").select("*").limit(500),
-      supabase.from("mm_tarefas").select("*").limit(2000),
+      supabase.from("mm_clientes").select("id,id_cliente,nome_empresa,plano,status,responsavel_mm,valor_contrato").limit(500),
+      supabase.from("mm_tarefas").select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes").limit(2000),
     ]);
-    // Desduplicar clientes por nome_empresa — mantém o menor ID MM
-    const rawClientes = (c ?? []) as Cliente[];
-    const seenNomes = new Map<string, Cliente>();
-    for (const cli of rawClientes) {
-      const key = cli.nome_empresa.toLowerCase().trim();
-      const existing = seenNomes.get(key);
-      if (!existing) {
-        seenNomes.set(key, cli);
-      } else {
-        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        const newNum   = parseInt(cli.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        if (newNum < existNum) seenNomes.set(key, cli);
-      }
-    }
-    setClientes(Array.from(seenNomes.values()));
+    setClientes(dedupClientesByNome((c ?? []) as Cliente[]));
     setTarefas((t ?? []) as Tarefa[]);
     setLoading(false);
   }, []);
@@ -421,7 +393,7 @@ export default function DailyPage() {
   }, [clientes]);
 
   // ── Helpers de status (declarados antes dos useMemo que os usam) ──
-  const isAtivo      = (s: string) => !/paus|encerr/i.test(s ?? "");
+  const isAtivo      = isStatusAtivo;
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
   const isAtrasado   = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 

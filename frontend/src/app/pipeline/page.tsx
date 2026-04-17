@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getStatusFromScore, getScoreColor } from "@/lib/healthScore";
+import { isPrazoVencido, formatDate, planoBadgeClass, planoLabel, isStatusAtivo, dedupClientesByNome, dedupTarefas } from "@/lib/client-utils";
 import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,36 +62,6 @@ const TODAY                      = new Date().toISOString().split("T")[0]; // YY
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 
-function isPrazoVencido(prazo: string | null, status: string) {
-  if (!prazo || status === "Finalizado") return false;
-  return prazo < TODAY;
-}
-
-function formatDate(isoDate: string | null) {
-  if (!isoDate) return "—";
-  // Add noon to avoid timezone shift
-  return new Date(isoDate + "T12:00:00").toLocaleDateString("pt-BR");
-}
-
-function planoBadgeClass(plano: string | null) {
-  switch (plano?.toLowerCase()) {
-    case "essencial":  return "bg-pink-900 text-pink-300";
-    case "growth":     return "bg-violet-900 text-violet-300";
-    case "enterprise": return "bg-amber-900 text-amber-300";
-    // legado
-    case "premium":    return "bg-purple-900 text-purple-300";
-    case "trial":      return "bg-gray-700 text-gray-300";
-    default:           return "bg-gray-700 text-gray-200";
-  }
-}
-
-function planoLabel(plano: string): string {
-  const map: Record<string, string> = {
-    essencial: "Essencial", growth: "Growth", enterprise: "Enterprise",
-    premium: "Premium", trial: "Trial",
-  };
-  return map[plano.toLowerCase()] ?? plano;
-}
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -432,33 +403,12 @@ export default function PipelinePage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: clientesData }, { data: tarefasData }] = await Promise.all([
-      supabase.from("mm_clientes").select("*").order("id_cliente").limit(500),
-      supabase.from("mm_tarefas").select("*").limit(2000),
+      supabase.from("mm_clientes").select("id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba").order("id_cliente").limit(500),
+      supabase.from("mm_tarefas").select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes").limit(2000),
     ]);
 
-    const rawTarefas = (tarefasData ?? []) as Tarefa[];
-    const seenT = new Set<string>();
-    const tarefas = rawTarefas.filter((t) => {
-      const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
-      if (seenT.has(key)) return false;
-      seenT.add(key);
-      return true;
-    });
-
-    // Desduplicar clientes por nome_empresa — mantém o menor ID MM
-    const seenNomes = new Map<string, Cliente>();
-    for (const c of (clientesData ?? []) as Cliente[]) {
-      const key = c.nome_empresa.toLowerCase().trim();
-      const existing = seenNomes.get(key);
-      if (!existing) {
-        seenNomes.set(key, c);
-      } else {
-        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        if (newNum < existNum) seenNomes.set(key, c);
-      }
-    }
-    const clientesDedup = Array.from(seenNomes.values());
+    const tarefas      = dedupTarefas((tarefasData ?? []) as Tarefa[]);
+    const clientesDedup = dedupClientesByNome((clientesData ?? []) as Cliente[]);
 
     const resultado: ClienteComMetricas[] = clientesDedup.map((c: Cliente) => {
       const tCliente    = tarefas.filter((t) => t.cliente_id === c.id_cliente);
