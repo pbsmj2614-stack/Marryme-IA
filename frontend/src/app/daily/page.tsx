@@ -306,10 +306,18 @@ export default function DailyPage() {
   // Atrasados: controla qual grupo está expandido
   const [atrasadosOpen,  setAtrasadosOpen]  = useState<Set<string>>(new Set());
   const [filtroResp,     setFiltroResp]     = useState("Todos");
+  const [busca,          setBusca]          = useState("");
+  const [buscaDelay,     setBuscaDelay]     = useState("");
   const [atrasadosExp,   setAtrasadosExp]   = useState(false);
   const [hojeExp,        setHojeExp]        = useState(false);
   const [semanaExp,      setSemanaExp]      = useState(false);
   const CARD_LIMIT = 10;
+
+  // Debounce busca 300ms
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDelay(busca), 300);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   // ── Load ──
   const loadData = useCallback(async () => {
@@ -497,17 +505,21 @@ export default function DailyPage() {
   }, [tarefasComCliente, filtroResp]);
 
   // ── Clientes com métricas (usa tarefasComCliente — já deduplicadas) ──
-  const clientesComMetricas = useMemo<ClienteComMetricas[]>(() =>
-    clientes.map((c) => {
-      const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
-      const fin        = t.filter(isFinalizado).length;
-      const atr        = t.filter(isAtrasado).length;
-      const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
-      const score      = totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0;
-      return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
-    }),
+  const clientesComMetricas = useMemo<ClienteComMetricas[]>(() => {
+    const q = buscaDelay.trim().toLowerCase();
+    return clientes
+      .filter((c) => !q || c.nome_empresa.toLowerCase().includes(q))
+      .map((c) => {
+        const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
+        const fin        = t.filter(isFinalizado).length;
+        const atr        = t.filter(isAtrasado).length;
+        const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
+        const score      = totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0;
+        return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
+      });
+  },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [clientes, tarefasComCliente]);
+  [clientes, tarefasComCliente, buscaDelay]);
 
   // ── Ranking: 5 piores scores (ativos) ──
   const ranking = useMemo(() =>
@@ -571,6 +583,23 @@ export default function DailyPage() {
           <div>
             <h1 className="text-2xl font-bold">Daily Interativo</h1>
             <p className="text-sm text-gray-500 mt-1 capitalize">{today}</p>
+          </div>
+
+          {/* Busca por cliente */}
+          <div className="relative flex items-center">
+            <svg className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="pl-8 pr-7 py-2 text-sm bg-[#242424] border border-[#444] text-gray-200 rounded-lg placeholder-gray-600 focus:outline-none focus:border-[#666] transition w-44"
+            />
+            {busca && (
+              <button onClick={() => setBusca("")} className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs">✕</button>
+            )}
           </div>
 
           {/* Filtro por responsável */}

@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import type { Prestador, Roteiro } from "@/lib/types";
 import Header from "@/components/Header";
 import PrestadorCard from "@/components/PrestadorCard";
 import AtualizarTodosButton from "@/components/AtualizarTodosButton";
+import SearchInput from "@/components/SearchInput";
 import { createSupabaseServer } from "@/lib/supabase-server";
 
 const TABS = [
@@ -16,9 +18,9 @@ const TABS = [
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string }>;
 }) {
-  const { tab = "todos" } = await searchParams;
+  const { tab = "todos", q = "" } = await searchParams;
   const supabase = await createSupabaseServer();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -57,6 +59,9 @@ export default async function DashboardPage({
     if (tab === "aguardando") return total > 0 && aprovados === 0;
     if (tab === "sem_roteiro") return total === 0;
     return true;
+  }).filter((p) => {
+    if (!q.trim()) return true;
+    return p.nome_artistico.toLowerCase().includes(q.toLowerCase());
   });
 
   return (
@@ -64,9 +69,12 @@ export default async function DashboardPage({
       <Header user={user} />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
           <h2 className="text-xl font-bold text-gray-800">Prestadores</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Suspense>
+              <SearchInput placeholder="Buscar prestador..." className="w-52" />
+            </Suspense>
             <AtualizarTodosButton />
             <Link
               href="/novo"
