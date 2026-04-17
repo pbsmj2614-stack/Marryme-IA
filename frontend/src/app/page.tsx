@@ -38,7 +38,20 @@ export default async function DashboardPage({
     entrevistas: { dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null; criado_em: string }[];
     relatorios_campanha: { health_score: number | null; gerado_em: string }[];
   };
+  const FASES_INATIVAS = ["Pausado", "Churn"];
+
   const lista = (prestadores ?? []) as PrestadorRow[];
+
+  function getFaseProjeto(p: PrestadorRow): string | null {
+    const ultima = [...(p.entrevistas ?? [])].sort(
+      (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+    )[0];
+    return ultima?.dados_json?.fase_projeto ?? null;
+  }
+
+  function isAtivo(p: PrestadorRow) {
+    return !FASES_INATIVAS.includes(getFaseProjeto(p) ?? "");
+  }
 
   function getStatus(p: PrestadorRow) {
     const total = p.roteiros?.length ?? 0;
@@ -46,14 +59,17 @@ export default async function DashboardPage({
     return { total, aprovados };
   }
 
+  // Apenas ativos (exclui Pausado/Churn) — inativos só aparecem na Pipeline
+  const listaAtiva = lista.filter(isAtivo);
+
   const contagens = {
-    todos: lista.length,
-    validados: lista.filter((p) => getStatus(p).aprovados > 0).length,
-    aguardando: lista.filter((p) => { const s = getStatus(p); return s.total > 0 && s.aprovados === 0; }).length,
-    sem_roteiro: lista.filter((p) => getStatus(p).total === 0).length,
+    todos:      listaAtiva.length,
+    validados:  listaAtiva.filter((p) => getStatus(p).aprovados > 0).length,
+    aguardando: listaAtiva.filter((p) => { const s = getStatus(p); return s.total > 0 && s.aprovados === 0; }).length,
+    sem_roteiro: listaAtiva.filter((p) => getStatus(p).total === 0).length,
   };
 
-  const filtrada = lista.filter((p) => {
+  const filtrada = listaAtiva.filter((p) => {
     const { total, aprovados } = getStatus(p);
     if (tab === "validados") return aprovados > 0;
     if (tab === "aguardando") return total > 0 && aprovados === 0;

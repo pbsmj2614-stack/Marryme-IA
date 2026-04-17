@@ -508,7 +508,7 @@ export default function DailyPage() {
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(() => {
     const q = buscaDelay.trim().toLowerCase();
     return clientes
-      .filter((c) => !q || c.nome_empresa.toLowerCase().includes(q))
+      .filter((c) => isAtivo(c.status) && (!q || c.nome_empresa.toLowerCase().includes(q)))
       .map((c) => {
         const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
         const fin        = t.filter(isFinalizado).length;
