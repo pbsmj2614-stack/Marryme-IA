@@ -77,13 +77,21 @@ export default async function PrestadorPage({
     .limit(1)
     .single();
 
-  // Buscar dados de campanha (paralelo)
-  const { data: relatorios } = await supabase
-    .from("relatorios_campanha")
-    .select("*")
-    .eq("prestador_id", id)
-    .order("gerado_em", { ascending: false })
-    .limit(10);
+  // Buscar dados de campanha + última análise IA (paralelo)
+  const [{ data: relatorios }, { data: analises }] = await Promise.all([
+    supabase
+      .from("relatorios_campanha")
+      .select("*")
+      .eq("prestador_id", id)
+      .order("gerado_em", { ascending: false })
+      .limit(10),
+    supabase
+      .from("analises_ia")
+      .select("dados_json, gerado_em")
+      .eq("prestador_id", id)
+      .order("gerado_em", { ascending: false })
+      .limit(1),
+  ]);
 
   const p = prestador as PrestadorMeta;
   const lista = (roteiros ?? []) as Roteiro[];
@@ -91,6 +99,10 @@ export default async function PrestadorPage({
   const dados = entrevista?.dados_json as DadosEntrevista | undefined;
   const historicoRelatorios = (relatorios ?? []) as RelatorioCampanha[];
   const ultimoRelatorio = historicoRelatorios[0] ?? null;
+  const ultimaAnalise = analises?.[0]?.dados_json ?? null;
+  const ultimaAnaliseEm = analises?.[0]?.gerado_em
+    ? new Date(analises[0].gerado_em).toLocaleString("pt-BR")
+    : null;
 
   // ── Textos para cópia por seção ─────────────────────────────────────────────
   const textoAnalise = ultimo?.analise_estrategica
@@ -325,6 +337,8 @@ export default async function PrestadorPage({
             metaUltimaSync={p.meta_ultima_sync}
             ultimoRelatorio={ultimoRelatorio}
             historico={historicoRelatorios}
+            ultimaAnalise={ultimaAnalise}
+            ultimaAnaliseEm={ultimaAnaliseEm}
           />
         )}
 

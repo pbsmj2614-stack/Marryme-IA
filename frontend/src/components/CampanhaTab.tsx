@@ -7,6 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha } from "@/lib/types";
+import AnaliseIA from "@/components/AnaliseIA";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,8 @@ interface Props {
   metaUltimaSync: string | null;
   ultimoRelatorio: RelatorioCampanha | null;
   historico: RelatorioCampanha[];
+  ultimaAnalise?: Record<string, unknown> | null;
+  ultimaAnaliseEm?: string | null;
 }
 
 export default function CampanhaTab({
@@ -231,6 +234,8 @@ export default function CampanhaTab({
   metaUltimaSync,
   ultimoRelatorio,
   historico,
+  ultimaAnalise,
+  ultimaAnaliseEm,
 }: Props) {
   const router = useRouter();
   const [sincronizando, setSincronizando] = useState(false);
@@ -516,6 +521,14 @@ export default function CampanhaTab({
               </div>
             </div>
           )}
+
+          {/* ── Bloco 7: Análise IA ───────────────────────────────────────── */}
+          <AnaliseIA
+            prestadorId={prestadorId}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ultimaAnalise={ultimaAnalise as any}
+            ultimaAnaliseEm={ultimaAnaliseEm}
+          />
         </>
       )}
     </div>
