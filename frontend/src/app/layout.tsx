@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Lora } from "next/font/google";
+import Image from "next/image";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -14,7 +15,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} ${lora.variable} font-sans bg-gray-50 text-gray-900 antialiased`}>
-        {children}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center"
+          style={{ mixBlendMode: "multiply" }}
+        >
+          <Image
+            src="/logo-marryme.png"
+            alt=""
+            width={520}
+            height={260}
+            className="opacity-[0.045] select-none"
+            priority={false}
+          />
+        </div>
+        <div className="relative z-10">
+          {children}
+        </div>
       </body>
     </html>
   );
