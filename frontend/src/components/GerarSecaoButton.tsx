@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { extractFunctionError } from "@/lib/error-utils";
 
 type Secao = "analise_estrategica" | "roteiro_sugerido" | "copy_anuncios" | "direcao_criativa";
 
@@ -44,20 +45,7 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
       });
 
       if (error) {
-        let detalhe = error.message ?? "Erro ao gerar seção";
-        // Lê o body real da resposta HTTP (context é o Response object, ainda não consumido)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (error as any).context;
-        if (ctx instanceof Response) {
-          try {
-            const body = await ctx.clone().json();
-            if (body?.error) detalhe = body.error;
-            else if (body?.message) detalhe = body.message;
-          } catch {
-            try { detalhe = (await ctx.clone().text()) || detalhe; } catch { /* ignora */ }
-          }
-        }
-        setErro(detalhe);
+        setErro(await extractFunctionError(error, "Erro ao gerar seção"));
         setLoading(false);
         return;
       }

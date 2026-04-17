@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
 import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "@/lib/client-utils";
+import { RESPONSAVEIS } from "@/lib/constants";
 import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,8 +48,6 @@ interface ClienteComMetricas extends Cliente {
 }
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-
-const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê", "Giovanni"];
 
 const TODAY = new Date().toISOString().split("T")[0];
 const WEEK_END = (() => {

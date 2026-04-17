@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { extractFunctionError } from "@/lib/error-utils";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 import Header from "@/components/Header";
@@ -329,13 +330,7 @@ export default function NovoPage() {
       });
 
       if (fnError) {
-        let detalhe = fnError.message ?? "Erro ao gerar roteiro";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (fnError as any).context;
-        if (ctx instanceof Response) {
-          try { const b = await ctx.clone().json(); if (b?.error) detalhe = b.error; } catch { /* ignora */ }
-        }
-        throw new Error(detalhe);
+        throw new Error(await extractFunctionError(fnError, "Erro ao gerar roteiro"));
       }
       if (!fnData?.roteiro) throw new Error(fnData?.error ?? "Roteiro não retornado pela IA");
 

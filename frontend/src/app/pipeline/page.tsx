@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getStatusFromScore, getScoreColor } from "@/lib/healthScore";
 import { isPrazoVencido, formatDate, planoBadgeClass, planoLabel, isStatusAtivo, dedupClientesByNome, dedupTarefas } from "@/lib/client-utils";
+import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ interface ClienteComMetricas extends Cliente {
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados", "Encerrados"];
-const RESPONSAVEIS               = ["Todos", "Paulo", "Murilo", "Kauê", "Giovanni"];
+const RESPONSAVEIS               = ["Todos", ...RESPONSAVEIS_BASE] as const;
 const TODAY                      = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

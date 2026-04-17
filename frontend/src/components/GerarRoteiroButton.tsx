@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { extractFunctionError } from "@/lib/error-utils";
 
 export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: string }) {
   const router = useRouter();
@@ -22,20 +23,7 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
       });
 
       if (fnError) {
-        let detalhe = fnError.message ?? "Erro ao gerar roteiro";
-        // Lê o body real da resposta HTTP (context é o Response object, ainda não consumido)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ctx = (fnError as any).context;
-        if (ctx instanceof Response) {
-          try {
-            const body = await ctx.clone().json();
-            if (body?.error) detalhe = body.error;
-            else if (body?.message) detalhe = body.message;
-          } catch {
-            try { detalhe = (await ctx.clone().text()) || detalhe; } catch { /* ignora */ }
-          }
-        }
-        setErro(detalhe);
+        setErro(await extractFunctionError(fnError, "Erro ao gerar roteiro"));
         setLoading(false);
         return;
       }
