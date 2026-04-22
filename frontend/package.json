@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/database.ts",
     "prepare": "cd .. && husky frontend/.husky"
   },
   "lint-staged": {
@@ -29,6 +30,8 @@
     "@supabase/supabase-js": "^2.45.4",
     "docx": "^9.6.1",
     "next": "14.2.15",
+    "posthog-js": "^1.370.1",
+    "posthog-node": "^5.29.5",
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^3.8.1"
@@ -36,6 +39,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
+    "@sentry/nextjs": "^10.49.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

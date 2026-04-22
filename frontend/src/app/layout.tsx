@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Lora } from "next/font/google";
 import Image from "next/image";
+import { PostHogProvider } from "@/components/PostHogProvider";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -31,7 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             priority={false}
           />
         </div>
-        <div className="relative z-10">{children}</div>
+        <div className="relative z-10">
+          <PostHogProvider>{children}</PostHogProvider>
+        </div>
       </body>
     </html>
   );
