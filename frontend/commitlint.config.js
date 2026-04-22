@@ -1,0 +1,38 @@
+/** @type {import('@commitlint/types').UserConfig} */
+export default {
+  extends: ["@commitlint/config-conventional"],
+  rules: {
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "fase0",
+        "fase1",
+        "fase2",
+        "fase3",
+        "fase4",
+        "fase5",
+        "fase6",
+        "fase7",
+        "fase8",
+        "fase9",
+        "fase10",
+        "fase11",
+        "fase12",
+        "prestadores",
+        "pipeline",
+        "daily",
+        "dashboard",
+        "roteiros",
+        "meta-ads",
+        "sheets",
+        "auth",
+        "admin",
+        "deps",
+        "ci",
+      ],
+    ],
+    "scope-empty": [1, "never"],
+    "subject-case": [2, "never", ["upper-case", "pascal-case", "start-case"]],
+  },
+};
