@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import ExportarButton from "@/components/ExportarButton";
+import { ConfirmDialog } from "@/components/ui";
 import type { Categoria } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 
@@ -92,6 +93,9 @@ export default function PrestadorCard({
   const [savingFase, setSavingFase] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  type DialogState = { type: "none" } | { type: "rename" } | { type: "delete" };
+  const [dialog, setDialog] = useState<DialogState>({ type: "none" });
+
   const temRoteiro = total > 0;
 
   // Extrai só a primeira cidade (antes de " (", " -" ou ",")
@@ -127,10 +131,14 @@ export default function PrestadorCard({
     setLoadingAcao(null);
   }
 
-  async function handleRenomear() {
+  function handleRenomear() {
     setMenuOpen(false);
-    const novoNome = window.prompt("Novo nome:", nome);
-    if (!novoNome || novoNome.trim() === nome) return;
+    setDialog({ type: "rename" });
+  }
+
+  async function confirmRenomear(novoNome: string) {
+    setDialog({ type: "none" });
+    if (!novoNome.trim() || novoNome.trim() === nome) return;
     setLoadingAcao("renomear");
     const supabase = createClient();
     await supabase
@@ -193,14 +201,13 @@ export default function PrestadorCard({
     router.push(`/prestador/${novo.id}`);
   }
 
-  async function handleExcluir() {
+  function handleExcluir() {
     setMenuOpen(false);
-    if (
-      !window.confirm(
-        `Excluir "${nome}"?\n\nEsta ação remove o prestador e todos os roteiros permanentemente.`
-      )
-    )
-      return;
+    setDialog({ type: "delete" });
+  }
+
+  async function confirmExcluir() {
+    setDialog({ type: "none" });
     setLoadingAcao("excluir");
     const supabase = createClient();
     await supabase.from("prestadores").delete().eq("id", prestadorId);
@@ -540,6 +547,27 @@ export default function PrestadorCard({
           </svg>
         </div>
       )}
+
+      <ConfirmDialog
+        kind="prompt"
+        open={dialog.type === "rename"}
+        title="Renomear prestador"
+        defaultValue={nome}
+        confirmLabel="Renomear"
+        onConfirm={confirmRenomear}
+        onCancel={() => setDialog({ type: "none" })}
+      />
+
+      <ConfirmDialog
+        kind="confirm"
+        open={dialog.type === "delete"}
+        title={`Excluir "${nome}"?`}
+        message="Esta ação remove o prestador e todos os roteiros permanentemente."
+        confirmLabel="Excluir"
+        variant="danger"
+        onConfirm={confirmExcluir}
+        onCancel={() => setDialog({ type: "none" })}
+      />
     </div>
   );
 }

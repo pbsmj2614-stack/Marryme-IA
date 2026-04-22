@@ -8,7 +8,7 @@ import { RESPONSAVEIS } from "@/lib/constants";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 import Header from "@/components/Header";
-import type { User } from "@supabase/supabase-js";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -184,7 +184,7 @@ function CharField({
 
 export default function NovoPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: userLoading } = useCurrentUser();
   const [dados, setDados] = useState<DadosEntrevista>({
     ...INITIAL,
     plano: "Essencial",
@@ -198,19 +198,8 @@ export default function NovoPage() {
   const acaoRef = useRef<"cadastrar" | "gerar">("cadastrar");
 
   useEffect(() => {
-    async function init() {
-      const supabase = createClient();
-      const {
-        data: { user: u },
-      } = await supabase.auth.getUser();
-      if (!u) {
-        router.push("/login");
-        return;
-      }
-      setUser(u);
-    }
-    init();
-  }, [router]);
+    if (!userLoading && !user) router.push("/login");
+  }, [user, userLoading, router]);
 
   function set(name: keyof DadosEntrevista, value: string) {
     const val = name === "whatsapp" ? formatarTelefone(value) : value;
