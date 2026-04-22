@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase";
@@ -15,7 +15,8 @@ import {
   dedupTarefas,
 } from "@/lib/client-utils";
 import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
-import type { User } from "@supabase/supabase-js";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -423,11 +424,43 @@ const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
   { key: "statusScore", label: "Status" },
 ];
 
+function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteComMetricas[] {
+  const tarefas = dedupTarefas(rawTarefas);
+  const clientesDedup = dedupClientesByNome(rawClientes);
+  const hoje = new Date().toISOString().split("T")[0];
+  return clientesDedup.map((c) => {
+    const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
+    const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+    const atrasadas = tCliente.filter(
+      (t) =>
+        !t.check_feito &&
+        t.status !== "Finalizado" &&
+        t.status !== "Cancelado" &&
+        (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
+    ).length;
+    const total = tCliente.length;
+    const totalAtivo = tCliente.filter((t) => t.status !== "Cancelado").length;
+    const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
+    return {
+      ...c,
+      total_tarefas: total,
+      finalizadas,
+      atrasadas,
+      score,
+      statusScore: getStatusFromScore(score) as StatusScore,
+      tarefas: tCliente,
+    };
+  });
+}
+
 export default function PipelinePage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: userLoading } = useCurrentUser();
+  const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
+  const invalidatePipeline = useInvalidatePipeline();
+
   const [clientes, setClientes] = useState<ClienteComMetricas[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [filtro, setFiltro] = useState<FiltroStatus>("Todos");
@@ -449,70 +482,16 @@ export default function PipelinePage() {
   });
   const [savingTarefa, setSavingTarefa] = useState(false);
 
-  // ── Load data ──
-  const loadData = useCallback(async () => {
-    const supabase = createClient();
-    const [{ data: clientesData }, { data: tarefasData }] = await Promise.all([
-      supabase
-        .from("mm_clientes")
-        .select(
-          "id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba"
-        )
-        .order("id_cliente")
-        .limit(500),
-      supabase
-        .from("mm_tarefas")
-        .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
-        .limit(2000),
-    ]);
-
-    const tarefas = dedupTarefas((tarefasData ?? []) as Tarefa[]);
-    const clientesDedup = dedupClientesByNome((clientesData ?? []) as Cliente[]);
-
-    const resultado: ClienteComMetricas[] = clientesDedup.map((c: Cliente) => {
-      const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-      const hoje = new Date().toISOString().split("T")[0];
-      const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
-      const atrasadas = tCliente.filter(
-        (t) =>
-          !t.check_feito &&
-          t.status !== "Finalizado" &&
-          t.status !== "Cancelado" &&
-          (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
-      ).length;
-      const total = tCliente.length;
-      const totalAtivo = tCliente.filter((t) => t.status !== "Cancelado").length;
-      const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
-      return {
-        ...c,
-        total_tarefas: total,
-        finalizadas,
-        atrasadas,
-        score,
-        statusScore: getStatusFromScore(score) as StatusScore,
-        tarefas: tCliente,
-      };
-    });
-
-    setClientes(resultado);
-    setLoading(false);
-  }, []);
-
+  // Sync query data → local state (preserva optimistic updates entre fetches)
   useEffect(() => {
-    async function init() {
-      const supabase = createClient();
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      if (!authUser) {
-        router.push("/login");
-        return;
-      }
-      setUser(authUser);
-      await loadData();
-    }
-    init();
-  }, [router, loadData]);
+    if (rawData)
+      setClientes(buildClientes(rawData.clientes as Cliente[], rawData.tarefas as Tarefa[]));
+  }, [rawData]);
+
+  // Redirect se não autenticado
+  useEffect(() => {
+    if (!userLoading && !user) router.push("/login");
+  }, [user, userLoading, router]);
 
   // ── Sync ──
   async function handleSync() {
@@ -530,7 +509,7 @@ export default function PipelinePage() {
           msg: `${result.clientes} clientes · ${result.tarefas} tarefas · ${result.erros.length} erro(s): ${result.erros[0]}`,
         });
       }
-      await loadData();
+      await invalidatePipeline();
     } catch (err) {
       setToast({ type: "error", msg: String(err) });
     } finally {
@@ -656,7 +635,7 @@ export default function PipelinePage() {
       };
       setToast({ type: "success", msg: `Cliente ${labels[novoStatus]}` });
       setExpandedId(null);
-      await loadData();
+      await invalidatePipeline();
     }
   }
 
@@ -682,7 +661,7 @@ export default function PipelinePage() {
         status: "Não iniciado",
         observacoes: "",
       });
-      await loadData();
+      await invalidatePipeline();
     } catch (err) {
       setToast({
         type: "error",

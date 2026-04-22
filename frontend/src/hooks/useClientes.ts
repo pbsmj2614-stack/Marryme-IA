@@ -5,8 +5,10 @@ import {
   fetchClientes,
   fetchClientesAtivos,
   fetchTarefasByCliente,
+  fetchPipelineRaw,
   type ClienteComTarefas,
   type TarefaRow,
+  type PipelineRaw,
 } from "@/lib/queries";
 
 export const clientesKeys = {
@@ -40,4 +42,23 @@ export function useTarefasByCliente(clienteId: string) {
 export function useInvalidateClientes() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: clientesKeys.all });
+}
+
+// ─── Pipeline ─────────────────────────────────────────────────────────────────
+
+export const pipelineKeys = {
+  raw: ["pipeline-data"] as const,
+};
+
+export function usePipelineRaw(enabled = true) {
+  return useQuery<PipelineRaw>({
+    queryKey: pipelineKeys.raw,
+    queryFn: fetchPipelineRaw,
+    enabled,
+  });
+}
+
+export function useInvalidatePipeline() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: pipelineKeys.raw });
 }
