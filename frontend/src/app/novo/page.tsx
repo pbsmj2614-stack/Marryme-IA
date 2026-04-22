@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { extractFunctionError } from "@/lib/error-utils";
+import { RESPONSAVEIS } from "@/lib/constants";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 import Header from "@/components/Header";
@@ -28,7 +29,7 @@ const FASES = [
   "Pausado",
   "Churn",
 ];
-const RESPS = ["Paulo", "Murilo", "Kauê", "Giovanni"];
+const RESPS = RESPONSAVEIS;
 
 const INITIAL: DadosEntrevista = {
   nome_artistico: "",
