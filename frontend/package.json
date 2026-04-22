@@ -14,6 +14,9 @@
     "format:check": "prettier --check .",
     "db:types": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/database.ts",
     "reconcile:clients": "npx tsx scripts/reconcile-clients.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepare": "cd .. && husky frontend/.husky"
   },
   "lint-staged": {
@@ -48,6 +51,7 @@
     "@types/react-dom": "^18",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
+    "@vitest/coverage-v8": "^4.1.5",
     "autoprefixer": "^10.0.1",
     "dotenv": "^17.4.2",
     "eslint": "^8",
@@ -59,6 +63,7 @@
     "prettier": "^3.8.3",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }
