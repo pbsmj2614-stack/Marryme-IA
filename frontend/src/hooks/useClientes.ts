@@ -6,9 +6,11 @@ import {
   fetchClientesAtivos,
   fetchTarefasByCliente,
   fetchPipelineRaw,
+  fetchDashboardRaw,
   type ClienteComTarefas,
   type TarefaRow,
   type PipelineRaw,
+  type DashboardRaw,
 } from "@/lib/queries";
 
 export const clientesKeys = {
@@ -61,4 +63,24 @@ export function usePipelineRaw(enabled = true) {
 export function useInvalidatePipeline() {
   const queryClient = useQueryClient();
   return () => queryClient.invalidateQueries({ queryKey: pipelineKeys.raw });
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+export const dashboardKeys = {
+  raw: ["dashboard-data"] as const,
+};
+
+export function useDashboardRaw(enabled = true) {
+  return useQuery<DashboardRaw>({
+    queryKey: dashboardKeys.raw,
+    queryFn: fetchDashboardRaw,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useInvalidateDashboard() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: dashboardKeys.raw });
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { createClient } from "@/lib/supabase";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useDashboardRaw, useInvalidateDashboard } from "@/hooks/useClientes";
+import { PageLoading } from "@/components/ui";
 import {
   BarChart,
   Bar,
@@ -15,7 +17,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import type { User } from "@supabase/supabase-js";
+
 import type { KPIsCampanha, CampanhaInsight, DadosRelatorio } from "@/lib/types";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
@@ -455,11 +457,69 @@ const TABLE_COLS: { key: SortKey | null; label: string }[] = [
   { key: null, label: "" },
 ];
 
+function buildDashboardRows(raw: import("@/lib/queries").DashboardRaw): PrestadorRow[] {
+  const mmIdMap = new Map<string, import("@/lib/queries").DashboardPrestadorRaw>();
+  const nomeMap = new Map<string, import("@/lib/queries").DashboardPrestadorRaw>();
+  for (const p of raw.prestadores) {
+    const ents = (p.entrevistas ?? []).sort(
+      (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+    );
+    const mmId = ents[0]?.dados_json?.mm_id;
+    if (mmId) mmIdMap.set(mmId.toUpperCase().trim(), p);
+    const nomeKey = p.nome_artistico.toLowerCase().trim();
+    if (!nomeMap.has(nomeKey)) nomeMap.set(nomeKey, p);
+  }
+
+  const seenNomes = new Map<string, import("@/lib/queries").DashboardClienteRaw>();
+  for (const c of raw.clientes) {
+    const key = c.nome_empresa.toLowerCase().trim();
+    const existing = seenNomes.get(key);
+    if (!existing) {
+      seenNomes.set(key, c);
+    } else {
+      const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      const newNum = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      if (newNum < existNum) seenNomes.set(key, c);
+    }
+  }
+
+  return Array.from(seenNomes.values()).map((c) => {
+    const prest =
+      mmIdMap.get(c.id_cliente.toUpperCase().trim()) ??
+      nomeMap.get(c.nome_empresa.toLowerCase().trim()) ??
+      null;
+    const relatorios = (prest?.relatorios_campanha ?? []) as RelatorioRow[];
+    const ultimoRel =
+      relatorios.sort(
+        (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()
+      )[0] ?? null;
+    const ents = (prest?.entrevistas ?? []).sort(
+      (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+    );
+    return {
+      id_cliente: c.id_cliente,
+      nome: c.nome_empresa,
+      plano: c.plano ?? ents[0]?.dados_json?.plano ?? null,
+      fase_projeto: c.fase_projeto ?? ents[0]?.dados_json?.fase_projeto ?? null,
+      status_cliente: c.status ?? "Ativo",
+      id: prest?.id ?? null,
+      categoria: prest?.categoria ?? null,
+      meta_ad_account_id: prest?.meta_ad_account_id ?? null,
+      meta_sync_status: prest?.meta_sync_status ?? null,
+      meta_ultima_sync: prest?.meta_ultima_sync ?? null,
+      relatorio: ultimoRel,
+    };
+  });
+}
+
 export default function DashboardBIPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: userLoading } = useCurrentUser();
+  const { data: rawData, isLoading: dataLoading } = useDashboardRaw(!!user);
+  const invalidateDashboard = useInvalidateDashboard();
+
   const [prestadores, setPrestadores] = useState<PrestadorRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = userLoading || dataLoading;
   const [filtro, setFiltro] = useState<FiltroStatus>("Todos");
   const [sortKey, setSortKey] = useState<SortKey | null>("health_score");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -469,124 +529,13 @@ export default function DashboardBIPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const TABLE_LIMIT = 8;
 
-  const loadData = useCallback(async () => {
-    const supabase = createClient();
-
-    // ── 1. mm_clientes (source of truth para contagem) ──────────────────────────
-    const { data: clientesData } = await supabase
-      .from("mm_clientes")
-      .select("id_cliente, nome_empresa, plano, fase_projeto, status")
-      .order("id_cliente");
-
-    // ── 2. prestadores + entrevistas (mm_id) + relatórios ──────────────────────
-    const { data: prestData } = await supabase
-      .from("prestadores")
-      .select(
-        "id, nome_artistico, categoria, meta_ad_account_id, meta_sync_status, meta_ultima_sync, entrevistas(dados_json, criado_em), relatorios_campanha(id, health_score, dados_json, periodo_inicio, periodo_fim, gerado_em)"
-      );
-
-    // ── 3. Montar mapa mm_id → prestador ────────────────────────────────────────
-    type PrestRaw = {
-      id: string;
-      nome_artistico: string;
-      categoria: string;
-      meta_ad_account_id: string | null;
-      meta_sync_status: string | null;
-      meta_ultima_sync: string | null;
-      entrevistas: Array<{
-        dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null;
-        criado_em: string;
-      }>;
-      relatorios_campanha: RelatorioRow[];
-    };
-    const mmIdMap = new Map<string, PrestRaw>();
-    const nomeMap = new Map<string, PrestRaw>(); // fallback: nome_artistico normalizado
-    for (const p of (prestData ?? []) as PrestRaw[]) {
-      const ents = (p.entrevistas ?? []).sort(
-        (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-      );
-      const mmId = ents[0]?.dados_json?.mm_id;
-      if (mmId) mmIdMap.set(mmId.toUpperCase().trim(), p);
-      // Always build name map (first occurrence wins; mmIdMap takes priority later)
-      const nomeKey = p.nome_artistico.toLowerCase().trim();
-      if (!nomeMap.has(nomeKey)) nomeMap.set(nomeKey, p);
-    }
-
-    // ── 4. Desduplicar mm_clientes por nome_empresa ─────────────────────────────
-    type ClienteRaw = {
-      id_cliente: string;
-      nome_empresa: string;
-      plano: string | null;
-      fase_projeto: string | null;
-      status: string | null;
-    };
-    const seenNomes = new Map<string, ClienteRaw>();
-    for (const c of clientesData ?? []) {
-      const key = c.nome_empresa.toLowerCase().trim();
-      const existing = seenNomes.get(key);
-      if (!existing) {
-        seenNomes.set(key, c);
-      } else {
-        const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        const newNum = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-        if (newNum < existNum) seenNomes.set(key, c);
-      }
-    }
-    const clientesDedup = Array.from(seenNomes.values());
-
-    // ── 5. Construir rows unificados ────────────────────────────────────────────
-    const rows: PrestadorRow[] = clientesDedup.map((c) => {
-      const prest =
-        mmIdMap.get(c.id_cliente.toUpperCase().trim()) ??
-        nomeMap.get(c.nome_empresa.toLowerCase().trim()) ??
-        null;
-      const relatorios = (prest?.relatorios_campanha ?? []) as RelatorioRow[];
-      const ultimoRel =
-        relatorios.sort(
-          (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()
-        )[0] ?? null;
-
-      // plano/fase: preferir mm_clientes, depois entrevista do prestador
-      const ents = (prest?.entrevistas ?? []).sort(
-        (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-      );
-      const planoFinal = c.plano ?? ents[0]?.dados_json?.plano ?? null;
-      const faseFinal = c.fase_projeto ?? ents[0]?.dados_json?.fase_projeto ?? null;
-
-      return {
-        id_cliente: c.id_cliente,
-        nome: c.nome_empresa,
-        plano: planoFinal,
-        fase_projeto: faseFinal,
-        status_cliente: c.status ?? "Ativo",
-        id: prest?.id ?? null,
-        categoria: prest?.categoria ?? null,
-        meta_ad_account_id: prest?.meta_ad_account_id ?? null,
-        meta_sync_status: prest?.meta_sync_status ?? null,
-        meta_ultima_sync: prest?.meta_ultima_sync ?? null,
-        relatorio: ultimoRel,
-      };
-    });
-
-    setPrestadores(rows);
-    setLoading(false);
-  }, []);
+  useEffect(() => {
+    if (rawData) setPrestadores(buildDashboardRows(rawData));
+  }, [rawData]);
 
   useEffect(() => {
-    async function init() {
-      const supabase = createClient();
-      const {
-        data: { user: u },
-      } = await supabase.auth.getUser();
-      if (!u) {
-        router.push("/login");
-        return;
-      }
-      setUser(u);
-      await loadData();
-    }
-    init();
-  }, [router, loadData]);
+    if (!userLoading && !user) router.push("/login");
+  }, [user, userLoading, router]);
 
   // ── Sincronizar individual (recebe prestador uuid, não id_cliente) ──
   async function handleSincronizar(prestadorId: string) {
@@ -614,7 +563,7 @@ export default function DashboardBIPage() {
           type: "success",
           msg: `Dados atualizados · Health Score: ${data.health_score ?? "—"}`,
         });
-        await loadData();
+        await invalidateDashboard();
       }
     } catch (e) {
       setToast({
@@ -729,13 +678,7 @@ export default function DashboardBIPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <p className="text-gray-400 animate-pulse">Carregando dashboard...</p>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
 
   const visiveis = tableExpanded ? filtrados : filtrados.slice(0, TABLE_LIMIT);
 
@@ -752,7 +695,7 @@ export default function DashboardBIPage() {
               Health score calculado por CTR Link, Frequência, CPM e Hook Rate das campanhas
             </p>
           </div>
-          <AtualizarTodosBtn onDone={loadData} />
+          <AtualizarTodosBtn onDone={invalidateDashboard} />
         </div>
 
         {/* ── Cards de métricas ── */}

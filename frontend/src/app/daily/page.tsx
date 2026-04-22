@@ -10,6 +10,7 @@ import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "
 import { RESPONSAVEIS } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
+import { PageLoading } from "@/components/ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -553,13 +554,7 @@ export default function DailyPage() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <p className="text-gray-400 animate-pulse">Carregando daily...</p>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
 
   const today = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",

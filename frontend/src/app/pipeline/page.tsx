@@ -17,6 +17,7 @@ import {
 import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
+import { PageLoading } from "@/components/ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -736,13 +737,7 @@ export default function PipelinePage() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <p className="text-gray-400 animate-pulse">Carregando pipeline...</p>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white">

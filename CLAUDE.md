@@ -50,33 +50,49 @@ MarryMeIA_claude/
         │   ├── importSheets.ts       # Sincronização Sheets → Supabase
         │   ├── exportDocx.ts         # Geração de relatório DOCX
         │   └── seedDashboard.ts      # Seed de dados de exemplo (dev only)
-        └── components/
-            ├── Header.tsx
-            ├── PrestadorCard.tsx
-            ├── AnaliseIA.tsx
-            ├── CampanhaTab.tsx
-            ├── RoteiroCard.tsx
-            ├── SearchInput.tsx
-            ├── GerarRoteiroButton.tsx
-            ├── GerarSecaoButton.tsx
-            ├── RefazerRoteiroButton.tsx
-            ├── AprovarButton.tsx
-            ├── EditarEntrevistaForm.tsx
-            ├── ExportarButton.tsx
-            ├── ExcluirPrestadorButton.tsx
-            ├── AtualizarTodosButton.tsx
-            └── CopiarButton.tsx
+        ├── components/
+        │   ├── Header.tsx
+        │   ├── Can.tsx               # Gate de UI baseado em role
+        │   ├── QueryProvider.tsx     # TanStack Query provider
+        │   ├── PostHogProvider.tsx
+        │   ├── PrestadorCard.tsx
+        │   ├── AnaliseIA.tsx
+        │   ├── CampanhaTab.tsx
+        │   ├── RoteiroCard.tsx
+        │   ├── SearchInput.tsx
+        │   ├── GerarRoteiroButton.tsx
+        │   ├── GerarSecaoButton.tsx
+        │   ├── RefazerRoteiroButton.tsx
+        │   ├── AprovarButton.tsx
+        │   ├── EditarEntrevistaForm.tsx
+        │   ├── ExportarButton.tsx
+        │   ├── ExcluirPrestadorButton.tsx
+        │   ├── AtualizarTodosButton.tsx
+        │   ├── CopiarButton.tsx
+        │   └── ui/                   # Design system
+        │       ├── index.ts
+        │       ├── PageHeader.tsx
+        │       ├── StatusBadge.tsx
+        │       ├── EmptyState.tsx
+        │       └── LoadingSpinner.tsx
+        └── hooks/
+            ├── useCurrentUser.ts     # Auth hook
+            ├── useRole.ts            # Role hierarchy hook
+            └── useClientes.ts        # TanStack Query hooks (clientes, pipeline, dashboard)
 ```
 
 ## Scripts disponíveis (frontend/)
 ```bash
-npm run dev          # dev server
-npm run build        # build de produção
-npm run lint         # ESLint
-npm run lint:fix     # ESLint com auto-fix
-npm run typecheck    # tsc --noEmit
-npm run format       # Prettier --write
-npm run format:check # Prettier --check
+npm run dev           # dev server
+npm run build         # build de produção
+npm run lint          # ESLint
+npm run lint:fix      # ESLint com auto-fix
+npm run typecheck     # tsc --noEmit
+npm run format        # Prettier --write
+npm run format:check  # Prettier --check
+npm run test          # Vitest (run once)
+npm run test:watch    # Vitest (watch mode)
+npm run test:coverage # Vitest com coverage
 ```
 
 ## Fluxo do agente IA (4 passos)
