@@ -4,12 +4,12 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
 import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "@/lib/client-utils";
 import { RESPONSAVEIS } from "@/lib/constants";
-import type { User } from "@supabase/supabase-js";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -304,10 +304,13 @@ function TarefaCheck({
 
 export default function DailyPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: userLoading } = useCurrentUser();
+  const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
+  const invalidatePipeline = useInvalidatePipeline();
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [modalCliente, setModalCliente] = useState<ClienteComMetricas | null>(null);
@@ -327,39 +330,18 @@ export default function DailyPage() {
     return () => clearTimeout(t);
   }, [busca]);
 
-  // ── Load ──
-  const loadData = useCallback(async () => {
-    const supabase = createClient();
-    const [{ data: c }, { data: t }] = await Promise.all([
-      supabase
-        .from("mm_clientes")
-        .select("id,id_cliente,nome_empresa,plano,status,responsavel_mm,valor_contrato")
-        .limit(500),
-      supabase
-        .from("mm_tarefas")
-        .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
-        .limit(2000),
-    ]);
-    setClientes(dedupClientesByNome((c ?? []) as Cliente[]));
-    setTarefas((t ?? []) as Tarefa[]);
-    setLoading(false);
-  }, []);
-
+  // Sync query data → local state
   useEffect(() => {
-    async function init() {
-      const supabase = createClient();
-      const {
-        data: { user: u },
-      } = await supabase.auth.getUser();
-      if (!u) {
-        router.push("/login");
-        return;
-      }
-      setUser(u);
-      await loadData();
+    if (rawData) {
+      setClientes(dedupClientesByNome(rawData.clientes as Cliente[]));
+      setTarefas(rawData.tarefas as Tarefa[]);
     }
-    init();
-  }, [router, loadData]);
+  }, [rawData]);
+
+  // Redirect se não autenticado
+  useEffect(() => {
+    if (!userLoading && !user) router.push("/login");
+  }, [user, userLoading, router]);
 
   // ── Check toggle — atualiza Supabase + Sheets ──
   const handleCheckChange = useCallback(
@@ -416,7 +398,7 @@ export default function DailyPage() {
             ? `${r.clientes} clientes e ${r.tarefas} tarefas importados`
             : `${r.clientes} clientes · ${r.tarefas} tarefas · ${r.erros[0]}`,
       });
-      await loadData();
+      await invalidatePipeline();
     } catch (err) {
       setToast({ type: "error", msg: String(err) });
     } finally {
