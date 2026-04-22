@@ -63,10 +63,12 @@ const TOMORROW = (() => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
-interface ToastState { msg: string; type: "success" | "error" }
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
 
 function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
   useEffect(() => {
@@ -74,14 +76,18 @@ function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
     return () => clearTimeout(t);
   }, [onClose, toast]);
   return (
-    <div className={`fixed bottom-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium ${
-      toast.type === "success"
-        ? "bg-green-950 border-green-700 text-green-300"
-        : "bg-red-950 border-red-700 text-red-300"
-    }`}>
+    <div
+      className={`fixed bottom-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium ${
+        toast.type === "success"
+          ? "bg-green-950 border-green-700 text-green-300"
+          : "bg-red-950 border-red-700 text-red-300"
+      }`}
+    >
       <span>{toast.type === "success" ? "✓" : "✕"}</span>
       <span>{toast.msg}</span>
-      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100">✕</button>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100">
+        ✕
+      </button>
     </div>
   );
 }
@@ -100,9 +106,9 @@ function ModalTarefas({
   onCheckChange: (id: string, val: boolean) => void;
 }) {
   const [mostrarFeitas, setMostrarFeitas] = React.useState(false);
-  const pendentes   = tarefas.filter((t) => !t.check_feito && t.status !== "Finalizado");
+  const pendentes = tarefas.filter((t) => !t.check_feito && t.status !== "Finalizado");
   const finalizadas = tarefas.filter((t) => t.check_feito || t.status === "Finalizado");
-  const lista       = mostrarFeitas ? tarefas : pendentes;
+  const lista = mostrarFeitas ? tarefas : pendentes;
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
@@ -117,7 +123,8 @@ function ModalTarefas({
           <div>
             <p className="font-bold text-white text-base">{cliente.nome_empresa}</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              {cliente.id_cliente} · Score {cliente.score}% · {cliente.finalizadas}/{tarefas.length} concluídas
+              {cliente.id_cliente} · Score {cliente.score}% · {cliente.finalizadas}/{tarefas.length}{" "}
+              concluídas
             </p>
           </div>
           {finalizadas.length > 0 && (
@@ -125,7 +132,9 @@ function ModalTarefas({
               onClick={() => setMostrarFeitas((v) => !v)}
               className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition mr-6"
             >
-              {mostrarFeitas ? "Ocultar concluídas" : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
+              {mostrarFeitas
+                ? "Ocultar concluídas"
+                : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
             </button>
           )}
           <button
@@ -157,25 +166,35 @@ function ModalTarefas({
                     className="mt-0.5 w-4 h-4 accent-green-500 cursor-pointer flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${t.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}>
+                    <p
+                      className={`text-sm ${t.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}
+                    >
                       {t.o_que}
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {t.etapa && <span className="text-xs text-gray-600">{t.etapa}</span>}
                       {t.quem && <span className="text-xs text-blue-400">{t.quem}</span>}
                       {t.prazo && (
-                        <span className={`text-xs ${vencida ? "text-red-400 font-bold" : "text-gray-500"}`}>
-                          {formatDate(t.prazo)}{vencida ? " !" : ""}
+                        <span
+                          className={`text-xs ${vencida ? "text-red-400 font-bold" : "text-gray-500"}`}
+                        >
+                          {formatDate(t.prazo)}
+                          {vencida ? " !" : ""}
                         </span>
                       )}
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                    t.status === "Finalizado"     ? "bg-green-900 text-green-300"  :
-                    t.status === "Atrasado"       ? "bg-red-900 text-red-300"      :
-                    t.status === "Em andamento"   ? "bg-blue-900 text-blue-300"    :
-                                                    "bg-gray-700 text-gray-400"
-                  }`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                      t.status === "Finalizado"
+                        ? "bg-green-900 text-green-300"
+                        : t.status === "Atrasado"
+                          ? "bg-red-900 text-red-300"
+                          : t.status === "Em andamento"
+                            ? "bg-blue-900 text-blue-300"
+                            : "bg-gray-700 text-gray-400"
+                    }`}
+                  >
                     {t.status}
                   </span>
                 </div>
@@ -204,7 +223,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ─── Card de situação ─────────────────────────────────────────────────────────
 
 function SituacaoCard({
-  title, borderColor, children, empty, emptyMsg, expanded, footer,
+  title,
+  borderColor,
+  children,
+  empty,
+  emptyMsg,
+  expanded,
+  footer,
 }: {
   title: string;
   borderColor: string;
@@ -219,16 +244,12 @@ function SituacaoCard({
       <div className="px-4 py-3 border-b border-[#333]">
         <h3 className="font-semibold text-sm text-white">{title}</h3>
       </div>
-      <div className={`px-4 py-3 flex-1 overflow-y-auto ${expanded ? "max-h-[460px]" : "max-h-72"}`}>
-        {empty ? (
-          <p className="text-gray-500 text-sm py-2">{emptyMsg}</p>
-        ) : (
-          children
-        )}
+      <div
+        className={`px-4 py-3 flex-1 overflow-y-auto ${expanded ? "max-h-[460px]" : "max-h-72"}`}
+      >
+        {empty ? <p className="text-gray-500 text-sm py-2">{emptyMsg}</p> : children}
       </div>
-      {footer && (
-        <div className="border-t border-[#2a2a2a]">{footer}</div>
-      )}
+      {footer && <div className="border-t border-[#2a2a2a]">{footer}</div>}
     </div>
   );
 }
@@ -268,7 +289,9 @@ function TarefaCheck({
         className="mt-0.5 w-3.5 h-3.5 accent-green-500 cursor-pointer flex-shrink-0"
       />
       <div className="min-w-0">
-        <p className={`text-sm leading-snug ${tarefa.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}>
+        <p
+          className={`text-sm leading-snug ${tarefa.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}
+        >
           {label}
         </p>
         {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
@@ -281,21 +304,21 @@ function TarefaCheck({
 
 export default function DailyPage() {
   const router = useRouter();
-  const [user,           setUser]           = useState<User | null>(null);
-  const [clientes,       setClientes]       = useState<Cliente[]>([]);
-  const [tarefas,        setTarefas]        = useState<Tarefa[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [syncing,        setSyncing]        = useState(false);
-  const [toast,          setToast]          = useState<ToastState | null>(null);
-  const [modalCliente,   setModalCliente]   = useState<ClienteComMetricas | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [modalCliente, setModalCliente] = useState<ClienteComMetricas | null>(null);
   // Atrasados: controla qual grupo está expandido
-  const [atrasadosOpen,  setAtrasadosOpen]  = useState<Set<string>>(new Set());
-  const [filtroResp,     setFiltroResp]     = useState("Todos");
-  const [busca,          setBusca]          = useState("");
-  const [buscaDelay,     setBuscaDelay]     = useState("");
-  const [atrasadosExp,   setAtrasadosExp]   = useState(false);
-  const [hojeExp,        setHojeExp]        = useState(false);
-  const [semanaExp,      setSemanaExp]      = useState(false);
+  const [atrasadosOpen, setAtrasadosOpen] = useState<Set<string>>(new Set());
+  const [filtroResp, setFiltroResp] = useState("Todos");
+  const [busca, setBusca] = useState("");
+  const [buscaDelay, setBuscaDelay] = useState("");
+  const [atrasadosExp, setAtrasadosExp] = useState(false);
+  const [hojeExp, setHojeExp] = useState(false);
+  const [semanaExp, setSemanaExp] = useState(false);
   const CARD_LIMIT = 10;
 
   // Debounce busca 300ms
@@ -308,8 +331,14 @@ export default function DailyPage() {
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: c }, { data: t }] = await Promise.all([
-      supabase.from("mm_clientes").select("id,id_cliente,nome_empresa,plano,status,responsavel_mm,valor_contrato").limit(500),
-      supabase.from("mm_tarefas").select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes").limit(2000),
+      supabase
+        .from("mm_clientes")
+        .select("id,id_cliente,nome_empresa,plano,status,responsavel_mm,valor_contrato")
+        .limit(500),
+      supabase
+        .from("mm_tarefas")
+        .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
+        .limit(2000),
     ]);
     setClientes(dedupClientesByNome((c ?? []) as Cliente[]));
     setTarefas((t ?? []) as Tarefa[]);
@@ -319,8 +348,13 @@ export default function DailyPage() {
   useEffect(() => {
     async function init() {
       const supabase = createClient();
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (!u) { router.push("/login"); return; }
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      if (!u) {
+        router.push("/login");
+        return;
+      }
       setUser(u);
       await loadData();
     }
@@ -328,42 +362,47 @@ export default function DailyPage() {
   }, [router, loadData]);
 
   // ── Check toggle — atualiza Supabase + Sheets ──
-  const handleCheckChange = useCallback(async (id: string, val: boolean) => {
-    const tarefa    = tarefas.find((t) => t.id === id);
-    if (!tarefa) return;
-    const newStatus = val
-      ? "Finalizado"
-      : tarefa.prazo && tarefa.prazo < TODAY ? "Atrasado" : "Não iniciado";
+  const handleCheckChange = useCallback(
+    async (id: string, val: boolean) => {
+      const tarefa = tarefas.find((t) => t.id === id);
+      if (!tarefa) return;
+      const newStatus = val
+        ? "Finalizado"
+        : tarefa.prazo && tarefa.prazo < TODAY
+          ? "Atrasado"
+          : "Não iniciado";
 
-    // Optimistic
-    setTarefas((prev) =>
-      prev.map((t) => t.id === id ? { ...t, check_feito: val, status: newStatus } : t)
-    );
-
-    try {
-      const res  = await fetch("/api/sheets/update-tarefa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          id_cliente:     tarefa.cliente_id,
-          o_que_original: tarefa.o_que,
-          prazo_original: tarefa.prazo,
-          etapa_original: tarefa.etapa,
-          check_feito:    val,
-          status:         newStatus,
-        }),
-      });
-      const data = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro");
-    } catch (err) {
-      // Revert
+      // Optimistic
       setTarefas((prev) =>
-        prev.map((t) => t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t)
+        prev.map((t) => (t.id === id ? { ...t, check_feito: val, status: newStatus } : t))
       );
-      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
-    }
-  }, [tarefas]);
+
+      try {
+        const res = await fetch("/api/sheets/update-tarefa", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id,
+            id_cliente: tarefa.cliente_id,
+            o_que_original: tarefa.o_que,
+            prazo_original: tarefa.prazo,
+            etapa_original: tarefa.etapa,
+            check_feito: val,
+            status: newStatus,
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro");
+      } catch (err) {
+        // Revert
+        setTarefas((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t))
+        );
+        setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
+      }
+    },
+    [tarefas]
+  );
 
   // ── Sync ──
   async function handleSync() {
@@ -372,9 +411,10 @@ export default function DailyPage() {
       const r = await importarPlanilha();
       setToast({
         type: r.erros.length === 0 ? "success" : "error",
-        msg: r.erros.length === 0
-          ? `${r.clientes} clientes e ${r.tarefas} tarefas importados`
-          : `${r.clientes} clientes · ${r.tarefas} tarefas · ${r.erros[0]}`,
+        msg:
+          r.erros.length === 0
+            ? `${r.clientes} clientes e ${r.tarefas} tarefas importados`
+            : `${r.clientes} clientes · ${r.tarefas} tarefas · ${r.erros[0]}`,
       });
       await loadData();
     } catch (err) {
@@ -387,14 +427,16 @@ export default function DailyPage() {
   // ── Mapa cliente por id ──
   const clienteMap = useMemo(() => {
     const m: Record<string, Cliente> = {};
-    clientes.forEach((c) => { m[c.id_cliente] = c; });
+    clientes.forEach((c) => {
+      m[c.id_cliente] = c;
+    });
     return m;
   }, [clientes]);
 
   // ── Helpers de status (declarados antes dos useMemo que os usam) ──
-  const isAtivo      = isStatusAtivo;
+  const isAtivo = isStatusAtivo;
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
-  const isAtrasado   = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+  const isAtrasado = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 
   // Ordem de prioridade: Atrasado(0) > Em andamento(1) > Não iniciado(2) > outros(3)
   const getPrioridade = (t: Tarefa): number => {
@@ -406,8 +448,7 @@ export default function DailyPage() {
 
   // Filtro por quem está fazendo a tarefa
   const matchesResp = (t: TarefaComCliente): boolean =>
-    filtroResp === "Todos" ||
-    (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
+    filtroResp === "Todos" || (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
 
   // ── Tarefas com cliente (deduplicadas por cliente_id+o_que+prazo) ──
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() => {
@@ -427,7 +468,9 @@ export default function DailyPage() {
   // ── Opções de responsável (derivadas dos dados reais) ──
   const respOptions = useMemo(() => {
     const nomes = new Set<string>();
-    tarefasComCliente.forEach((t) => { if (t.quem?.trim()) nomes.add(t.quem.trim()); });
+    tarefasComCliente.forEach((t) => {
+      if (t.quem?.trim()) nomes.add(t.quem.trim());
+    });
     return ["Todos", ...Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"))];
   }, [tarefasComCliente]);
 
@@ -440,26 +483,28 @@ export default function DailyPage() {
       grupos[t.cliente_id].tarefas.push(t);
     });
     return Object.values(grupos).sort((a, b) => b.tarefas.length - a.tarefas.length);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp]);
 
   // ── Prioridades de hoje — ordenadas por prioridade ──
-  const prioHoje = useMemo(() =>
-    tarefasComCliente
-      .filter((t) => t.prazo === TODAY && !isFinalizado(t) && matchesResp(t))
-      .sort((a, b) => {
-        const diff = getPrioridade(a) - getPrioridade(b);
-        if (diff !== 0) return diff;
-        return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR");
-      }),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [tarefasComCliente, filtroResp]);
+  const prioHoje = useMemo(
+    () =>
+      tarefasComCliente
+        .filter((t) => t.prazo === TODAY && !isFinalizado(t) && matchesResp(t))
+        .sort((a, b) => {
+          const diff = getPrioridade(a) - getPrioridade(b);
+          if (diff !== 0) return diff;
+          return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR");
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tarefasComCliente, filtroResp]
+  );
 
   // ── Esta semana (hoje → +7 dias) agrupada por data, ordenada por prioridade ──
   const prioSemana = useMemo(() => {
     const list = tarefasComCliente.filter(
-      (t) => t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END &&
-             !isFinalizado(t) && matchesResp(t)
+      (t) =>
+        t.prazo && t.prazo >= TOMORROW && t.prazo <= WEEK_END && !isFinalizado(t) && matchesResp(t)
     );
     const grupos: Record<string, TarefaComCliente[]> = {};
     list.forEach((t) => {
@@ -468,54 +513,61 @@ export default function DailyPage() {
       grupos[k].push(t);
     });
     // Ordena tarefas dentro de cada dia por prioridade
-    Object.values(grupos).forEach((arr) =>
-      arr.sort((a, b) => getPrioridade(a) - getPrioridade(b))
-    );
+    Object.values(grupos).forEach((arr) => arr.sort((a, b) => getPrioridade(a) - getPrioridade(b)));
     return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp]);
 
   // ── Clientes com métricas (usa tarefasComCliente — já deduplicadas) ──
-  const clientesComMetricas = useMemo<ClienteComMetricas[]>(() => {
-    const q = buscaDelay.trim().toLowerCase();
-    return clientes
-      .filter((c) => isAtivo(c.status) && (!q || c.nome_empresa.toLowerCase().includes(q)))
-      .map((c) => {
-        const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
-        const fin        = t.filter(isFinalizado).length;
-        const atr        = t.filter(isAtrasado).length;
-        const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
-        const score      = totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0;
-        return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
-      });
-  },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [clientes, tarefasComCliente, buscaDelay]);
+  const clientesComMetricas = useMemo<ClienteComMetricas[]>(
+    () => {
+      const q = buscaDelay.trim().toLowerCase();
+      return clientes
+        .filter((c) => isAtivo(c.status) && (!q || c.nome_empresa.toLowerCase().includes(q)))
+        .map((c) => {
+          const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
+          const fin = t.filter(isFinalizado).length;
+          const atr = t.filter(isAtrasado).length;
+          const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
+          const score = totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0;
+          return { ...c, tarefas: t, finalizadas: fin, atrasadas: atr, score };
+        });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clientes, tarefasComCliente, buscaDelay]
+  );
 
   // ── Ranking: 5 piores scores (ativos) ──
-  const ranking = useMemo(() =>
-    clientesComMetricas
-      .filter((c) => isAtivo(c.status))
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 5),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [clientesComMetricas]);
+  const ranking = useMemo(
+    () =>
+      clientesComMetricas
+        .filter((c) => isAtivo(c.status))
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 5),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [clientesComMetricas]
+  );
 
   // ── Resumo por responsável ──
-  const resumoResponsavel = useMemo(() =>
-    RESPONSAVEIS.map((resp) => {
-      const meus = tarefasComCliente.filter((t) =>
-        t.quem?.toLowerCase().includes(resp.toLowerCase()) ||
-        t.cliente.responsavel_mm?.toLowerCase().includes(resp.toLowerCase())
-      );
-      const total       = meus.length;
-      const finalizadas = meus.filter(isFinalizado).length;
-      const atrasadas   = meus.filter(isAtrasado).length;
-      const totalAtivo  = meus.filter((t) => t.status !== "Cancelado").length;
-      const score       = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
-      return { resp, total, finalizadas, atrasadas, score };
-    }),
-  [tarefasComCliente]);
+  const resumoResponsavel = useMemo(
+    () =>
+      RESPONSAVEIS.map((resp) => {
+        const meus = tarefasComCliente.filter(
+          (t) =>
+            t.quem?.toLowerCase().includes(resp.toLowerCase()) ||
+            t.cliente.responsavel_mm?.toLowerCase().includes(resp.toLowerCase())
+        );
+        const total = meus.length;
+        const finalizadas = meus.filter(isFinalizado).length;
+        const atrasadas = meus.filter(isAtrasado).length;
+        const totalAtivo = meus.filter((t) => t.status !== "Cancelado").length;
+        const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
+        return { resp, total, finalizadas, atrasadas, score };
+      }),
+    // isAtrasado e isFinalizado são funções estáveis de módulo, não dependências de hook
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tarefasComCliente]
+  );
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -528,7 +580,9 @@ export default function DailyPage() {
   }
 
   const today = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long", day: "2-digit", month: "long",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
   });
 
   return (
@@ -548,7 +602,6 @@ export default function DailyPage() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-10">
-
         {/* ── Título + Filtro ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -558,8 +611,15 @@ export default function DailyPage() {
 
           {/* Busca por cliente */}
           <div className="relative flex items-center">
-            <svg className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <svg
+              className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
@@ -569,7 +629,12 @@ export default function DailyPage() {
               className="pl-8 pr-7 py-2 text-sm bg-[#242424] border border-[#444] text-gray-200 rounded-lg placeholder-gray-600 focus:outline-none focus:border-[#666] transition w-44"
             />
             {busca && (
-              <button onClick={() => setBusca("")} className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs">✕</button>
+              <button
+                onClick={() => setBusca("")}
+                className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs"
+              >
+                ✕
+              </button>
             )}
           </div>
 
@@ -583,10 +648,14 @@ export default function DailyPage() {
                 className="appearance-none bg-[#242424] border border-[#444] text-sm text-gray-200 rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-[#666] focus:outline-none focus:border-[#888] transition"
               >
                 {respOptions.map((resp) => (
-                  <option key={resp} value={resp}>{resp}</option>
+                  <option key={resp} value={resp}>
+                    {resp}
+                  </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▼</span>
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
+                ▼
+              </span>
             </div>
           </div>
         </div>
@@ -596,7 +665,6 @@ export default function DailyPage() {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Situação do dia">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
             {/* ── Card Atrasados ── */}
             <SituacaoCard
               title={`⚠ Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
@@ -604,68 +672,83 @@ export default function DailyPage() {
               empty={atrasados.length === 0}
               emptyMsg="Nenhum item atrasado"
               expanded={atrasadosExp}
-              footer={atrasados.length > CARD_LIMIT ? (
-                <button
-                  onClick={() => setAtrasadosExp(!atrasadosExp)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
-                >
-                  {atrasadosExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({atrasados.length} clientes)</>}
-                </button>
-              ) : undefined}
+              footer={
+                atrasados.length > CARD_LIMIT ? (
+                  <button
+                    onClick={() => setAtrasadosExp(!atrasadosExp)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                  >
+                    {atrasadosExp ? (
+                      <>
+                        <span>▲</span> Minimizar
+                      </>
+                    ) : (
+                      <>
+                        <span>▼</span> Ver todos ({atrasados.length} clientes)
+                      </>
+                    )}
+                  </button>
+                ) : undefined
+              }
             >
               <div className="space-y-1">
-                {(atrasadosExp ? atrasados : atrasados.slice(0, CARD_LIMIT)).map(({ cliente, tarefas: tList }) => {
-                  const open = atrasadosOpen.has(cliente.id_cliente);
-                  return (
-                    <div key={cliente.id_cliente}>
-                      {/* Cabeçalho do grupo */}
-                      <button
-                        className="w-full flex items-center justify-between py-2 text-left hover:text-white transition-colors"
-                        onClick={() =>
-                          setAtrasadosOpen((prev) => {
-                            const next = new Set(prev);
-                            open ? next.delete(cliente.id_cliente) : next.add(cliente.id_cliente);
-                            return next;
-                          })
-                        }
-                      >
-                        <Link
-                          href="/pipeline"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-sm font-medium text-red-300 hover:underline"
+                {(atrasadosExp ? atrasados : atrasados.slice(0, CARD_LIMIT)).map(
+                  ({ cliente, tarefas: tList }) => {
+                    const open = atrasadosOpen.has(cliente.id_cliente);
+                    return (
+                      <div key={cliente.id_cliente}>
+                        {/* Cabeçalho do grupo */}
+                        <button
+                          className="w-full flex items-center justify-between py-2 text-left hover:text-white transition-colors"
+                          onClick={() =>
+                            setAtrasadosOpen((prev) => {
+                              const next = new Set(prev);
+                              open ? next.delete(cliente.id_cliente) : next.add(cliente.id_cliente);
+                              return next;
+                            })
+                          }
                         >
-                          {cliente.nome_empresa}
-                        </Link>
-                        <span className="text-xs text-gray-500 flex items-center gap-1.5 flex-shrink-0">
-                          <span className="bg-red-900 text-red-300 px-1.5 py-0.5 rounded-full">
-                            {tList.length}
+                          <Link
+                            href="/pipeline"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-sm font-medium text-red-300 hover:underline"
+                          >
+                            {cliente.nome_empresa}
+                          </Link>
+                          <span className="text-xs text-gray-500 flex items-center gap-1.5 flex-shrink-0">
+                            <span className="bg-red-900 text-red-300 px-1.5 py-0.5 rounded-full">
+                              {tList.length}
+                            </span>
+                            <span>{open ? "▲" : "▼"}</span>
                           </span>
-                          <span>{open ? "▲" : "▼"}</span>
-                        </span>
-                      </button>
+                        </button>
 
-                      {/* Tarefas expandidas */}
-                      {open && (
-                        <div className="pl-3 border-l border-red-900 mb-2 space-y-1">
-                          {tList.map((t) => (
-                            <div key={t.id} className="text-xs text-gray-400 py-0.5 flex items-start gap-1.5">
-                              <span className="text-red-500 mt-0.5 flex-shrink-0">•</span>
-                              <span>
-                                {t.o_que}
-                                {t.prazo && (
-                                  <span className="text-red-500 ml-1">({formatDate(t.prazo)})</span>
-                                )}
-                                {t.quem && (
-                                  <span className="text-blue-400 ml-1">· {t.quem}</span>
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                        {/* Tarefas expandidas */}
+                        {open && (
+                          <div className="pl-3 border-l border-red-900 mb-2 space-y-1">
+                            {tList.map((t) => (
+                              <div
+                                key={t.id}
+                                className="text-xs text-gray-400 py-0.5 flex items-start gap-1.5"
+                              >
+                                <span className="text-red-500 mt-0.5 flex-shrink-0">•</span>
+                                <span>
+                                  {t.o_que}
+                                  {t.prazo && (
+                                    <span className="text-red-500 ml-1">
+                                      ({formatDate(t.prazo)})
+                                    </span>
+                                  )}
+                                  {t.quem && <span className="text-blue-400 ml-1">· {t.quem}</span>}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                )}
               </div>
             </SituacaoCard>
 
@@ -676,14 +759,24 @@ export default function DailyPage() {
               empty={prioHoje.length === 0}
               emptyMsg="Nada para hoje"
               expanded={hojeExp}
-              footer={prioHoje.length > CARD_LIMIT ? (
-                <button
-                  onClick={() => setHojeExp(!hojeExp)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
-                >
-                  {hojeExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({prioHoje.length} tarefas)</>}
-                </button>
-              ) : undefined}
+              footer={
+                prioHoje.length > CARD_LIMIT ? (
+                  <button
+                    onClick={() => setHojeExp(!hojeExp)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                  >
+                    {hojeExp ? (
+                      <>
+                        <span>▲</span> Minimizar
+                      </>
+                    ) : (
+                      <>
+                        <span>▼</span> Ver todos ({prioHoje.length} tarefas)
+                      </>
+                    )}
+                  </button>
+                ) : undefined
+              }
             >
               {(hojeExp ? prioHoje : prioHoje.slice(0, CARD_LIMIT)).map((t) => (
                 <TarefaCheck
@@ -691,7 +784,11 @@ export default function DailyPage() {
                   tarefa={t}
                   label={`${t.cliente.nome_empresa} — ${t.o_que}`}
                   sub={`${t.cliente.id_cliente}${t.quem ? ` · ${t.quem}` : ""}${
-                    isAtrasado(t) ? " · ⚠ atrasado" : t.status === "Em andamento" ? " · em andamento" : ""
+                    isAtrasado(t)
+                      ? " · ⚠ atrasado"
+                      : t.status === "Em andamento"
+                        ? " · em andamento"
+                        : ""
                   }`}
                   onCheckChange={handleCheckChange}
                 />
@@ -705,14 +802,24 @@ export default function DailyPage() {
               empty={prioSemana.length === 0}
               emptyMsg="Semana tranquila"
               expanded={semanaExp}
-              footer={prioSemana.length > CARD_LIMIT ? (
-                <button
-                  onClick={() => setSemanaExp(!semanaExp)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
-                >
-                  {semanaExp ? <><span>▲</span> Minimizar</> : <><span>▼</span> Ver todos ({prioSemana.length} dias)</>}
-                </button>
-              ) : undefined}
+              footer={
+                prioSemana.length > CARD_LIMIT ? (
+                  <button
+                    onClick={() => setSemanaExp(!semanaExp)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                  >
+                    {semanaExp ? (
+                      <>
+                        <span>▲</span> Minimizar
+                      </>
+                    ) : (
+                      <>
+                        <span>▼</span> Ver todos ({prioSemana.length} dias)
+                      </>
+                    )}
+                  </button>
+                ) : undefined
+              }
             >
               <div className="space-y-3">
                 {(semanaExp ? prioSemana : prioSemana.slice(0, CARD_LIMIT)).map(([data, tList]) => (
@@ -721,11 +828,21 @@ export default function DailyPage() {
                       {formatDateFull(data)}
                     </p>
                     {tList.map((t) => (
-                      <div key={t.id} className="text-xs text-gray-300 py-0.5 flex items-start gap-1.5 pl-2">
-                        <span className={`mt-0.5 flex-shrink-0 ${
-                          t.status === "Em andamento" ? "text-blue-500" :
-                          t.status === "Atrasado"     ? "text-red-500"  : "text-gray-600"
-                        }`}>•</span>
+                      <div
+                        key={t.id}
+                        className="text-xs text-gray-300 py-0.5 flex items-start gap-1.5 pl-2"
+                      >
+                        <span
+                          className={`mt-0.5 flex-shrink-0 ${
+                            t.status === "Em andamento"
+                              ? "text-blue-500"
+                              : t.status === "Atrasado"
+                                ? "text-red-500"
+                                : "text-gray-600"
+                          }`}
+                        >
+                          •
+                        </span>
                         <span>
                           <span className="text-gray-500">{t.cliente.nome_empresa}</span>
                           {" — "}
@@ -763,7 +880,9 @@ export default function DailyPage() {
 
                   {/* Nome + ID */}
                   <div className="w-44 flex-shrink-0">
-                    <p className="font-semibold text-white text-sm leading-tight">{c.nome_empresa}</p>
+                    <p className="font-semibold text-white text-sm leading-tight">
+                      {c.nome_empresa}
+                    </p>
                     <p className="text-xs text-gray-500">{c.id_cliente}</p>
                   </div>
 
@@ -803,50 +922,50 @@ export default function DailyPage() {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Resumo por responsável">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {resumoResponsavel.filter(({ total }) => total > 0).map(({ resp, total, finalizadas, atrasadas, score }) => (
-              <div
-                key={resp}
-                className="bg-[#242424] border border-[#333] rounded-xl p-5"
-              >
-                {/* Nome */}
-                <div className="flex items-center justify-between mb-4">
-                  <p className="font-semibold text-white">{resp}</p>
-                  <span
-                    className="text-sm font-bold"
-                    style={{ color: getScoreColor(score) }}
-                  >
-                    {score}%
-                  </span>
-                </div>
+            {resumoResponsavel
+              .filter(({ total }) => total > 0)
+              .map(({ resp, total, finalizadas, atrasadas, score }) => (
+                <div key={resp} className="bg-[#242424] border border-[#333] rounded-xl p-5">
+                  {/* Nome */}
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="font-semibold text-white">{resp}</p>
+                    <span className="text-sm font-bold" style={{ color: getScoreColor(score) }}>
+                      {score}%
+                    </span>
+                  </div>
 
-                {/* Métricas */}
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-gray-200">{total}</p>
-                    <p className="text-xs text-gray-500">Total</p>
+                  {/* Métricas */}
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-gray-200">{total}</p>
+                      <p className="text-xs text-gray-500">Total</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-green-400">{finalizadas}</p>
+                      <p className="text-xs text-gray-500">Finaliz.</p>
+                    </div>
+                    <div className="text-center">
+                      <p
+                        className={`text-lg font-bold ${atrasadas > 0 ? "text-red-400" : "text-gray-400"}`}
+                      >
+                        {atrasadas}
+                      </p>
+                      <p className="text-xs text-gray-500">Atrasadas</p>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-green-400">{finalizadas}</p>
-                    <p className="text-xs text-gray-500">Finaliz.</p>
-                  </div>
-                  <div className="text-center">
-                    <p className={`text-lg font-bold ${atrasadas > 0 ? "text-red-400" : "text-gray-400"}`}>
-                      {atrasadas}
-                    </p>
-                    <p className="text-xs text-gray-500">Atrasadas</p>
-                  </div>
-                </div>
 
-                {/* Barra semanal */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs text-gray-500">Progresso geral</p>
-                    <p className="text-xs text-gray-400">{finalizadas}/{total}</p>
+                  {/* Barra semanal */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-gray-500">Progresso geral</p>
+                      <p className="text-xs text-gray-400">
+                        {finalizadas}/{total}
+                      </p>
+                    </div>
+                    <ProgressBar score={score} height="h-1.5" />
                   </div>
-                  <ProgressBar score={score} height="h-1.5" />
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </Section>
       </main>

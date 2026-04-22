@@ -12,36 +12,43 @@ import type { User } from "@supabase/supabase-js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CATEGORIAS: { value: Categoria; label: string }[] = [
-  { value: "musico",     label: "Músico / Banda" },
-  { value: "fotografo",  label: "Fotógrafo / Cinegrafista" },
+  { value: "musico", label: "Músico / Banda" },
+  { value: "fotografo", label: "Fotógrafo / Cinegrafista" },
   { value: "celebrante", label: "Celebrante / Cerimonialista" },
-  { value: "dj",         label: "DJ" },
-  { value: "outro",      label: "Outro" },
+  { value: "dj", label: "DJ" },
+  { value: "outro", label: "Outro" },
 ];
 
-const PLANOS    = ["Essencial", "Growth", "Enterprise"];
-const FASES     = ["Onboarding", "Planejamento de Metas", "Voo de Cruzeiro", "Renovação", "Pausado", "Churn"];
-const RESPS     = ["Paulo", "Murilo", "Kauê", "Giovanni"];
+const PLANOS = ["Essencial", "Growth", "Enterprise"];
+const FASES = [
+  "Onboarding",
+  "Planejamento de Metas",
+  "Voo de Cruzeiro",
+  "Renovação",
+  "Pausado",
+  "Churn",
+];
+const RESPS = ["Paulo", "Murilo", "Kauê", "Giovanni"];
 
 const INITIAL: DadosEntrevista = {
-  nome_artistico:        "",
-  categoria:             "musico",
-  whatsapp:              "",
-  email:                 "",
-  cidade_base:           "",
-  instagram:             "",
-  anos_experiencia:      "",
-  especialidade:         "",
-  preco_medio:           "",
-  numero_casamentos:     "",
-  formacao:              "",
-  equipamentos:          "",
-  diferenciais:          "",
-  estilo_trabalho:       "",
-  depoimento_favorito:   "",
-  momentos_especiais:    "",
-  como_conheceu_noivos:  "",
-  informacoes_adicionais:"",
+  nome_artistico: "",
+  categoria: "musico",
+  whatsapp: "",
+  email: "",
+  cidade_base: "",
+  instagram: "",
+  anos_experiencia: "",
+  especialidade: "",
+  preco_medio: "",
+  numero_casamentos: "",
+  formacao: "",
+  equipamentos: "",
+  diferenciais: "",
+  estilo_trabalho: "",
+  depoimento_favorito: "",
+  momentos_especiais: "",
+  como_conheceu_noivos: "",
+  informacoes_adicionais: "",
 };
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -68,14 +75,17 @@ function Label({ children, required }: { children: React.ReactNode; required?: b
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
-      {children}
-    </p>
+    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">{children}</p>
   );
 }
 
 function Select({
-  label, value, onChange, options, required, disabled,
+  label,
+  value,
+  onChange,
+  options,
+  required,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -96,17 +106,29 @@ function Select({
           required={required}
         >
           {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">▼</span>
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
+          ▼
+        </span>
       </div>
     </div>
   );
 }
 
 function CharField({
-  label, value, onChange, placeholder, required, textarea, rows = 3, maxLength, disabled,
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  textarea,
+  rows = 3,
+  maxLength,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -145,9 +167,11 @@ function CharField({
         />
       )}
       {remaining !== null && value.length > 0 && (
-        <p className={`text-right text-xs mt-1 ${
-          remaining === 0 ? "text-red-500 font-medium" : warn ? "text-amber-500" : "text-gray-600"
-        }`}>
+        <p
+          className={`text-right text-xs mt-1 ${
+            remaining === 0 ? "text-red-500 font-medium" : warn ? "text-amber-500" : "text-gray-600"
+          }`}
+        >
           {remaining} restantes
         </p>
       )}
@@ -159,24 +183,29 @@ function CharField({
 
 export default function NovoPage() {
   const router = useRouter();
-  const [user,    setUser]    = useState<User | null>(null);
-  const [dados,   setDados]   = useState<DadosEntrevista>({
+  const [user, setUser] = useState<User | null>(null);
+  const [dados, setDados] = useState<DadosEntrevista>({
     ...INITIAL,
-    plano:          "Essencial",
-    fase_projeto:   "Onboarding",
+    plano: "Essencial",
+    fase_projeto: "Onboarding",
     responsavel_mm: "",
   });
   const [loading, setLoading] = useState(false);
-  const [status,  setStatus]  = useState("");
-  const [erro,    setErro]    = useState("");
+  const [status, setStatus] = useState("");
+  const [erro, setErro] = useState("");
   const [sheetsAviso, setSheetsAviso] = useState("");
   const acaoRef = useRef<"cadastrar" | "gerar">("cadastrar");
 
   useEffect(() => {
     async function init() {
       const supabase = createClient();
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (!u) { router.push("/login"); return; }
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      if (!u) {
+        router.push("/login");
+        return;
+      }
       setUser(u);
     }
     init();
@@ -192,19 +221,19 @@ export default function NovoPage() {
       return "Nome artístico é obrigatório (mínimo 2 caracteres).";
     if (dados.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dados.email.trim()))
       return "E-mail inválido.";
-    if (!dados.especialidade.trim())
-      return "Especialidade é obrigatória.";
-    if (!dados.diferenciais.trim())
-      return "Diferenciais são obrigatórios.";
-    if (!dados.estilo_trabalho.trim())
-      return "Estilo de trabalho é obrigatório.";
+    if (!dados.especialidade.trim()) return "Especialidade é obrigatória.";
+    if (!dados.diferenciais.trim()) return "Diferenciais são obrigatórios.";
+    if (!dados.estilo_trabalho.trim()) return "Estilo de trabalho é obrigatório.";
     return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const validErr = validate();
-    if (validErr) { setErro(validErr); return; }
+    if (validErr) {
+      setErro(validErr);
+      return;
+    }
     setErro("");
     setSheetsAviso("");
     setLoading(true);
@@ -218,16 +247,17 @@ export default function NovoPage() {
         .from("prestadores")
         .insert({
           nome_artistico: dados.nome_artistico.trim(),
-          categoria:      dados.categoria,
-          whatsapp:       dados.whatsapp   || null,
-          email:          dados.email      || null,
-          cidade_base:    dados.cidade_base|| null,
-          instagram:      dados.instagram  || null,
+          categoria: dados.categoria,
+          whatsapp: dados.whatsapp || null,
+          email: dados.email || null,
+          cidade_base: dados.cidade_base || null,
+          instagram: dados.instagram || null,
         })
         .select()
         .single();
 
-      if (errPrestador || !prestador) throw new Error("Erro ao salvar prestador: " + errPrestador?.message);
+      if (errPrestador || !prestador)
+        throw new Error("Erro ao salvar prestador: " + errPrestador?.message);
 
       // ── 2. Salvar entrevista ──
       setStatus("Salvando entrevista...");
@@ -237,7 +267,8 @@ export default function NovoPage() {
         .select()
         .single();
 
-      if (errEntrevista || !entrevista) throw new Error("Erro ao salvar entrevista: " + errEntrevista?.message);
+      if (errEntrevista || !entrevista)
+        throw new Error("Erro ao salvar entrevista: " + errEntrevista?.message);
 
       // ── 3. Verificar se cliente já existe na pipeline ──────────────────────
       setStatus("Verificando pipeline...");
@@ -249,8 +280,8 @@ export default function NovoPage() {
         .ilike("nome_empresa", nomeBusca);
 
       // Pega o de menor ID MM caso haja duplicatas residuais
-      const clienteExistente = (candidatos ?? [])
-        .sort((a, b) => {
+      const clienteExistente =
+        (candidatos ?? []).sort((a, b) => {
           const na = parseInt(a.id_cliente.replace(/^MM/i, ""), 10) || 999999;
           const nb = parseInt(b.id_cliente.replace(/^MM/i, ""), 10) || 999999;
           return na - nb;
@@ -270,20 +301,21 @@ export default function NovoPage() {
         setStatus("Criando pipeline completa (planilha + tarefas)...");
         let abortarCadastro = false;
         try {
-          const segmentoLabel = CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
+          const segmentoLabel =
+            CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
           const res = await fetch("/api/sheets/novo-cliente", {
-            method:  "POST",
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({
-              nome_empresa:   nomeBusca,
-              segmento:       segmentoLabel,
-              cidade:         dados.cidade_base            || "",
-              whatsapp:       dados.whatsapp               || "",
-              email:          dados.email                  || "",
-              plano:          dados.plano                  || "Essencial",
-              fase_projeto:   dados.fase_projeto           || "Onboarding",
-              responsavel_mm: dados.responsavel_mm         || "",
-              observacoes:    dados.informacoes_adicionais || "",
+            body: JSON.stringify({
+              nome_empresa: nomeBusca,
+              segmento: segmentoLabel,
+              cidade: dados.cidade_base || "",
+              whatsapp: dados.whatsapp || "",
+              email: dados.email || "",
+              plano: dados.plano || "Essencial",
+              fase_projeto: dados.fase_projeto || "Onboarding",
+              responsavel_mm: dados.responsavel_mm || "",
+              observacoes: dados.informacoes_adicionais || "",
             }),
           });
           const sheetData = await res.json();
@@ -312,7 +344,9 @@ export default function NovoPage() {
           }
         } catch (sheetsErr) {
           if (abortarCadastro) throw sheetsErr;
-          setSheetsAviso(`Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`);
+          setSheetsAviso(
+            `Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`
+          );
         }
       }
 
@@ -335,7 +369,6 @@ export default function NovoPage() {
       if (!fnData?.roteiro) throw new Error(fnData?.error ?? "Roteiro não retornado pela IA");
 
       router.push(`/prestador/${prestador.id}`);
-
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : "Erro inesperado");
       setLoading(false);
@@ -348,18 +381,16 @@ export default function NovoPage() {
       <Header user={user} />
 
       <main className="max-w-3xl mx-auto px-4 py-10">
-
         {/* ── Cabeçalho ── */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Novo Prestador</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Se o cliente já existe na pipeline, apenas cria o card de roteiro vinculado.
-            Se for novo, cria a pipeline completa (planilha + tarefas) e o card.
+            Se o cliente já existe na pipeline, apenas cria o card de roteiro vinculado. Se for
+            novo, cria a pipeline completa (planilha + tarefas) e o card.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
-
           {/* ══════════════════════════════════════════════════ */}
           {/* SEÇÃO 1 — Identificação                           */}
           {/* ══════════════════════════════════════════════════ */}
@@ -367,7 +398,6 @@ export default function NovoPage() {
             <div className="px-6 py-5 border-b border-gray-100">
               <SectionHeader>Identificação</SectionHeader>
               <div className="space-y-4">
-
                 <CharField
                   label="Nome artístico / empresa"
                   value={dados.nome_artistico}
@@ -408,11 +438,13 @@ export default function NovoPage() {
                     label="Responsável MM"
                     value={dados.responsavel_mm ?? ""}
                     onChange={(v) => set("responsavel_mm", v)}
-                    options={[{ value: "", label: "— selecione —" }, ...RESPS.map((r) => ({ value: r, label: r }))]}
+                    options={[
+                      { value: "", label: "— selecione —" },
+                      ...RESPS.map((r) => ({ value: r, label: r })),
+                    ]}
                     disabled={loading}
                   />
                 </div>
-
               </div>
             </div>
 
@@ -611,11 +643,13 @@ export default function NovoPage() {
           )}
 
           {sheetsAviso && !erro && (
-            <div className={`px-4 py-3 rounded-xl border text-sm ${
-              sheetsAviso.startsWith("Aviso")
-                ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                : "border-green-200 bg-green-50 text-green-700"
-            }`}>
+            <div
+              className={`px-4 py-3 rounded-xl border text-sm ${
+                sheetsAviso.startsWith("Aviso")
+                  ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                  : "border-green-200 bg-green-50 text-green-700"
+              }`}
+            >
               {sheetsAviso}
             </div>
           )}
@@ -629,9 +663,10 @@ export default function NovoPage() {
 
           {/* ── Aviso de pré-requisito Sheets ── */}
           <p className="text-xs text-gray-400 text-center">
-            Se o cliente já existe na pipeline, nenhuma entrada nova é criada na planilha.
-            Para novos clientes, é necessário{" "}
-            <span className="font-mono text-gray-500">GOOGLE_SERVICE_ACCOUNT_JSON</span> configurado.
+            Se o cliente já existe na pipeline, nenhuma entrada nova é criada na planilha. Para
+            novos clientes, é necessário{" "}
+            <span className="font-mono text-gray-500">GOOGLE_SERVICE_ACCOUNT_JSON</span>{" "}
+            configurado.
           </p>
 
           {/* ── Botões ── */}
@@ -639,7 +674,9 @@ export default function NovoPage() {
             <button
               type="submit"
               disabled={loading}
-              onClick={() => { acaoRef.current = "cadastrar"; }}
+              onClick={() => {
+                acaoRef.current = "cadastrar";
+              }}
               className="flex-1 py-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {loading && acaoRef.current === "cadastrar" ? (
@@ -647,12 +684,16 @@ export default function NovoPage() {
                   <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                   Salvando…
                 </span>
-              ) : "Cadastrar prestador"}
+              ) : (
+                "Cadastrar prestador"
+              )}
             </button>
             <button
               type="submit"
               disabled={loading}
-              onClick={() => { acaoRef.current = "gerar"; }}
+              onClick={() => {
+                acaoRef.current = "gerar";
+              }}
               className="flex-1 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading && acaoRef.current === "gerar" ? (
@@ -660,10 +701,11 @@ export default function NovoPage() {
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Gerando roteiro…
                 </span>
-              ) : "Cadastrar e gerar roteiro ✦"}
+              ) : (
+                "Cadastrar e gerar roteiro ✦"
+              )}
             </button>
           </div>
-
         </form>
       </main>
     </div>

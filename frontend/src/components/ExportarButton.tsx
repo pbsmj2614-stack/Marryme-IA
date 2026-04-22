@@ -15,18 +15,28 @@ interface Props {
 }
 
 const LABEL: Record<TipoExport, string> = {
-  completo:  "Exportar .docx",
-  analise:   "Exportar análise",
-  roteiro:   "Exportar roteiro",
-  anuncios:  "Exportar anúncios",
-  direcao:   "Exportar direção",
+  completo: "Exportar .docx",
+  analise: "Exportar análise",
+  roteiro: "Exportar roteiro",
+  anuncios: "Exportar anúncios",
+  direcao: "Exportar direção",
 };
 
 // Ícone de download SVG inline
 function IconDownload({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path
+        d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <polyline points="7 10 12 15 17 10" strokeLinecap="round" strokeLinejoin="round" />
       <line x1="12" y1="15" x2="12" y2="3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -85,13 +95,20 @@ export default function ExportarButton({
           erro
             ? "text-red-500 bg-red-50"
             : loading
-            ? "text-gray-300 cursor-wait"
-            : "text-gray-400 hover:text-brand-600 hover:bg-brand-50"
+              ? "text-gray-300 cursor-wait"
+              : "text-gray-400 hover:text-brand-600 hover:bg-brand-50"
         }`}
       >
         {loading ? (
           <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         ) : (
@@ -116,7 +133,14 @@ export default function ExportarButton({
         >
           {loading ? (
             <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
           ) : (
@@ -143,7 +167,14 @@ export default function ExportarButton({
       >
         {loading ? (
           <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         ) : (

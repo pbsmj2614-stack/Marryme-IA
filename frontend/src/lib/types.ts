@@ -150,29 +150,29 @@ export interface KPIsCampanha {
   impressions: number;
   reach: number;
   frequency: number;
-  cpm: number;               // custo por mil impressões (R$)
+  cpm: number; // custo por mil impressões (R$)
 
   // Clique
-  link_clicks: number;       // inline_link_clicks — cliques no link
-  link_ctr: number;          // inline_link_click_ctr — CTR do link (%)
-  cpc: number;               // cost_per_inline_link_click (R$)
+  link_clicks: number; // inline_link_clicks — cliques no link
+  link_ctr: number; // inline_link_click_ctr — CTR do link (%)
+  cpc: number; // cost_per_inline_link_click (R$)
 
   // Resultado principal (mensagens iniciadas)
-  results: number;           // mensagens iniciadas
-  cost_per_result: number;   // custo por mensagem (R$)
+  results: number; // mensagens iniciadas
+  cost_per_result: number; // custo por mensagem (R$)
 
   // Gasto
-  spend: number;             // valor gasto total (R$)
+  spend: number; // valor gasto total (R$)
 
   // Vídeo
-  thruplay: number;          // quem assistiu 15s ou 100% do vídeo
+  thruplay: number; // quem assistiu 15s ou 100% do vídeo
   cost_per_thruplay: number; // R$
-  video_3s: number;          // visualizações de 3 segundos
-  hook_rate: number;         // video_3s / impressions * 100 (%)
-  video_p25: number;         // retenção em 25%
-  video_p50: number;         // retenção em 50%
-  video_p75: number;         // retenção em 75%
-  video_p100: number;        // retenção em 100%
+  video_3s: number; // visualizações de 3 segundos
+  hook_rate: number; // video_3s / impressions * 100 (%)
+  video_p25: number; // retenção em 25%
+  video_p50: number; // retenção em 50%
+  video_p75: number; // retenção em 75%
+  video_p100: number; // retenção em 100%
 
   // Compat (mantidos para não quebrar código existente)
   clicks: number;

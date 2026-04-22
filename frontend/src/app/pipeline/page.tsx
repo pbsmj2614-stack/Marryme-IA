@@ -1,23 +1,36 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getStatusFromScore, getScoreColor } from "@/lib/healthScore";
-import { isPrazoVencido, formatDate, planoBadgeClass, planoLabel, isStatusAtivo, dedupClientesByNome, dedupTarefas } from "@/lib/client-utils";
+import {
+  isPrazoVencido,
+  formatDate,
+  planoBadgeClass,
+  planoLabel,
+  dedupClientesByNome,
+  dedupTarefas,
+} from "@/lib/client-utils";
 import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import type { User } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type StatusCliente = "Ativo" | "Pausado" | "Encerrado";
-type StatusScore   = "Em risco" | "Em atenção" | "Saudável" | "Concluído";
-type FiltroStatus  = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Pausados" | "Encerrados";
+type StatusScore = "Em risco" | "Em atenção" | "Saudável" | "Concluído";
+type FiltroStatus = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Pausados" | "Encerrados";
 type SortKey =
-  | "id_cliente" | "nome_empresa" | "plano"
-  | "total_tarefas" | "finalizadas" | "atrasadas" | "score" | "statusScore";
+  | "id_cliente"
+  | "nome_empresa"
+  | "plano"
+  | "total_tarefas"
+  | "finalizadas"
+  | "atrasadas"
+  | "score"
+  | "statusScore";
 
 interface Cliente {
   id: string;
@@ -40,7 +53,7 @@ interface Tarefa {
   o_que: string;
   tipo: string | null;
   quem: string | null;
-  prazo: string | null;       // YYYY-MM-DD
+  prazo: string | null; // YYYY-MM-DD
   status: string;
   observacoes: string | null;
 }
@@ -56,13 +69,17 @@ interface ClienteComMetricas extends Cliente {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Pausados", "Encerrados"];
-const RESPONSAVEIS               = ["Todos", ...RESPONSAVEIS_BASE] as const;
-const TODAY                      = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+const FILTROS: FiltroStatus[] = [
+  "Todos",
+  "Em risco",
+  "Em atenção",
+  "Saudáveis",
+  "Pausados",
+  "Encerrados",
+];
+const RESPONSAVEIS = ["Todos", ...RESPONSAVEIS_BASE] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -87,10 +104,7 @@ function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
     >
       <span>{toast.type === "success" ? "✓" : "✕"}</span>
       <span>{toast.msg}</span>
-      <button
-        onClick={onClose}
-        className="ml-2 opacity-60 hover:opacity-100 text-xs"
-      >
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100 text-xs">
         ✕
       </button>
     </div>
@@ -100,24 +114,36 @@ function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
 // ─── Status badges ────────────────────────────────────────────────────────────
 
 function ClienteStatusBadge({
-  score, clienteStatus,
+  score,
+  clienteStatus,
 }: {
-  score: number; clienteStatus: StatusCliente;
+  score: number;
+  clienteStatus: StatusCliente;
 }) {
   if (clienteStatus === "Encerrado")
-    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 line-through">Encerrado</span>;
+    return (
+      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 line-through">
+        Encerrado
+      </span>
+    );
   if (clienteStatus === "Pausado")
-    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">Pausado</span>;
+    return (
+      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
+        Pausado
+      </span>
+    );
 
   const status = getStatusFromScore(score);
   const styles: Record<string, string> = {
-    "Em risco":   "bg-red-900 text-red-300",
+    "Em risco": "bg-red-900 text-red-300",
     "Em atenção": "bg-yellow-900 text-yellow-300",
-    Saudável:     "bg-green-900 text-green-300",
-    Concluído:    "bg-emerald-900 text-emerald-300",
+    Saudável: "bg-green-900 text-green-300",
+    Concluído: "bg-emerald-900 text-emerald-300",
   };
   return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] ?? styles["Em risco"]}`}>
+    <span
+      className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[status] ?? styles["Em risco"]}`}
+    >
       {status}
     </span>
   );
@@ -125,14 +151,16 @@ function ClienteStatusBadge({
 
 function TarefaStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Finalizado:      "bg-green-900 text-green-300",
-    Atrasado:        "bg-red-900 text-red-300",
-    "Em andamento":  "bg-blue-900 text-blue-300",
-    "Não iniciado":  "bg-gray-700 text-gray-400",
-    Cancelado:       "bg-gray-800 text-gray-600 line-through",
+    Finalizado: "bg-green-900 text-green-300",
+    Atrasado: "bg-red-900 text-red-300",
+    "Em andamento": "bg-blue-900 text-blue-300",
+    "Não iniciado": "bg-gray-700 text-gray-400",
+    Cancelado: "bg-gray-800 text-gray-600 line-through",
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] ?? "bg-gray-700 text-gray-400"}`}>
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] ?? "bg-gray-700 text-gray-400"}`}
+    >
       {status}
     </span>
   );
@@ -170,7 +198,7 @@ type EditForm = { etapa: string; quem: string; prazo: string; status: string; ob
 
 function TabelaTarefas({
   tarefas,
-  clienteId,
+  clienteId: _clienteId,
   onCheckChange,
   onUpdate,
 }: {
@@ -180,16 +208,22 @@ function TabelaTarefas({
   onUpdate: (tarefa: Tarefa, updates: EditForm) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm,  setEditForm]  = useState<EditForm>({ etapa: "", quem: "", prazo: "", status: "", observacoes: "" });
-  const [saving,    setSaving]    = useState(false);
+  const [editForm, setEditForm] = useState<EditForm>({
+    etapa: "",
+    quem: "",
+    prazo: "",
+    status: "",
+    observacoes: "",
+  });
+  const [saving, setSaving] = useState(false);
 
   function startEdit(t: Tarefa) {
     setEditingId(t.id);
     setEditForm({
-      etapa:       t.etapa       ?? "",
-      quem:        t.quem        ?? "",
-      prazo:       t.prazo       ?? "",  // YYYY-MM-DD
-      status:      t.status      ?? "Não iniciado",
+      etapa: t.etapa ?? "",
+      quem: t.quem ?? "",
+      prazo: t.prazo ?? "", // YYYY-MM-DD
+      status: t.status ?? "Não iniciado",
       observacoes: t.observacoes ?? "",
     });
   }
@@ -202,9 +236,12 @@ function TabelaTarefas({
   }
 
   if (tarefas.length === 0)
-    return <p className="text-gray-500 text-sm py-2">Nenhuma tarefa importada para este cliente.</p>;
+    return (
+      <p className="text-gray-500 text-sm py-2">Nenhuma tarefa importada para este cliente.</p>
+    );
 
-  const inputCls = "bg-[#111] border border-[#444] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-[#666] w-full";
+  const inputCls =
+    "bg-[#111] border border-[#444] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-[#666] w-full";
   const selectCls = inputCls + " cursor-pointer";
 
   return (
@@ -224,8 +261,8 @@ function TabelaTarefas({
         </thead>
         <tbody>
           {tarefas.map((t) => {
-            const vencida  = isPrazoVencido(t.prazo, t.status);
-            const isEdit   = editingId === t.id;
+            const vencida = isPrazoVencido(t.prazo, t.status);
+            const isEdit = editingId === t.id;
             const rowClass = t.check_feito
               ? "border-t border-[#2a2a2a] opacity-50"
               : `border-t border-[#2a2a2a] ${isEdit ? "bg-[#1a1a2e]" : "hover:bg-[#1e1e2e] transition-colors"}`;
@@ -237,29 +274,25 @@ function TabelaTarefas({
                     <input
                       type="checkbox"
                       checked={t.check_feito}
-                      onChange={(e) => { if (!isEdit) onCheckChange(t, e.target.checked); }}
+                      onChange={(e) => {
+                        if (!isEdit) onCheckChange(t, e.target.checked);
+                      }}
                       className="w-3.5 h-3.5 accent-green-500 cursor-pointer"
                       title="Marcar como concluído"
                     />
                   </td>
                   {/* Etapa */}
-                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                    {t.etapa ?? "—"}
-                  </td>
+                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{t.etapa ?? "—"}</td>
                   {/* O que */}
-                  <td className="px-3 py-2 text-gray-200">
-                    {t.o_que}
-                  </td>
+                  <td className="px-3 py-2 text-gray-200">{t.o_que}</td>
                   {/* Tipo */}
-                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                    {t.tipo ?? "—"}
-                  </td>
+                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{t.tipo ?? "—"}</td>
                   {/* Quem */}
-                  <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
-                    {t.quem ?? "—"}
-                  </td>
+                  <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{t.quem ?? "—"}</td>
                   {/* Prazo */}
-                  <td className={`px-3 py-2 whitespace-nowrap font-medium ${vencida ? "text-red-400" : "text-gray-400"}`}>
+                  <td
+                    className={`px-3 py-2 whitespace-nowrap font-medium ${vencida ? "text-red-400" : "text-gray-400"}`}
+                  >
                     {formatDate(t.prazo)}
                     {vencida && <span className="ml-1 text-red-500">!</span>}
                   </td>
@@ -274,13 +307,17 @@ function TabelaTarefas({
                         onClick={() => setEditingId(null)}
                         className="text-gray-500 hover:text-gray-300 px-1"
                         title="Cancelar"
-                      >✕</button>
+                      >
+                        ✕
+                      </button>
                     ) : (
                       <button
                         onClick={() => startEdit(t)}
                         className="text-gray-600 hover:text-gray-300 px-1 transition"
                         title="Editar tarefa"
-                      >✎</button>
+                      >
+                        ✎
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -356,9 +393,13 @@ function TabelaTarefas({
 // ─── Badge de resumo ──────────────────────────────────────────────────────────
 
 function SummaryBadge({
-  label, value, color = "text-gray-200",
+  label,
+  value,
+  color = "text-gray-200",
 }: {
-  label: string; value: number | string; color?: string;
+  label: string;
+  value: number | string;
+  color?: string;
 }) {
   return (
     <div className="flex items-center gap-2 bg-[#2a2a2a] border border-[#333] rounded-lg px-3 py-1.5">
@@ -371,57 +412,77 @@ function SummaryBadge({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
-  { key: "id_cliente",    label: "ID"          },
-  { key: "nome_empresa",  label: "Cliente"     },
-  { key: "plano",         label: "Plano"       },
-  { key: "total_tarefas", label: "Tarefas",  center: true },
-  { key: "finalizadas",   label: "Finaliz.",  center: true },
-  { key: "atrasadas",     label: "Atrasadas", center: true },
-  { key: "score",         label: "Progresso"   },
-  { key: null,            label: "Score",     center: true },
-  { key: "statusScore",   label: "Status"      },
+  { key: "id_cliente", label: "ID" },
+  { key: "nome_empresa", label: "Cliente" },
+  { key: "plano", label: "Plano" },
+  { key: "total_tarefas", label: "Tarefas", center: true },
+  { key: "finalizadas", label: "Finaliz.", center: true },
+  { key: "atrasadas", label: "Atrasadas", center: true },
+  { key: "score", label: "Progresso" },
+  { key: null, label: "Score", center: true },
+  { key: "statusScore", label: "Status" },
 ];
 
 export default function PipelinePage() {
-  const router  = useRouter();
-  const [user,            setUser]            = useState<User | null>(null);
-  const [clientes,        setClientes]        = useState<ClienteComMetricas[]>([]);
-  const [loading,         setLoading]         = useState(true);
-  const [syncing,         setSyncing]         = useState(false);
-  const [toast,           setToast]           = useState<ToastState | null>(null);
-  const [filtro,          setFiltro]          = useState<FiltroStatus>("Todos");
-  const [busca,           setBusca]           = useState("");
-  const [responsavel,     setResponsavel]     = useState("Todos");
-  const [sortKey,         setSortKey]         = useState<SortKey | null>(null);
-  const [sortDir,         setSortDir]         = useState<"asc" | "desc">("asc");
-  const [expandedId,      setExpandedId]      = useState<string | null>(null);
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [clientes, setClientes] = useState<ClienteComMetricas[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [filtro, setFiltro] = useState<FiltroStatus>("Todos");
+  const [busca, setBusca] = useState("");
+  const [responsavel, setResponsavel] = useState("Todos");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
-  const [addTarefaFor,    setAddTarefaFor]    = useState<string | null>(null);
-  const [addTarefaForm,   setAddTarefaForm]   = useState({ etapa: "", o_que: "", tipo: "Marry Me", quem: "", prazo: "", status: "Não iniciado", observacoes: "" });
-  const [savingTarefa,    setSavingTarefa]    = useState(false);
+  const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
+  const [addTarefaForm, setAddTarefaForm] = useState({
+    etapa: "",
+    o_que: "",
+    tipo: "Marry Me",
+    quem: "",
+    prazo: "",
+    status: "Não iniciado",
+    observacoes: "",
+  });
+  const [savingTarefa, setSavingTarefa] = useState(false);
 
   // ── Load data ──
   const loadData = useCallback(async () => {
     const supabase = createClient();
     const [{ data: clientesData }, { data: tarefasData }] = await Promise.all([
-      supabase.from("mm_clientes").select("id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba").order("id_cliente").limit(500),
-      supabase.from("mm_tarefas").select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes").limit(2000),
+      supabase
+        .from("mm_clientes")
+        .select(
+          "id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba"
+        )
+        .order("id_cliente")
+        .limit(500),
+      supabase
+        .from("mm_tarefas")
+        .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
+        .limit(2000),
     ]);
 
-    const tarefas      = dedupTarefas((tarefasData ?? []) as Tarefa[]);
+    const tarefas = dedupTarefas((tarefasData ?? []) as Tarefa[]);
     const clientesDedup = dedupClientesByNome((clientesData ?? []) as Cliente[]);
 
     const resultado: ClienteComMetricas[] = clientesDedup.map((c: Cliente) => {
-      const tCliente    = tarefas.filter((t) => t.cliente_id === c.id_cliente);
+      const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
       const hoje = new Date().toISOString().split("T")[0];
       const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
-      const atrasadas   = tCliente.filter((t) =>
-        !t.check_feito && t.status !== "Finalizado" && t.status !== "Cancelado" &&
-        (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
+      const atrasadas = tCliente.filter(
+        (t) =>
+          !t.check_feito &&
+          t.status !== "Finalizado" &&
+          t.status !== "Cancelado" &&
+          (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
       ).length;
-      const total       = tCliente.length;
-      const totalAtivo  = tCliente.filter((t) => t.status !== "Cancelado").length;
-      const score       = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
+      const total = tCliente.length;
+      const totalAtivo = tCliente.filter((t) => t.status !== "Cancelado").length;
+      const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
       return {
         ...c,
         total_tarefas: total,
@@ -440,8 +501,13 @@ export default function PipelinePage() {
   useEffect(() => {
     async function init() {
       const supabase = createClient();
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) { router.push("/login"); return; }
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) {
+        router.push("/login");
+        return;
+      }
       setUser(authUser);
       await loadData();
     }
@@ -474,10 +540,12 @@ export default function PipelinePage() {
 
   // ── Check toggle — atualiza Supabase + Sheets ──
   async function handleCheckChange(tarefa: Tarefa, checked: boolean) {
-    const hoje       = new Date().toISOString().split("T")[0];
-    const newStatus  = checked
+    const hoje = new Date().toISOString().split("T")[0];
+    const newStatus = checked
       ? "Finalizado"
-      : tarefa.prazo && tarefa.prazo < hoje ? "Atrasado" : "Não iniciado";
+      : tarefa.prazo && tarefa.prazo < hoje
+        ? "Atrasado"
+        : "Não iniciado";
 
     // Optimistic update (check + status)
     setClientes((prev) =>
@@ -490,20 +558,20 @@ export default function PipelinePage() {
     );
 
     try {
-      const res  = await fetch("/api/sheets/update-tarefa", {
+      const res = await fetch("/api/sheets/update-tarefa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id:             tarefa.id,
-          id_cliente:     tarefa.cliente_id,
+          id: tarefa.id,
+          id_cliente: tarefa.cliente_id,
           o_que_original: tarefa.o_que,
           prazo_original: tarefa.prazo,
           etapa_original: tarefa.etapa,
-          check_feito:    checked,
-          status:         newStatus,
+          check_feito: checked,
+          status: newStatus,
         }),
       });
-      const data = await res.json() as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar");
     } catch (err) {
       // Revert
@@ -529,11 +597,11 @@ export default function PipelinePage() {
           t.id === tarefa.id
             ? {
                 ...t,
-                etapa:       updates.etapa       || null,
-                quem:        updates.quem        || null,
-                prazo:       updates.prazo        || null,
-                status:      updates.status,
-                observacoes: updates.observacoes  || null,
+                etapa: updates.etapa || null,
+                quem: updates.quem || null,
+                prazo: updates.prazo || null,
+                status: updates.status,
+                observacoes: updates.observacoes || null,
               }
             : t
         ),
@@ -541,23 +609,23 @@ export default function PipelinePage() {
     );
 
     try {
-      const res  = await fetch("/api/sheets/update-tarefa", {
+      const res = await fetch("/api/sheets/update-tarefa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id:             tarefa.id,
-          id_cliente:     tarefa.cliente_id,
+          id: tarefa.id,
+          id_cliente: tarefa.cliente_id,
           o_que_original: tarefa.o_que,
           prazo_original: tarefa.prazo,
           etapa_original: tarefa.etapa,
-          etapa:          updates.etapa,
-          quem:           updates.quem,
-          prazo:          updates.prazo,
-          status:         updates.status,
-          observacoes:    updates.observacoes,
+          etapa: updates.etapa,
+          quem: updates.quem,
+          prazo: updates.prazo,
+          status: updates.status,
+          observacoes: updates.observacoes,
         }),
       });
-      const data = await res.json() as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar");
       setToast({ type: "success", msg: "Tarefa atualizada na planilha" });
     } catch (err) {
@@ -565,9 +633,7 @@ export default function PipelinePage() {
       setClientes((prev) =>
         prev.map((c) => ({
           ...c,
-          tarefas: c.tarefas.map((t) =>
-            t.id === tarefa.id ? tarefa : t
-          ),
+          tarefas: c.tarefas.map((t) => (t.id === tarefa.id ? tarefa : t)),
         }))
       );
       setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao atualizar" });
@@ -583,7 +649,11 @@ export default function PipelinePage() {
     if (error) {
       setToast({ type: "error", msg: `Erro: ${error.message}` });
     } else {
-      const labels: Record<StatusCliente, string> = { Ativo: "reativado", Pausado: "pausado", Encerrado: "encerrado" };
+      const labels: Record<StatusCliente, string> = {
+        Ativo: "reativado",
+        Pausado: "pausado",
+        Encerrado: "encerrado",
+      };
       setToast({ type: "success", msg: `Cliente ${labels[novoStatus]}` });
       setExpandedId(null);
       await loadData();
@@ -603,10 +673,21 @@ export default function PipelinePage() {
       if (!data.ok) throw new Error(data.error ?? "Erro ao salvar");
       setToast({ type: "success", msg: "Tarefa adicionada na planilha e no sistema" });
       setAddTarefaFor(null);
-      setAddTarefaForm({ etapa: "", o_que: "", tipo: "Marry Me", quem: "", prazo: "", status: "Não iniciado", observacoes: "" });
+      setAddTarefaForm({
+        etapa: "",
+        o_que: "",
+        tipo: "Marry Me",
+        quem: "",
+        prazo: "",
+        status: "Não iniciado",
+        observacoes: "",
+      });
       await loadData();
     } catch (err) {
-      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar tarefa" });
+      setToast({
+        type: "error",
+        msg: err instanceof Error ? err.message : "Erro ao salvar tarefa",
+      });
     } finally {
       setSavingTarefa(false);
     }
@@ -614,11 +695,11 @@ export default function PipelinePage() {
 
   // ── Summary metrics ──
   const metrics = useMemo(() => {
-    const ativos     = clientes.filter((c) => !/paus|encerr/i.test(c.status ?? ""));
-    const pausados   = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
+    const ativos = clientes.filter((c) => !/paus|encerr/i.test(c.status ?? ""));
+    const pausados = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
     const encerrados = clientes.filter((c) => /encerr/i.test(c.status ?? "")).length;
     const atrasadasTotal = ativos.reduce((s, c) => s + c.atrasadas, 0);
-    const emRisco        = ativos.filter((c) => c.score < 50).length;
+    const emRisco = ativos.filter((c) => c.score < 50).length;
     return { ativos: ativos.length, pausados, encerrados, atrasadasTotal, emRisco };
   }, [clientes]);
 
@@ -626,11 +707,12 @@ export default function PipelinePage() {
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
       if (filtro === "Encerrados") return /encerr/i.test(c.status ?? "");
-      if (filtro === "Pausados")   return /paus/i.test(c.status ?? "");
+      if (filtro === "Pausados") return /paus/i.test(c.status ?? "");
       if (/paus|encerr/i.test(c.status ?? "")) return false;
-      if (filtro === "Em risco")   return c.statusScore === "Em risco";
+      if (filtro === "Em risco") return c.statusScore === "Em risco";
       if (filtro === "Em atenção") return c.statusScore === "Em atenção";
-      if (filtro === "Saudáveis")  return c.statusScore === "Saudável"  || c.statusScore === "Concluído";
+      if (filtro === "Saudáveis")
+        return c.statusScore === "Saudável" || c.statusScore === "Concluído";
       return true;
     });
 
@@ -638,9 +720,7 @@ export default function PipelinePage() {
     if (busca.trim()) {
       const q = busca.toLowerCase();
       lista = lista.filter(
-        (c) =>
-          c.nome_empresa.toLowerCase().includes(q) ||
-          c.id_cliente.toLowerCase().includes(q)
+        (c) => c.nome_empresa.toLowerCase().includes(q) || c.id_cliente.toLowerCase().includes(q)
       );
     }
 
@@ -669,7 +749,10 @@ export default function PipelinePage() {
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -686,26 +769,27 @@ export default function PipelinePage() {
     <div className="min-h-screen bg-[#1a1a1a] text-white">
       <Header user={user} />
 
-      {toast && (
-        <Toast toast={toast} onClose={() => setToast(null)} />
-      )}
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-
         {/* ── Cabeçalho ── */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold mb-3">Pipeline de clientes</h1>
             <div className="flex flex-wrap gap-2">
-              <SummaryBadge label="clientes ativos"   value={metrics.ativos}        />
-              <SummaryBadge label="tarefas atrasadas" value={metrics.atrasadasTotal}
-                color={metrics.atrasadasTotal > 0 ? "text-red-400" : "text-gray-200"} />
-              <SummaryBadge label="em risco"          value={metrics.emRisco}
-                color={metrics.emRisco > 0 ? "text-red-400" : "text-gray-200"} />
-              <SummaryBadge label="pausados"          value={metrics.pausados}
-                color="text-gray-400" />
-              <SummaryBadge label="encerrados"        value={metrics.encerrados}
-                color="text-zinc-500" />
+              <SummaryBadge label="clientes ativos" value={metrics.ativos} />
+              <SummaryBadge
+                label="tarefas atrasadas"
+                value={metrics.atrasadasTotal}
+                color={metrics.atrasadasTotal > 0 ? "text-red-400" : "text-gray-200"}
+              />
+              <SummaryBadge
+                label="em risco"
+                value={metrics.emRisco}
+                color={metrics.emRisco > 0 ? "text-red-400" : "text-gray-200"}
+              />
+              <SummaryBadge label="pausados" value={metrics.pausados} color="text-gray-400" />
+              <SummaryBadge label="encerrados" value={metrics.encerrados} color="text-zinc-500" />
             </div>
           </div>
 
@@ -748,8 +832,15 @@ export default function PipelinePage() {
 
           {/* Busca */}
           <div className="relative flex items-center">
-            <svg className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <svg
+              className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
@@ -759,7 +850,12 @@ export default function PipelinePage() {
               className="pl-8 pr-7 py-1.5 text-sm bg-[#1a1a1a] border border-[#444] rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666] w-48"
             />
             {busca && (
-              <button onClick={() => setBusca("")} className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs">✕</button>
+              <button
+                onClick={() => setBusca("")}
+                className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs"
+              >
+                ✕
+              </button>
             )}
           </div>
 
@@ -817,9 +913,7 @@ export default function PipelinePage() {
                     <React.Fragment key={c.id}>
                       {/* ── Linha do cliente ── */}
                       <tr
-                        onClick={() =>
-                          setExpandedId(expandedId === c.id ? null : c.id)
-                        }
+                        onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                         className={`cursor-pointer border-t border-[#2a2a2a] transition-colors ${
                           i % 2 === 0 ? "bg-[#1e1e1e]" : "bg-[#222]"
                         } hover:bg-[#2c2c2c]`}
@@ -838,7 +932,9 @@ export default function PipelinePage() {
                         {/* Plano */}
                         <td className="px-4 py-3">
                           {c.plano ? (
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}>
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
+                            >
                               {planoLabel(c.plano)}
                             </span>
                           ) : (
@@ -846,17 +942,17 @@ export default function PipelinePage() {
                           )}
                         </td>
                         {/* Total */}
-                        <td className="px-4 py-3 text-center text-gray-300">
-                          {c.total_tarefas}
-                        </td>
+                        <td className="px-4 py-3 text-center text-gray-300">{c.total_tarefas}</td>
                         {/* Finalizadas */}
                         <td className="px-4 py-3 text-center text-green-400 font-medium">
                           {c.finalizadas}
                         </td>
                         {/* Atrasadas */}
-                        <td className={`px-4 py-3 text-center font-medium ${
-                          c.atrasadas > 0 ? "text-red-400" : "text-green-400"
-                        }`}>
+                        <td
+                          className={`px-4 py-3 text-center font-medium ${
+                            c.atrasadas > 0 ? "text-red-400" : "text-green-400"
+                          }`}
+                        >
                           {c.atrasadas}
                         </td>
                         {/* Progresso */}
@@ -872,10 +968,7 @@ export default function PipelinePage() {
                         </td>
                         {/* Status */}
                         <td className="px-4 py-3">
-                          <ClienteStatusBadge
-                            score={c.score}
-                            clienteStatus={c.status}
-                          />
+                          <ClienteStatusBadge score={c.score} clienteStatus={c.status} />
                         </td>
                       </tr>
 
@@ -890,7 +983,10 @@ export default function PipelinePage() {
                               <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
                                 Tarefas · {c.nome_empresa}
                               </p>
-                              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <div
+                                className="flex items-center gap-2"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {c.fase_projeto && (
                                   <span className="text-xs text-blue-400 bg-blue-950 px-2 py-0.5 rounded-full">
                                     {c.fase_projeto}
@@ -904,11 +1000,17 @@ export default function PipelinePage() {
                                     onClick={() => setMostrarFinalizadas((v) => !v)}
                                     className="text-xs px-2 py-0.5 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition"
                                   >
-                                    {mostrarFinalizadas ? "Ocultar concluídas" : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
+                                    {mostrarFinalizadas
+                                      ? "Ocultar concluídas"
+                                      : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => setAddTarefaFor(addTarefaFor === c.id_cliente ? null : c.id_cliente)}
+                                  onClick={() =>
+                                    setAddTarefaFor(
+                                      addTarefaFor === c.id_cliente ? null : c.id_cliente
+                                    )
+                                  }
                                   className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
                                 >
                                   + Tarefa
@@ -916,7 +1018,13 @@ export default function PipelinePage() {
                               </div>
                             </div>
                             <TabelaTarefas
-                              tarefas={mostrarFinalizadas ? c.tarefas : c.tarefas.filter((t) => !t.check_feito && t.status !== "Finalizado")}
+                              tarefas={
+                                mostrarFinalizadas
+                                  ? c.tarefas
+                                  : c.tarefas.filter(
+                                      (t) => !t.check_feito && t.status !== "Finalizado"
+                                    )
+                              }
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                               onUpdate={handleUpdateTarefa}
@@ -928,23 +1036,31 @@ export default function PipelinePage() {
                                 className="mt-3 p-4 rounded-xl bg-[#1a1a2e] border border-[#333] space-y-3"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Nova tarefa</p>
+                                <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">
+                                  Nova tarefa
+                                </p>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                   <input
                                     placeholder="Etapa"
                                     value={addTarefaForm.etapa}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))
+                                    }
                                     className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666]"
                                   />
                                   <input
                                     placeholder="O que fazer? *"
                                     value={addTarefaForm.o_que}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))
+                                    }
                                     className="col-span-2 bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666]"
                                   />
                                   <select
                                     value={addTarefaForm.tipo}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))
+                                    }
                                     className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
                                   >
                                     <option>Marry Me</option>
@@ -954,22 +1070,30 @@ export default function PipelinePage() {
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                   <select
                                     value={addTarefaForm.quem}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))
+                                    }
                                     className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
                                   >
                                     <option value="">Quem?</option>
-                                    {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => <option key={r}>{r}</option>)}
+                                    {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => (
+                                      <option key={r}>{r}</option>
+                                    ))}
                                     <option>Cliente</option>
                                   </select>
                                   <input
                                     type="date"
                                     value={addTarefaForm.prazo}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))
+                                    }
                                     className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666]"
                                   />
                                   <select
                                     value={addTarefaForm.status}
-                                    onChange={(e) => setAddTarefaForm((f) => ({ ...f, status: e.target.value }))}
+                                    onChange={(e) =>
+                                      setAddTarefaForm((f) => ({ ...f, status: e.target.value }))
+                                    }
                                     className="bg-[#1e1e1e] border border-[#444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-[#666] cursor-pointer"
                                   >
                                     <option>Não iniciado</option>
@@ -995,19 +1119,24 @@ export default function PipelinePage() {
                               </div>
                             )}
 
-                            <div className="mt-4 pt-3 border-t border-[#2a2a2a] flex items-center gap-3"
+                            <div
+                              className="mt-4 pt-3 border-t border-[#2a2a2a] flex items-center gap-3"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span className="text-xs text-gray-500">Status do contrato:</span>
                               {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
                                 <button
                                   key={s}
-                                  onClick={() => c.status !== s && handleStatusChange(c.id_cliente, s)}
+                                  onClick={() =>
+                                    c.status !== s && handleStatusChange(c.id_cliente, s)
+                                  }
                                   className={`text-xs px-3 py-1.5 rounded-lg border transition ${
                                     c.status === s
-                                      ? s === "Ativo"     ? "bg-green-950 border-green-700 text-green-300 cursor-default"
-                                      : s === "Pausado"   ? "bg-gray-800 border-gray-600 text-gray-300 cursor-default"
-                                                          : "bg-zinc-900 border-zinc-600 text-zinc-300 cursor-default"
+                                      ? s === "Ativo"
+                                        ? "bg-green-950 border-green-700 text-green-300 cursor-default"
+                                        : s === "Pausado"
+                                          ? "bg-gray-800 border-gray-600 text-gray-300 cursor-default"
+                                          : "bg-zinc-900 border-zinc-600 text-zinc-300 cursor-default"
                                       : "bg-transparent border-[#444] text-gray-500 hover:border-[#666] hover:text-gray-300"
                                   }`}
                                 >

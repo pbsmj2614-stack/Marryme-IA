@@ -9,18 +9,14 @@
  */
 
 import { createClient } from "@/lib/supabase";
-import {
-  fetchTodasAbas,
-  fetchCadastroClientes,
-  fetchTodasTarefasBatch,
-} from "@/lib/sheets";
+import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch } from "@/lib/sheets";
 
 export interface ImportResult {
   clientes: number;
   tarefas: number;
   erros: string[];
-  semAbas: string[];      // clientes sem aba no Sheets
-  semTarefas: string[];   // clientes com aba mas 0 tarefas importadas
+  semAbas: string[]; // clientes sem aba no Sheets
+  semTarefas: string[]; // clientes com aba mas 0 tarefas importadas
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -98,9 +94,9 @@ function encontrarAba(
   abasDisponiveis: string[], // abas filtradas MM\d+
   idCliente: string,
   nomeEmpresa: string,
-  todasAbas: string[] = [], // todas as abas (fallback para abas sem prefixo MM)
+  todasAbas: string[] = [] // todas as abas (fallback para abas sem prefixo MM)
 ): string | null {
-  const idLower   = idCliente.toLowerCase();
+  const idLower = idCliente.toLowerCase();
   const nomeLower = nomeEmpresa.toLowerCase().replace(/\s+/g, "");
 
   // 1ª: ID como prefixo (MM039_Nome ou MM039 Nome ou exatamente MM039)
@@ -135,8 +131,14 @@ export async function importarPlanilha(): Promise<ImportResult> {
   let totalClientes = 0;
   let totalTarefas = 0;
 
-  const vazio = (extra?: Partial<ImportResult>): ImportResult =>
-    ({ clientes: 0, tarefas: 0, erros, semAbas, semTarefas, ...extra });
+  const vazio = (extra?: Partial<ImportResult>): ImportResult => ({
+    clientes: 0,
+    tarefas: 0,
+    erros,
+    semAbas,
+    semTarefas,
+    ...extra,
+  });
 
   // ── 1. Busca todas as abas ──
   let todasAbas: string[] = [];
@@ -167,7 +169,10 @@ export async function importarPlanilha(): Promise<ImportResult> {
     .select("id_cliente, status")
     .in("status", ["Pausado", "Encerrado"]);
   const statusOverrides = new Map<string, string>(
-    (statusOverrideData ?? []).map((c: { id_cliente: string; status: string }) => [c.id_cliente, c.status])
+    (statusOverrideData ?? []).map((c: { id_cliente: string; status: string }) => [
+      c.id_cliente,
+      c.status,
+    ])
   );
 
   // Checks manuais feitos no app (check_feito=true que a planilha ainda não reflete)
@@ -209,31 +214,31 @@ export async function importarPlanilha(): Promise<ImportResult> {
     const aba = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
     if (!aba) semAbas.push(`${c.id_cliente} (${c.nome_empresa})`);
     return {
-      id_cliente:      c.id_cliente,
-      nome_empresa:    c.nome_empresa,
-      segmento:        c.segmento       || null,
-      cidade:          c.cidade         || null,
-      whatsapp:        c.whatsapp       || null,
-      email:           c.email          || null,
+      id_cliente: c.id_cliente,
+      nome_empresa: c.nome_empresa,
+      segmento: c.segmento || null,
+      cidade: c.cidade || null,
+      whatsapp: c.whatsapp || null,
+      email: c.email || null,
       inicio_contrato: parseDateBR(c.inicio_contrato),
-      plano:           c.plano          || null,
-      fase_projeto:    c.fase_projeto   || null,
-      status:          (() => {
+      plano: c.plano || null,
+      fase_projeto: c.fase_projeto || null,
+      status: (() => {
         const sheetStatus = normalizeClientStatus(c.status);
-        const override    = statusOverrides.get(c.id_cliente);
+        const override = statusOverrides.get(c.id_cliente);
         // Override manual (Pausado/Encerrado) prevalece quando a planilha diz "Ativo"
-        return (override && sheetStatus === "Ativo") ? override : sheetStatus;
+        return override && sheetStatus === "Ativo" ? override : sheetStatus;
       })(),
-      responsavel_mm:  c.responsavel_mm || null,
-      observacoes:     c.observacoes    || null,
-      sheets_aba:      aba,
-      atualizado_em:   new Date().toISOString(),
+      responsavel_mm: c.responsavel_mm || null,
+      observacoes: c.observacoes || null,
+      sheets_aba: aba,
+      atualizado_em: new Date().toISOString(),
     };
   });
 
   // ── 4b. Desduplicar por nome_empresa (mantém o menor ID MM) ──
   // Evita duplicatas quando a planilha tem a mesma empresa com IDs diferentes
-  const seenNomes = new Map<string, typeof clientesPayload[0]>();
+  const seenNomes = new Map<string, (typeof clientesPayload)[0]>();
   for (const c of clientesPayload) {
     const key = c.nome_empresa.toLowerCase().trim();
     const existing = seenNomes.get(key);
@@ -241,7 +246,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
       seenNomes.set(key, c);
     } else {
       const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-      const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      const newNum = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
       if (newNum < existNum) seenNomes.set(key, c); // mantém o ID mais antigo (menor número)
     }
   }
@@ -249,13 +254,13 @@ export async function importarPlanilha(): Promise<ImportResult> {
 
   const duplicatasRemovidas = clientesPayload.length - clientesPayloadDedup.length;
   if (duplicatasRemovidas > 0) {
-    erros.push(`Aviso: ${duplicatasRemovidas} entrada(s) duplicada(s) por nome_empresa removida(s) da importação (mantido o menor ID).`);
+    erros.push(
+      `Aviso: ${duplicatasRemovidas} entrada(s) duplicada(s) por nome_empresa removida(s) da importação (mantido o menor ID).`
+    );
   }
 
   // ── 5. Insere clientes frescos ──
-  const { error: errClientes } = await supabase
-    .from("mm_clientes")
-    .insert(clientesPayloadDedup);
+  const { error: errClientes } = await supabase.from("mm_clientes").insert(clientesPayloadDedup);
 
   if (errClientes) {
     erros.push(`Erro ao salvar clientes: ${errClientes.message}`);
@@ -266,7 +271,11 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // ── 6. Busca TODAS as tarefas em batchGet ──
   const abasComCliente = clientesPayloadDedup
     .filter((c) => c.sheets_aba)
-    .map((c) => ({ id_cliente: c.id_cliente, sheets_aba: c.sheets_aba as string, nome_empresa: c.nome_empresa }));
+    .map((c) => ({
+      id_cliente: c.id_cliente,
+      sheets_aba: c.sheets_aba as string,
+      nome_empresa: c.nome_empresa,
+    }));
 
   let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
   try {
@@ -285,28 +294,28 @@ export async function importarPlanilha(): Promise<ImportResult> {
     }
 
     const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
-      const prazoISO   = parseDateBR(t.prazo);
+      const prazoISO = parseDateBR(t.prazo);
       const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
-      const statusFinal = t.check_feito ? "Finalizado"
-        : isAtrasado(t.prazo, statusNorm) ? "Atrasado"
-        : statusNorm;
+      const statusFinal = t.check_feito
+        ? "Finalizado"
+        : isAtrasado(t.prazo, statusNorm)
+          ? "Atrasado"
+          : statusNorm;
       return {
-        cliente_id:    cliente.id_cliente,
-        check_feito:   t.check_feito,
-        etapa:         t.etapa       || null,
-        o_que:         t.o_que,
-        tipo:          t.tipo        || null,
-        quem:          t.quem        || null,
-        prazo:         prazoISO,
-        status:        statusFinal,
-        observacoes:   t.observacoes || null,
+        cliente_id: cliente.id_cliente,
+        check_feito: t.check_feito,
+        etapa: t.etapa || null,
+        o_que: t.o_que,
+        tipo: t.tipo || null,
+        quem: t.quem || null,
+        prazo: prazoISO,
+        status: statusFinal,
+        observacoes: t.observacoes || null,
         atualizado_em: new Date().toISOString(),
       };
     });
 
-    const { error: errInsert } = await supabase
-      .from("mm_tarefas")
-      .insert(tarefasPayload);
+    const { error: errInsert } = await supabase.from("mm_tarefas").insert(tarefasPayload);
 
     if (errInsert) {
       erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${errInsert.message}`);
@@ -323,15 +332,25 @@ export async function importarPlanilha(): Promise<ImportResult> {
       .eq("check_feito", false);
 
     const idsParaMarcar = (tarefasInseridas ?? [])
-      .filter((t: { id: string; cliente_id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
-        checksSet.has(`${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`)
+      .filter(
+        (t: {
+          id: string;
+          cliente_id: string;
+          o_que: string;
+          prazo: string | null;
+          etapa: string | null;
+        }) => checksSet.has(`${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`)
       )
       .map((t: { id: string }) => t.id);
 
     if (idsParaMarcar.length > 0) {
       await supabase
         .from("mm_tarefas")
-        .update({ check_feito: true, status: "Finalizado", atualizado_em: new Date().toISOString() })
+        .update({
+          check_feito: true,
+          status: "Finalizado",
+          atualizado_em: new Date().toISOString(),
+        })
         .in("id", idsParaMarcar);
     }
   }

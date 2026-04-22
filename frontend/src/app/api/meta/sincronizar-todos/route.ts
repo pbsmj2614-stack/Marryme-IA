@@ -25,11 +25,16 @@ export async function POST(req: NextRequest) {
 
     if (error) throw new Error(error.message);
     if (!prestadores || prestadores.length === 0) {
-      return NextResponse.json({ ok: true, sincronizados: 0, mensagem: "Nenhum prestador com conta Meta configurada." });
+      return NextResponse.json({
+        ok: true,
+        sincronizados: 0,
+        mensagem: "Nenhum prestador com conta Meta configurada.",
+      });
     }
 
     const baseUrl = req.nextUrl.origin;
-    const resultados: Array<{ nome: string; ok: boolean; erro?: string; health_score?: number }> = [];
+    const resultados: Array<{ nome: string; ok: boolean; erro?: string; health_score?: number }> =
+      [];
 
     // Processar em série para não exceder rate limits da Meta API
     for (const p of prestadores) {
@@ -39,14 +44,22 @@ export async function POST(req: NextRequest) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prestador_id: p.id }),
         });
-        const data = await res.json() as { ok?: boolean; health_score?: number; error?: string };
+        const data = (await res.json()) as { ok?: boolean; health_score?: number; error?: string };
         if (!res.ok || !data.ok) {
-          resultados.push({ nome: p.nome_artistico, ok: false, erro: data.error ?? "Erro desconhecido" });
+          resultados.push({
+            nome: p.nome_artistico,
+            ok: false,
+            erro: data.error ?? "Erro desconhecido",
+          });
         } else {
           resultados.push({ nome: p.nome_artistico, ok: true, health_score: data.health_score });
         }
       } catch (e) {
-        resultados.push({ nome: p.nome_artistico, ok: false, erro: e instanceof Error ? e.message : String(e) });
+        resultados.push({
+          nome: p.nome_artistico,
+          ok: false,
+          erro: e instanceof Error ? e.message : String(e),
+        });
       }
 
       // Pequeno delay entre chamadas para respeitar rate limits
@@ -54,16 +67,15 @@ export async function POST(req: NextRequest) {
     }
 
     const sucessos = resultados.filter((r) => r.ok).length;
-    const erros    = resultados.filter((r) => !r.ok).length;
+    const erros = resultados.filter((r) => !r.ok).length;
 
     return NextResponse.json({
-      ok:            true,
-      total:         prestadores.length,
+      ok: true,
+      total: prestadores.length,
       sincronizados: sucessos,
       erros,
       resultados,
     });
-
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[meta/sincronizar-todos]", msg);

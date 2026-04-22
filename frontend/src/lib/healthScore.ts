@@ -15,14 +15,13 @@ export type StatusSaude = "Em risco" | "Em atenção" | "Saudável" | "Concluíd
 
 export function getStatusFromScore(score: number): StatusSaude {
   if (score === 100) return "Concluído";
-  if (score >= 70)   return "Saudável";
-  if (score >= 50)   return "Em atenção";
+  if (score >= 70) return "Saudável";
+  if (score >= 50) return "Em atenção";
   return "Em risco";
 }
 
 export function getScoreColor(score: number): string {
   if (score >= 70) return "#22c55e"; // verde
   if (score >= 50) return "#eab308"; // amarelo
-  return "#ef4444";                  // vermelho
+  return "#ef4444"; // vermelho
 }
-

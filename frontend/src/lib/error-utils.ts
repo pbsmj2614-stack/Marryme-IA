@@ -14,11 +14,15 @@ export async function extractFunctionError(
 
   if (ctx instanceof Response) {
     try {
-      const body = await (ctx as Response).clone().json() as { error?: string; message?: string };
-      if (body?.error)   return body.error;
+      const body = (await (ctx as Response).clone().json()) as { error?: string; message?: string };
+      if (body?.error) return body.error;
       if (body?.message) return body.message;
     } catch {
-      try { return (await (ctx as Response).clone().text()) || msg; } catch { /* ignora */ }
+      try {
+        return (await (ctx as Response).clone().text()) || msg;
+      } catch {
+        /* ignora */
+      }
     }
   }
 

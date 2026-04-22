@@ -24,26 +24,26 @@ import type {
 // ─── Identidade visual ────────────────────────────────────────────────────────
 
 const C = {
-  PINK:        "E84393",
-  DARK:        "1E293B",
-  SLATE:       "334155",
-  GRAY:        "6B7280",
-  GRAY_LIGHT:  "F1F5F9",
+  PINK: "E84393",
+  DARK: "1E293B",
+  SLATE: "334155",
+  GRAY: "6B7280",
+  GRAY_LIGHT: "F1F5F9",
   GRAY_BORDER: "CBD5E1",
-  WHITE:       "FFFFFF",
-  BLACK:       "1E293B",
-  AMBER:       "92400E",
-  BLUE:        "1D4ED8",
-  RED:         "BE185D",
+  WHITE: "FFFFFF",
+  BLACK: "1E293B",
+  AMBER: "92400E",
+  BLUE: "1D4ED8",
+  RED: "BE185D",
 } as const;
 
 // Half-points (24 = 12pt)
 const SZ = {
-  HUGE:    52, // 26pt — nome na capa
+  HUGE: 52, // 26pt — nome na capa
   SECTION: 28, // 14pt — títulos de seção
-  BODY:    24, // 12pt — texto principal
-  SMALL:   20, // 10pt — metadados
-  TINY:    18, // 9pt  — rodapé e notas
+  BODY: 24, // 12pt — texto principal
+  SMALL: 20, // 10pt — metadados
+  TINY: 18, // 9pt  — rodapé e notas
 } as const;
 
 const FONT = "Nunito";
@@ -53,12 +53,12 @@ const FONT = "Nunito";
 const LINHA_NORMAL = { line: 276, lineRule: LineRuleType.AUTO };
 
 const CATEG: Record<string, string> = {
-  musico:         "Músico / Cantora",
-  fotografo:      "Fotógrafo / Cinegrafista",
-  celebrante:     "Celebrante",
-  dj:             "DJ",
+  musico: "Músico / Cantora",
+  fotografo: "Fotógrafo / Cinegrafista",
+  celebrante: "Celebrante",
+  dj: "DJ",
   cerimonialista: "Cerimonialista",
-  outro:          "Outro",
+  outro: "Outro",
 };
 
 const TEMPO_CENAS = ["15–20s", "25–30s", "25–35s", "20–25s", "20–25s", "15–20s", "5–10s", "10–15s"];
@@ -71,13 +71,15 @@ function dataHoje(): string {
 }
 
 function normalizar(str: string): string {
-  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "");
 }
 
 function nomeArquivo(nome: string, tituloSlug: string): string {
   return `MM_${tituloSlug}_${normalizar(nome)}.docx`;
 }
-
 
 // ─── Blocos base ──────────────────────────────────────────────────────────────
 
@@ -143,7 +145,12 @@ function cabecalhoLogo(logoData: ArrayBuffer): Header {
         children: [
           new TextRun({ text: "MARRY ME", bold: true, color: C.PINK, size: SZ.SMALL, font: FONT }),
           new TextRun({ text: "   |   ", color: C.GRAY_BORDER, size: SZ.SMALL }),
-          new TextRun({ text: "Assessoria de Vendas & Marketing para Casamentos", color: C.GRAY, size: SZ.TINY, font: FONT }),
+          new TextRun({
+            text: "Assessoria de Vendas & Marketing para Casamentos",
+            color: C.GRAY,
+            size: SZ.TINY,
+            font: FONT,
+          }),
         ],
       }),
     ],
@@ -151,19 +158,36 @@ function cabecalhoLogo(logoData: ArrayBuffer): Header {
 }
 
 // Header de cena: número em rosa + título escuro + tempo cinza — sem shading, sem bugs
-function headerCena(num: number, titulo: string, tempo: string, corAccento: string = C.PINK): Paragraph {
+function headerCena(
+  num: number,
+  titulo: string,
+  tempo: string,
+  corAccento: string = C.PINK
+): Paragraph {
   return new Paragraph({
     border: {
-      top:    { style: BorderStyle.SINGLE, size: 4,  color: C.GRAY_BORDER, space: 4 },
-      bottom: { style: BorderStyle.SINGLE, size: 4,  color: C.GRAY_BORDER, space: 4 },
-      left:   { style: BorderStyle.SINGLE, size: 24, color: corAccento,    space: 6 },
+      top: { style: BorderStyle.SINGLE, size: 4, color: C.GRAY_BORDER, space: 4 },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: C.GRAY_BORDER, space: 4 },
+      left: { style: BorderStyle.SINGLE, size: 24, color: corAccento, space: 6 },
     },
     keepNext: true,
     spacing: { before: 200, after: 100 },
     indent: { left: convertInchesToTwip(0.2) },
     children: [
-      new TextRun({ text: `CENA ${String(num).padStart(2, "0")}`, bold: true, color: corAccento, size: SZ.SMALL, font: FONT }),
-      new TextRun({ text: `  —  ${titulo.toUpperCase()}`, bold: true, color: C.DARK, size: SZ.SMALL, font: FONT }),
+      new TextRun({
+        text: `CENA ${String(num).padStart(2, "0")}`,
+        bold: true,
+        color: corAccento,
+        size: SZ.SMALL,
+        font: FONT,
+      }),
+      new TextRun({
+        text: `  —  ${titulo.toUpperCase()}`,
+        bold: true,
+        color: C.DARK,
+        size: SZ.SMALL,
+        font: FONT,
+      }),
       new TextRun({ text: `    \u00B7  ${tempo}`, color: C.GRAY, size: SZ.TINY, font: FONT }),
     ],
   });
@@ -176,9 +200,7 @@ function headerSubSecao(label: string, cor: string = C.PINK): Paragraph {
     keepNext: true,
     spacing: { before: 200, after: 60 },
     indent: { left: convertInchesToTwip(0.15) },
-    children: [
-      new TextRun({ text: label, bold: true, color: cor, size: SZ.SMALL, font: FONT }),
-    ],
+    children: [new TextRun({ text: label, bold: true, color: cor, size: SZ.SMALL, font: FONT })],
   });
 }
 
@@ -188,16 +210,28 @@ function tituloSecao(numero: number, texto: string, corAccento: string = C.PINK)
     new Paragraph({ spacing: { before: 480, after: 0 }, keepNext: true }),
     new Paragraph({
       border: {
-        top:    { style: BorderStyle.SINGLE, size: 8,  color: corAccento,    space: 4 },
-        bottom: { style: BorderStyle.SINGLE, size: 8,  color: corAccento,    space: 4 },
-        left:   { style: BorderStyle.SINGLE, size: 36, color: corAccento,    space: 8 },
+        top: { style: BorderStyle.SINGLE, size: 8, color: corAccento, space: 4 },
+        bottom: { style: BorderStyle.SINGLE, size: 8, color: corAccento, space: 4 },
+        left: { style: BorderStyle.SINGLE, size: 36, color: corAccento, space: 8 },
       },
       keepNext: true,
       spacing: { before: 0, after: 0 },
       indent: { left: convertInchesToTwip(0.2) },
       children: [
-        new TextRun({ text: `0${numero}  `, bold: true, color: corAccento, size: SZ.SECTION, font: FONT }),
-        new TextRun({ text: texto.toUpperCase(), bold: true, color: C.DARK, size: SZ.SECTION, font: FONT }),
+        new TextRun({
+          text: `0${numero}  `,
+          bold: true,
+          color: corAccento,
+          size: SZ.SECTION,
+          font: FONT,
+        }),
+        new TextRun({
+          text: texto.toUpperCase(),
+          bold: true,
+          color: C.DARK,
+          size: SZ.SECTION,
+          font: FONT,
+        }),
       ],
     }),
     espaco(200),
@@ -212,7 +246,14 @@ function notaGravacao(texto: string): Paragraph {
     indent: { left: convertInchesToTwip(0.3) },
     spacing: { before: 80, after: 80, ...LINHA_NORMAL },
     children: [
-      new TextRun({ text: "NOTA DE GRAVAÇÃO: ", bold: true, italics: true, color: C.PINK, size: SZ.TINY, font: FONT }),
+      new TextRun({
+        text: "NOTA DE GRAVAÇÃO: ",
+        bold: true,
+        italics: true,
+        color: C.PINK,
+        size: SZ.TINY,
+        font: FONT,
+      }),
       new TextRun({ text: texto, italics: true, color: C.GRAY, size: SZ.TINY, font: FONT }),
     ],
   });
@@ -226,14 +267,17 @@ function fala(falante: string, texto: string): Paragraph[] {
     new Paragraph({
       keepNext: true,
       spacing: { before: 0, after: 60 },
-      children: [new TextRun({ text: `${falante}:`, bold: true, color: C.DARK, size: SZ.BODY, font: FONT })],
+      children: [
+        new TextRun({ text: `${falante}:`, bold: true, color: C.DARK, size: SZ.BODY, font: FONT }),
+      ],
     }),
-    ...paragrafos.map((p) =>
-      new Paragraph({
-        alignment: AlignmentType.BOTH,
-        spacing: { before: 0, after: 120, ...LINHA_NORMAL },
-        children: [new TextRun({ text: p.trim(), size: SZ.BODY, color: C.BLACK, font: FONT })],
-      })
+    ...paragrafos.map(
+      (p) =>
+        new Paragraph({
+          alignment: AlignmentType.BOTH,
+          spacing: { before: 0, after: 120, ...LINHA_NORMAL },
+          children: [new TextRun({ text: p.trim(), size: SZ.BODY, color: C.BLACK, font: FONT })],
+        })
     ),
   ];
 }
@@ -244,7 +288,15 @@ function campoValor(label: string, valor: string): Paragraph[] {
     new Paragraph({
       keepNext: true,
       spacing: { before: 180, after: 40 },
-      children: [new TextRun({ text: label.toUpperCase(), bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
+      children: [
+        new TextRun({
+          text: label.toUpperCase(),
+          bold: true,
+          color: C.GRAY,
+          size: SZ.TINY,
+          font: FONT,
+        }),
+      ],
     }),
     new Paragraph({
       alignment: AlignmentType.BOTH,
@@ -274,7 +326,15 @@ function paginaCapa(nome: string, categoria: string, titulo: string): Paragraph[
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 80 },
-      children: [new TextRun({ text: titulo.toUpperCase(), color: C.GRAY, size: SZ.SMALL, font: FONT, characterSpacing: 40 })],
+      children: [
+        new TextRun({
+          text: titulo.toUpperCase(),
+          color: C.GRAY,
+          size: SZ.SMALL,
+          font: FONT,
+          characterSpacing: 40,
+        }),
+      ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -284,18 +344,29 @@ function paginaCapa(nome: string, categoria: string, titulo: string): Paragraph[
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 480 },
-      children: [new TextRun({ text: cat, italics: true, color: C.GRAY, size: SZ.SECTION, font: FONT })],
+      children: [
+        new TextRun({ text: cat, italics: true, color: C.GRAY, size: SZ.SECTION, font: FONT }),
+      ],
     }),
     regua(C.PINK),
     espaco(240),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 60 },
-      children: [new TextRun({ text: `Gerado em ${dataHoje()}`, color: C.GRAY, size: SZ.SMALL, font: FONT })],
+      children: [
+        new TextRun({ text: `Gerado em ${dataHoje()}`, color: C.GRAY, size: SZ.SMALL, font: FONT }),
+      ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      children: [new TextRun({ text: "Documento confidencial — MarryMe", color: C.GRAY, size: SZ.TINY, font: FONT })],
+      children: [
+        new TextRun({
+          text: "Documento confidencial — MarryMe",
+          color: C.GRAY,
+          size: SZ.TINY,
+          font: FONT,
+        }),
+      ],
     }),
   ];
 }
@@ -311,7 +382,10 @@ function secaoAnalise(a: AnaliseEstrategica): (Paragraph | Table)[] {
       children: [
         new TextRun({
           text: "Este documento define o posicionamento estratégico do profissional e orienta todos os materiais de comunicação.",
-          italics: true, color: C.GRAY, size: SZ.SMALL, font: FONT,
+          italics: true,
+          color: C.GRAY,
+          size: SZ.SMALL,
+          font: FONT,
         }),
       ],
     }),
@@ -322,13 +396,29 @@ function secaoAnalise(a: AnaliseEstrategica): (Paragraph | Table)[] {
     new Paragraph({
       keepNext: true,
       spacing: { before: 180, after: 40 },
-      children: [new TextRun({ text: "DIFERENCIAIS-CHAVE", bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
+      children: [
+        new TextRun({
+          text: "DIFERENCIAIS-CHAVE",
+          bold: true,
+          color: C.GRAY,
+          size: SZ.TINY,
+          font: FONT,
+        }),
+      ],
     }),
     ...a.diferenciais_chave.map(itemBullet),
     new Paragraph({
       keepNext: true,
       spacing: { before: 180, after: 40 },
-      children: [new TextRun({ text: "GATILHOS EMOCIONAIS", bold: true, color: C.GRAY, size: SZ.TINY, font: FONT })],
+      children: [
+        new TextRun({
+          text: "GATILHOS EMOCIONAIS",
+          bold: true,
+          color: C.GRAY,
+          size: SZ.TINY,
+          font: FONT,
+        }),
+      ],
     }),
     ...a.gatilhos_emocionais.map(itemBullet),
   ];
@@ -347,7 +437,11 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
         new TextRun({ text: "Tempo estimado: ", bold: true, size: SZ.SMALL, font: FONT }),
         new TextRun({ text: "2 a 3 minutos   ", size: SZ.SMALL, font: FONT }),
         new TextRun({ text: "Objetivo: ", bold: true, size: SZ.SMALL, font: FONT }),
-        new TextRun({ text: "Gerar segurança, desejo e conduzir para a reunião", size: SZ.SMALL, font: FONT }),
+        new TextRun({
+          text: "Gerar segurança, desejo e conduzir para a reunião",
+          size: SZ.SMALL,
+          font: FONT,
+        }),
       ],
     }),
     new Paragraph({
@@ -355,7 +449,11 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
       spacing: { before: 0, after: 40, ...LINHA_NORMAL },
       children: [
         new TextRun({ text: "Canal: ", bold: true, size: SZ.SMALL, font: FONT }),
-        new TextRun({ text: "WhatsApp — atendimento a leads de tráfego pago", size: SZ.SMALL, font: FONT }),
+        new TextRun({
+          text: "WhatsApp — atendimento a leads de tráfego pago",
+          size: SZ.SMALL,
+          font: FONT,
+        }),
       ],
     }),
     new Paragraph({
@@ -364,7 +462,10 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
         new TextRun({ text: "Estrutura: ", bold: true, size: SZ.SMALL, font: FONT }),
         new TextRun({
           text: "Identificação — Autoridade — Diferenciação — Processo — Prova Social — Convite",
-          italics: true, size: SZ.SMALL, color: C.GRAY, font: FONT,
+          italics: true,
+          size: SZ.SMALL,
+          color: C.GRAY,
+          font: FONT,
         }),
       ],
     }),
@@ -387,8 +488,21 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
           indent: { left: convertInchesToTwip(0.3) },
           spacing: { before: 60, after: 0, ...LINHA_NORMAL },
           children: [
-            new TextRun({ text: "Legenda sugerida: ", bold: true, italics: true, color: C.PINK, size: SZ.TINY, font: FONT }),
-            new TextRun({ text: cena.legenda_sugerida, italics: true, color: C.GRAY, size: SZ.TINY, font: FONT }),
+            new TextRun({
+              text: "Legenda sugerida: ",
+              bold: true,
+              italics: true,
+              color: C.PINK,
+              size: SZ.TINY,
+              font: FONT,
+            }),
+            new TextRun({
+              text: cena.legenda_sugerida,
+              italics: true,
+              color: C.GRAY,
+              size: SZ.TINY,
+              font: FONT,
+            }),
           ],
         })
       );
@@ -403,7 +517,11 @@ function secaoRoteiro(r: { roteiro: CenaRoteiro[] }, nomeCliente: string): (Para
 
 function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
   const COR_TIPO: Record<string, string> = { emocional: C.RED, direto: C.BLUE, premium: C.AMBER };
-  const LABEL_TIPO: Record<string, string> = { emocional: "EMOCIONAL", direto: "DIRETO", premium: "PREMIUM" };
+  const LABEL_TIPO: Record<string, string> = {
+    emocional: "EMOCIONAL",
+    direto: "DIRETO",
+    premium: "PREMIUM",
+  };
 
   const items: (Paragraph | Table)[] = [
     ...tituloSecao(3, "Roteiro para Meta Ads", C.BLUE),
@@ -413,7 +531,10 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
       children: [
         new TextRun({
           text: "Três variações para campanhas no Meta Ads. Cada anúncio funciona de forma independente.",
-          italics: true, color: C.GRAY, size: SZ.SMALL, font: FONT,
+          italics: true,
+          color: C.GRAY,
+          size: SZ.SMALL,
+          font: FONT,
         }),
       ],
     }),
@@ -449,7 +570,7 @@ function secaoAnuncios(c: { anuncios: Anuncio[] }): (Paragraph | Table)[] {
           new TextRun({ text: ad.cta, size: SZ.BODY, color: C.BLACK, font: FONT }),
         ],
       }),
-      regua(C.GRAY_BORDER),
+      regua(C.GRAY_BORDER)
     );
   });
 
@@ -467,7 +588,10 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
       children: [
         new TextRun({
           text: "Sugestões de enquadramento, ambientação e estilo de edição para a gravação do vídeo.",
-          italics: true, color: C.GRAY, size: SZ.SMALL, font: FONT,
+          italics: true,
+          color: C.GRAY,
+          size: SZ.SMALL,
+          font: FONT,
         }),
       ],
     }),
@@ -476,30 +600,41 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
   d.direcao.forEach((item, idx) => {
     items.push(
       espaco(180),
-      headerSubSecao(`${String(idx + 1).padStart(2, "0")}  —  ${item.tipo_cena.toUpperCase()}`, C.PINK),
+      headerSubSecao(
+        `${String(idx + 1).padStart(2, "0")}  —  ${item.tipo_cena.toUpperCase()}`,
+        C.PINK
+      )
     );
 
     const campos: [string, string][] = [
-      ["Ambientação",      item.ambientacao],
-      ["Enquadramento",    item.enquadramento],
+      ["Ambientação", item.ambientacao],
+      ["Enquadramento", item.enquadramento],
       ["Estilo de edição", item.estilo_edicao],
       ["Legenda sugerida", item.legenda_sugerida],
     ];
 
-    campos.filter(([, v]) => v).forEach(([label, valor], i, arr) => {
-      items.push(
-        new Paragraph({
-          keepNext: i < arr.length - 1,
-          alignment: AlignmentType.BOTH,
-          indent: { left: convertInchesToTwip(0.3) },
-          spacing: { before: 60, after: 40, ...LINHA_NORMAL },
-          children: [
-            new TextRun({ text: `${label}: `, bold: true, color: C.GRAY, size: SZ.SMALL, font: FONT }),
-            new TextRun({ text: valor, color: C.BLACK, size: SZ.SMALL, font: FONT }),
-          ],
-        })
-      );
-    });
+    campos
+      .filter(([, v]) => v)
+      .forEach(([label, valor], i, arr) => {
+        items.push(
+          new Paragraph({
+            keepNext: i < arr.length - 1,
+            alignment: AlignmentType.BOTH,
+            indent: { left: convertInchesToTwip(0.3) },
+            spacing: { before: 60, after: 40, ...LINHA_NORMAL },
+            children: [
+              new TextRun({
+                text: `${label}: `,
+                bold: true,
+                color: C.GRAY,
+                size: SZ.SMALL,
+                font: FONT,
+              }),
+              new TextRun({ text: valor, color: C.BLACK, size: SZ.SMALL, font: FONT }),
+            ],
+          })
+        );
+      });
     items.push(espaco(80), regua(C.GRAY_BORDER));
   });
 
@@ -508,7 +643,12 @@ function secaoDirecao(d: { direcao: DirecaoCena[] }): (Paragraph | Table)[] {
 
 // ─── Montagem do documento ────────────────────────────────────────────────────
 
-function montarDocumento(children: (Paragraph | Table)[], nome: string, categoria: string, logoData?: ArrayBuffer | null): Document {
+function montarDocumento(
+  children: (Paragraph | Table)[],
+  nome: string,
+  categoria: string,
+  logoData?: ArrayBuffer | null
+): Document {
   const cat = CATEG[categoria] ?? categoria;
   return new Document({
     styles: {
@@ -522,10 +662,10 @@ function montarDocumento(children: (Paragraph | Table)[], nome: string, categori
           titlePage: logoData ? true : undefined,
           page: {
             margin: {
-              top:    convertInchesToTwip(1),
-              right:  convertInchesToTwip(1),
+              top: convertInchesToTwip(1),
+              right: convertInchesToTwip(1),
               bottom: convertInchesToTwip(1),
-              left:   convertInchesToTwip(1),
+              left: convertInchesToTwip(1),
             },
           },
         },
@@ -537,10 +677,23 @@ function montarDocumento(children: (Paragraph | Table)[], nome: string, categori
           default: new Footer({
             children: [
               new Paragraph({
-                border: { top: { style: BorderStyle.SINGLE, size: 4, color: C.GRAY_BORDER, space: 6 } },
+                border: {
+                  top: { style: BorderStyle.SINGLE, size: 4, color: C.GRAY_BORDER, space: 6 },
+                },
                 children: [
-                  new TextRun({ text: `MarryMe — ${dataHoje()}    `, color: C.GRAY, size: SZ.TINY, font: FONT }),
-                  new TextRun({ text: `${nome}  ·  ${cat}`, bold: true, color: C.DARK, size: SZ.TINY, font: FONT }),
+                  new TextRun({
+                    text: `MarryMe — ${dataHoje()}    `,
+                    color: C.GRAY,
+                    size: SZ.TINY,
+                    font: FONT,
+                  }),
+                  new TextRun({
+                    text: `${nome}  ·  ${cat}`,
+                    bold: true,
+                    color: C.DARK,
+                    size: SZ.TINY,
+                    font: FONT,
+                  }),
                 ],
               }),
             ],
@@ -559,17 +712,17 @@ export type TipoExport = "completo" | "analise" | "roteiro" | "anuncios" | "dire
 export async function exportarDocumento(
   tipo: TipoExport,
   prestador: Pick<Prestador, "nome_artistico" | "categoria">,
-  roteiro: Roteiro,
+  roteiro: Roteiro
 ): Promise<void> {
   const nome = prestador.nome_artistico;
-  const cat  = prestador.categoria;
+  const cat = prestador.categoria;
 
   const TITULOS: Record<TipoExport, [string, string]> = {
-    completo: ["Kit de Conteúdo",      "KitConteudo"],
-    analise:  ["Análise Estratégica",  "AnaliseEstrategica"],
-    roteiro:  ["Roteiro de Vídeo",     "RoteiroVideo"],
-    anuncios: ["Copy para Anúncios",   "CopyAnuncios"],
-    direcao:  ["Direção Criativa",     "DirecaoCriativa"],
+    completo: ["Kit de Conteúdo", "KitConteudo"],
+    analise: ["Análise Estratégica", "AnaliseEstrategica"],
+    roteiro: ["Roteiro de Vídeo", "RoteiroVideo"],
+    anuncios: ["Copy para Anúncios", "CopyAnuncios"],
+    direcao: ["Direção Criativa", "DirecaoCriativa"],
   };
   const [titulo, sufixo] = TITULOS[tipo];
   const capa = paginaCapa(nome, cat, titulo);
@@ -596,19 +749,19 @@ export async function exportarDocumento(
     case "completo":
     default:
       conteudo = [...capa];
-      if (roteiro.analise_estrategica)  conteudo.push(...secaoAnalise(roteiro.analise_estrategica));
-      if (roteiro.roteiro_sugerido)     conteudo.push(...secaoRoteiro(roteiro.roteiro_sugerido, nome));
-      if (roteiro.copy_anuncios)        conteudo.push(...secaoAnuncios(roteiro.copy_anuncios));
-      if (roteiro.direcao_criativa)     conteudo.push(...secaoDirecao(roteiro.direcao_criativa));
+      if (roteiro.analise_estrategica) conteudo.push(...secaoAnalise(roteiro.analise_estrategica));
+      if (roteiro.roteiro_sugerido) conteudo.push(...secaoRoteiro(roteiro.roteiro_sugerido, nome));
+      if (roteiro.copy_anuncios) conteudo.push(...secaoAnuncios(roteiro.copy_anuncios));
+      if (roteiro.direcao_criativa) conteudo.push(...secaoDirecao(roteiro.direcao_criativa));
       break;
   }
 
   const logoData = await buscarLogo();
-  const doc  = montarDocumento(conteudo, nome, cat, logoData);
+  const doc = montarDocumento(conteudo, nome, cat, logoData);
   const blob = await Packer.toBlob(doc);
-  const url  = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href     = url;
+  link.href = url;
   link.download = nomeArquivo(nome, sufixo);
   document.body.appendChild(link);
   link.click();

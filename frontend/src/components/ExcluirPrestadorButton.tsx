@@ -12,10 +12,9 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
   async function handleExcluir() {
     setLoading(true);
     const supabase = createClient();
-    const r1 = await supabase.from("roteiros").delete().eq("prestador_id", prestadorId);
-    const r2 = await supabase.from("entrevistas").delete().eq("prestador_id", prestadorId);
+    await supabase.from("roteiros").delete().eq("prestador_id", prestadorId);
+    await supabase.from("entrevistas").delete().eq("prestador_id", prestadorId);
     const r3 = await supabase.from("prestadores").delete().eq("id", prestadorId);
-    console.log("roteiros:", r1.error, "entrevistas:", r2.error, "prestador:", r3.error);
     if (!r3.error) {
       router.push("/");
       router.refresh();

@@ -10,14 +10,12 @@ export default async function EditarPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const supabase = await createSupabaseServer();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: prestador } = await supabase
-    .from("prestadores")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const { data: prestador } = await supabase.from("prestadores").select("*").eq("id", id).single();
 
   if (!prestador) notFound();
 
@@ -35,30 +33,30 @@ export default async function EditarPage({ params }: { params: Promise<{ id: str
   // Monta dados iniciais: entrevista carrega primeiro, prestadores sobrescreve campos de contato
   // (prestadores é a fonte de verdade para whatsapp, email, cidade_base, instagram, nome_artistico)
   const initialData: DadosEntrevista = {
-    anos_experiencia:      "",
-    especialidade:         "",
-    preco_medio:           "",
-    numero_casamentos:     "",
-    formacao:              "",
-    equipamentos:          "",
-    diferenciais:          "",
-    estilo_trabalho:       "",
-    depoimento_favorito:   "",
-    momentos_especiais:    "",
-    como_conheceu_noivos:  "",
-    informacoes_adicionais:"",
-    plano:          "Essencial",
-    fase_projeto:   "Onboarding",
+    anos_experiencia: "",
+    especialidade: "",
+    preco_medio: "",
+    numero_casamentos: "",
+    formacao: "",
+    equipamentos: "",
+    diferenciais: "",
+    estilo_trabalho: "",
+    depoimento_favorito: "",
+    momentos_especiais: "",
+    como_conheceu_noivos: "",
+    informacoes_adicionais: "",
+    plano: "Essencial",
+    fase_projeto: "Onboarding",
     responsavel_mm: "",
     // Campos da entrevista (inclui tudo do dados_json)
     ...(entrevista?.dados_json ?? {}),
     // Campos de contato do prestador sempre prevalecem — são a fonte de verdade
     nome_artistico: p.nome_artistico ?? "",
-    categoria:      p.categoria      ?? "musico",
-    whatsapp:       p.whatsapp       ?? "",
-    email:          p.email          ?? "",
-    cidade_base:    p.cidade_base    ?? "",
-    instagram:      p.instagram      ?? "",
+    categoria: p.categoria ?? "musico",
+    whatsapp: p.whatsapp ?? "",
+    email: p.email ?? "",
+    cidade_base: p.cidade_base ?? "",
+    instagram: p.instagram ?? "",
   };
 
   return (
@@ -68,7 +66,9 @@ export default async function EditarPage({ params }: { params: Promise<{ id: str
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{p.nome_artistico}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {entrevista ? "Atualize os dados para melhorar a geração do roteiro." : "Preencha os dados para habilitar a geração de roteiros."}
+            {entrevista
+              ? "Atualize os dados para melhorar a geração do roteiro."
+              : "Preencha os dados para habilitar a geração de roteiros."}
           </p>
         </div>
         <EditarEntrevistaForm

@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 
 export default function AtualizarTodosButton() {
   const router = useRouter();
-  const [loading,    setLoading]    = useState(false);
-  const [resultado,  setResultado]  = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [resultado, setResultado] = useState<string | null>(null);
 
   async function handleClick() {
     setLoading(true);
     setResultado(null);
     try {
       const res = await fetch("/api/meta/sincronizar-todos", { method: "POST" });
-      const data = await res.json() as {
+      const data = (await res.json()) as {
         ok?: boolean;
         sincronizados?: number;
         total?: number;
@@ -26,7 +26,9 @@ export default function AtualizarTodosButton() {
       } else if (data.sincronizados === 0 && data.mensagem) {
         setResultado(data.mensagem);
       } else {
-        setResultado(`${data.sincronizados}/${data.total} contas atualizadas${data.erros ? ` · ${data.erros} erro(s)` : ""}`);
+        setResultado(
+          `${data.sincronizados}/${data.total} contas atualizadas${data.erros ? ` · ${data.erros} erro(s)` : ""}`
+        );
         router.refresh();
       }
     } catch (e) {
@@ -54,15 +56,23 @@ export default function AtualizarTodosButton() {
           strokeWidth="2"
         >
           <polyline points="23 4 23 10 17 10" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M20.49 15a9 9 0 11-2.12-9.36L23 10"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         {loading ? "Atualizando…" : "Atualizar Meta Ads"}
       </button>
 
       {resultado && (
-        <div className={`absolute right-0 top-10 z-20 text-xs px-3 py-2 rounded-lg shadow-md whitespace-nowrap ${
-          resultado.startsWith("Erro") ? "bg-red-50 text-red-700 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"
-        }`}>
+        <div
+          className={`absolute right-0 top-10 z-20 text-xs px-3 py-2 rounded-lg shadow-md whitespace-nowrap ${
+            resultado.startsWith("Erro")
+              ? "bg-red-50 text-red-700 border border-red-200"
+              : "bg-green-50 text-green-700 border border-green-200"
+          }`}
+        >
           {resultado}
         </div>
       )}

@@ -23,19 +23,26 @@ export default async function DashboardPage({
   const { tab = "todos", q = "" } = await searchParams;
   const supabase = await createSupabaseServer();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: prestadores } = await supabase
     .from("prestadores")
-    .select("*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em), relatorios_campanha(health_score, gerado_em)")
+    .select(
+      "*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em), relatorios_campanha(health_score, gerado_em)"
+    )
     .order("nome_artistico", { ascending: true });
 
   type PrestadorRow = Prestador & {
     roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
       analise_estrategica: { nivel_mercado?: string } | null;
     })[];
-    entrevistas: { dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null; criado_em: string }[];
+    entrevistas: {
+      dados_json: { plano?: string; fase_projeto?: string; mm_id?: string } | null;
+      criado_em: string;
+    }[];
     relatorios_campanha: { health_score: number | null; gerado_em: string }[];
   };
   const FASES_INATIVAS = ["Pausado", "Churn"];
@@ -63,22 +70,27 @@ export default async function DashboardPage({
   const listaAtiva = lista.filter(isAtivo);
 
   const contagens = {
-    todos:      listaAtiva.length,
-    validados:  listaAtiva.filter((p) => getStatus(p).aprovados > 0).length,
-    aguardando: listaAtiva.filter((p) => { const s = getStatus(p); return s.total > 0 && s.aprovados === 0; }).length,
+    todos: listaAtiva.length,
+    validados: listaAtiva.filter((p) => getStatus(p).aprovados > 0).length,
+    aguardando: listaAtiva.filter((p) => {
+      const s = getStatus(p);
+      return s.total > 0 && s.aprovados === 0;
+    }).length,
     sem_roteiro: listaAtiva.filter((p) => getStatus(p).total === 0).length,
   };
 
-  const filtrada = listaAtiva.filter((p) => {
-    const { total, aprovados } = getStatus(p);
-    if (tab === "validados") return aprovados > 0;
-    if (tab === "aguardando") return total > 0 && aprovados === 0;
-    if (tab === "sem_roteiro") return total === 0;
-    return true;
-  }).filter((p) => {
-    if (!q.trim()) return true;
-    return p.nome_artistico.toLowerCase().includes(q.toLowerCase());
-  });
+  const filtrada = listaAtiva
+    .filter((p) => {
+      const { total, aprovados } = getStatus(p);
+      if (tab === "validados") return aprovados > 0;
+      if (tab === "aguardando") return total > 0 && aprovados === 0;
+      if (tab === "sem_roteiro") return total === 0;
+      return true;
+    })
+    .filter((p) => {
+      if (!q.trim()) return true;
+      return p.nome_artistico.toLowerCase().includes(q.toLowerCase());
+    });
 
   return (
     <div className="min-h-screen">
@@ -117,9 +129,11 @@ export default async function DashboardPage({
                 }`}
               >
                 {label}
-                <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                  ativo ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
-                }`}>
+                <span
+                  className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
+                    ativo ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
+                  }`}
+                >
                   {count}
                 </span>
               </Link>
@@ -131,7 +145,10 @@ export default async function DashboardPage({
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Nenhum prestador nesta categoria.</p>
             {tab === "todos" && (
-              <Link href="/novo" className="mt-3 inline-block text-brand-600 hover:underline text-sm">
+              <Link
+                href="/novo"
+                className="mt-3 inline-block text-brand-600 hover:underline text-sm"
+              >
                 Adicionar o primeiro
               </Link>
             )}
@@ -150,9 +167,9 @@ export default async function DashboardPage({
               const ultimaEntrevista = [...(p.entrevistas ?? [])].sort(
                 (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
               )[0];
-              const plano       = ultimaEntrevista?.dados_json?.plano       ?? null;
+              const plano = ultimaEntrevista?.dados_json?.plano ?? null;
               const faseProjeto = ultimaEntrevista?.dados_json?.fase_projeto ?? null;
-              const mmId        = ultimaEntrevista?.dados_json?.mm_id        ?? null;
+              const mmId = ultimaEntrevista?.dados_json?.mm_id ?? null;
 
               const ultimoRelatorio = [...(p.relatorios_campanha ?? [])].sort(
                 (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()

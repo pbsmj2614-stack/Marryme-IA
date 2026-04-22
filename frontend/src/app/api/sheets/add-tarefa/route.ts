@@ -17,18 +17,23 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
-const BASE     = "https://sheets.googleapis.com/v4/spreadsheets";
+const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 // ─── Google Auth ──────────────────────────────────────────────────────────────
 
 function makeJWT(email: string, key: string): string {
-  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-  const now     = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(JSON.stringify({
-    iss: email, scope: "https://www.googleapis.com/auth/spreadsheets",
-    aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600,
-  })).toString("base64url");
-  const msg  = `${header}.${payload}`;
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(
+    JSON.stringify({
+      iss: email,
+      scope: "https://www.googleapis.com/auth/spreadsheets",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    })
+  ).toString("base64url");
+  const msg = `${header}.${payload}`;
   const sign = createSign("RSA-SHA256");
   sign.update(msg);
   return `${msg}.${sign.sign(key, "base64url")}`;
@@ -37,18 +42,19 @@ function makeJWT(email: string, key: string): string {
 async function googleToken(): Promise<string> {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON não configurado.");
-  const sa  = JSON.parse(raw) as { client_email: string; private_key: string };
+  const sa = JSON.parse(raw) as { client_email: string; private_key: string };
   const jwt = makeJWT(sa.client_email, sa.private_key);
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion:  jwt,
+      assertion: jwt,
     }),
   });
   const data = await res.json();
-  if (!data.access_token) throw new Error(`Google Auth falhou: ${data.error_description ?? JSON.stringify(data)}`);
+  if (!data.access_token)
+    throw new Error(`Google Auth falhou: ${data.error_description ?? JSON.stringify(data)}`);
   return data.access_token;
 }
 
@@ -77,11 +83,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
-    const { id_cliente, etapa, o_que, tipo, quem, prazo, status, observacoes } =
-      body as Record<string, string>;
+    const { id_cliente, etapa, o_que, tipo, quem, prazo, status, observacoes } = body as Record<
+      string,
+      string
+    >;
 
-    if (!id_cliente?.trim()) return NextResponse.json({ error: "id_cliente obrigatório" }, { status: 400 });
-    if (!o_que?.trim())      return NextResponse.json({ error: "O que? é obrigatório" },   { status: 400 });
+    if (!id_cliente?.trim())
+      return NextResponse.json({ error: "id_cliente obrigatório" }, { status: 400 });
+    if (!o_que?.trim())
+      return NextResponse.json({ error: "O que? é obrigatório" }, { status: 400 });
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -100,18 +110,21 @@ export async function POST(req: NextRequest) {
     if (errCliente || !cliente)
       return NextResponse.json({ error: "Cliente não encontrado" }, { status: 404 });
     if (!cliente.sheets_aba)
-      return NextResponse.json({ error: `Cliente ${id_cliente} não tem aba configurada` }, { status: 422 });
+      return NextResponse.json(
+        { error: `Cliente ${id_cliente} não tem aba configurada` },
+        { status: 422 }
+      );
 
     // ── 2. Monta linha para o Sheets (ordem: A=check, B=etapa, C=o_que, D=tipo, E=quem, F=prazo, G=status, H=obs) ──
     const prazoBR = prazo ? toDateBR(prazo) : "";
     const novaLinha = [
       "FALSE",
-      etapa?.trim()       ?? "",
+      etapa?.trim() ?? "",
       o_que.trim(),
-      tipo?.trim()        || "Marry Me",
-      quem?.trim()        ?? "",
+      tipo?.trim() || "Marry Me",
+      quem?.trim() ?? "",
       prazoBR,
-      status?.trim()      || "Não iniciado",
+      status?.trim() || "Não iniciado",
       observacoes?.trim() ?? "",
     ];
 
@@ -126,15 +139,15 @@ export async function POST(req: NextRequest) {
     const { data: novaTarefa, error: errInsert } = await supabase
       .from("mm_tarefas")
       .insert({
-        cliente_id:    id_cliente,
-        check_feito:   false,
-        etapa:         etapa?.trim()       || null,
-        o_que:         o_que.trim(),
-        tipo:          tipo?.trim()        || null,
-        quem:          quem?.trim()        || null,
-        prazo:         prazoISO,
-        status:        statusFinal,
-        observacoes:   observacoes?.trim() || null,
+        cliente_id: id_cliente,
+        check_feito: false,
+        etapa: etapa?.trim() || null,
+        o_que: o_que.trim(),
+        tipo: tipo?.trim() || null,
+        quem: quem?.trim() || null,
+        prazo: prazoISO,
+        status: statusFinal,
+        observacoes: observacoes?.trim() || null,
         atualizado_em: new Date().toISOString(),
       })
       .select()
@@ -143,7 +156,6 @@ export async function POST(req: NextRequest) {
     if (errInsert) throw new Error(`Erro ao salvar no Supabase: ${errInsert.message}`);
 
     return NextResponse.json({ ok: true, tarefa: novaTarefa });
-
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[add-tarefa]", msg);

@@ -7,15 +7,12 @@
 
 const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const SHEET_ID =
-  process.env.NEXT_PUBLIC_SHEETS_ID ??
-  "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
+  process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 
 function apiKey(): string {
   const key = process.env.NEXT_PUBLIC_SHEETS_API_KEY;
   if (!key || key === "sua_chave_aqui") {
-    throw new Error(
-      "NEXT_PUBLIC_SHEETS_API_KEY não configurada. Veja README para obter a chave."
-    );
+    throw new Error("NEXT_PUBLIC_SHEETS_API_KEY não configurada. Veja README para obter a chave.");
   }
   return key;
 }
@@ -23,29 +20,29 @@ function apiKey(): string {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ClienteSheet {
-  id_cliente: string;       // col A
-  nome_empresa: string;     // col B
-  segmento: string;         // col C
-  cidade: string;           // col D
-  whatsapp: string;         // col E
-  email: string;            // col F
-  inicio_contrato: string;  // col G  (DD/MM/YYYY)
-  plano: string;            // col H
-  fase_projeto: string;     // col I
-  status: string;           // col J
-  responsavel_mm: string;   // col K
-  observacoes: string;      // col L
+  id_cliente: string; // col A
+  nome_empresa: string; // col B
+  segmento: string; // col C
+  cidade: string; // col D
+  whatsapp: string; // col E
+  email: string; // col F
+  inicio_contrato: string; // col G  (DD/MM/YYYY)
+  plano: string; // col H
+  fase_projeto: string; // col I
+  status: string; // col J
+  responsavel_mm: string; // col K
+  observacoes: string; // col L
 }
 
 export interface TarefaSheet {
-  check_feito: boolean;  // col A
-  etapa: string;         // col B
-  o_que: string;         // col C
-  tipo: string;          // col D  (Marry Me | Cliente)
-  quem: string;          // col E
-  prazo: string;         // col F  (DD/MM/YYYY)
-  status: string;        // col G  (Finalizado | Atrasado | Em andamento | Não iniciado)
-  observacoes: string;   // col H
+  check_feito: boolean; // col A
+  etapa: string; // col B
+  o_que: string; // col C
+  tipo: string; // col D  (Marry Me | Cliente)
+  quem: string; // col E
+  prazo: string; // col F  (DD/MM/YYYY)
+  status: string; // col G  (Finalizado | Atrasado | Em andamento | Não iniciado)
+  observacoes: string; // col H
 }
 
 export interface TarefaComCliente extends TarefaSheet {
@@ -55,18 +52,18 @@ export interface TarefaComCliente extends TarefaSheet {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function row(values: string[][], index: number): string[] {
-  return values[index] ?? [];
-}
-
-function cell(values: string[][], rowIdx: number, colIdx: number): string {
-  return values[rowIdx]?.[colIdx]?.trim() ?? "";
-}
-
 function parseCheckbox(value: string): boolean {
   const v = (value ?? "").toLowerCase().trim();
   // Google Sheets retorna "TRUE"/"FALSE" em EN e "VERDADEIRO"/"FALSO" em PT-BR
-  return v === "true" || v === "verdadeiro" || v === "sim" || v === "1" || v === "x" || v === "✓" || v === "checked";
+  return (
+    v === "true" ||
+    v === "verdadeiro" ||
+    v === "sim" ||
+    v === "1" ||
+    v === "x" ||
+    v === "✓" ||
+    v === "checked"
+  );
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
@@ -82,9 +79,7 @@ export async function fetchTodasAbas(): Promise<string[]> {
     throw new Error(`Sheets API error ${res.status}: ${body}`);
   }
   const data = await res.json();
-  return (data.sheets ?? []).map(
-    (s: { properties: { title: string } }) => s.properties.title
-  );
+  return (data.sheets ?? []).map((s: { properties: { title: string } }) => s.properties.title);
 }
 
 /**
@@ -94,13 +89,11 @@ export async function fetchTodasAbas(): Promise<string[]> {
 export async function resolverAbaCadastro(): Promise<string> {
   const abas = await fetchTodasAbas();
   const candidatos = ["cadastro_clientes", "cadastro clientes", "clientes", "cadastro"];
-  const encontrada = abas.find((a) =>
-    candidatos.includes(a.toLowerCase().trim())
-  );
+  const encontrada = abas.find((a) => candidatos.includes(a.toLowerCase().trim()));
   if (!encontrada) {
     throw new Error(
       `Aba de cadastro não encontrada. Abas disponíveis: ${abas.join(", ")}. ` +
-      `Renomeie a aba de clientes para "Cadastro_Clientes".`
+        `Renomeie a aba de clientes para "Cadastro_Clientes".`
     );
   }
   return encontrada;
@@ -117,8 +110,8 @@ function normalizeKey(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/[^a-z0-9]+/g, "_")    // não-alfanum → _
-    .replace(/^_+|_+$/g, "");       // remove _ das bordas
+    .replace(/[^a-z0-9]+/g, "_") // não-alfanum → _
+    .replace(/^_+|_+$/g, ""); // remove _ das bordas
 }
 
 /**
@@ -163,9 +156,7 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   }
 
   if (dataStartRow === -1) {
-    throw new Error(
-      `Nenhuma linha com ID no padrão "MM001" encontrada na aba "${nomeAba}".`
-    );
+    throw new Error(`Nenhuma linha com ID no padrão "MM001" encontrada na aba "${nomeAba}".`);
   }
 
   // 2. Usa a linha imediatamente anterior como cabeçalho
@@ -188,18 +179,18 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   const rows = values
     .slice(dataStartRow)
     .map((r) => ({
-      id_cliente:      col(r, 0, "id_cliente", "id", "codigo", "codigo_cliente"),
-      nome_empresa:    col(r, 1, "nome_empresa", "nome", "empresa"),
-      segmento:        col(r, 2, "segmento"),
-      cidade:          col(r, 3, "cidade"),
-      whatsapp:        col(r, 4, "whatsapp", "telefone", "celular"),
-      email:           col(r, 5, "email", "e_mail"),
+      id_cliente: col(r, 0, "id_cliente", "id", "codigo", "codigo_cliente"),
+      nome_empresa: col(r, 1, "nome_empresa", "nome", "empresa"),
+      segmento: col(r, 2, "segmento"),
+      cidade: col(r, 3, "cidade"),
+      whatsapp: col(r, 4, "whatsapp", "telefone", "celular"),
+      email: col(r, 5, "email", "e_mail"),
       inicio_contrato: col(r, 6, "inicio_contrato", "inicio", "data_inicio"),
-      plano:           col(r, 7, "plano"),
-      fase_projeto:    col(r, 8, "fase_projeto", "fase", "fase_do_projeto"),
-      status:          col(r, 9, "status"),
-      responsavel_mm:  col(r, 10, "responsavel_mm", "responsavel"),
-      observacoes:     col(r, 11, "observacoes", "observacao", "obs"),
+      plano: col(r, 7, "plano"),
+      fase_projeto: col(r, 8, "fase_projeto", "fase", "fase_do_projeto"),
+      status: col(r, 9, "status"),
+      responsavel_mm: col(r, 10, "responsavel_mm", "responsavel"),
+      observacoes: col(r, 11, "observacoes", "observacao", "obs"),
     }))
     .filter((c) => /^MM\d+/i.test(c.id_cliente));
 
@@ -221,8 +212,13 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
   const TASK_HEADER_KEYS = [
-    "o_que", "etapa", "prazo", "status",
-    "tarefa", "descricao", "atividade",   // variantes do campo "o que fazer"
+    "o_que",
+    "etapa",
+    "prazo",
+    "status",
+    "tarefa",
+    "descricao",
+    "atividade", // variantes do campo "o que fazer"
   ];
   let headerRowIdx = -1;
   let hMap: Record<string, number> = {};
@@ -236,9 +232,7 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
     }
   }
 
-  const dataRows = headerRowIdx >= 0
-    ? values.slice(headerRowIdx + 1)
-    : values.slice(1);
+  const dataRows = headerRowIdx >= 0 ? values.slice(headerRowIdx + 1) : values.slice(1);
 
   function tcol(r: string[], pos: number, ...names: string[]): string {
     for (const name of names) {
@@ -281,12 +275,12 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
   return dataRows
     .map((r) => ({
       check_feito: getCheck(r),
-      etapa:       tcol(r, 1, "etapa"),
-      o_que:       tcol(r, 2, "o_que", "tarefa", "descricao", "atividade"),
-      tipo:        tcol(r, 3, "tipo"),
-      quem:        tcol(r, 4, "quem", "responsavel", "responsavel_tarefa"),
-      prazo:       tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega"),
-      status:      r[statusColIdx]?.trim() || "Não iniciado",
+      etapa: tcol(r, 1, "etapa"),
+      o_que: tcol(r, 2, "o_que", "tarefa", "descricao", "atividade"),
+      tipo: tcol(r, 3, "tipo"),
+      quem: tcol(r, 4, "quem", "responsavel", "responsavel_tarefa"),
+      prazo: tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega"),
+      status: r[statusColIdx]?.trim() || "Não iniciado",
       observacoes: tcol(r, 7, "observacoes", "observacao", "obs"),
     }))
     .filter((t) => t.o_que !== "");
@@ -328,8 +322,11 @@ export async function fetchTodasTarefasBatch(
     if (!res.ok) {
       // Fallback individual se batchGet falhar (ex: range inválido causa 400 no lote todo)
       for (const aba of lote) {
-        try { result[aba] = await fetchTarefasCliente(aba); }
-        catch { result[aba] = []; }
+        try {
+          result[aba] = await fetchTarefasCliente(aba);
+        } catch {
+          result[aba] = [];
+        }
       }
       continue;
     }
@@ -355,7 +352,11 @@ export async function fetchTodasTarefas(
   const lote = await fetchTodasTarefasBatch(abas);
   return clientes.flatMap((c) =>
     c.sheets_aba
-      ? (lote[c.sheets_aba] ?? []).map((t) => ({ ...t, id_cliente: c.id_cliente, aba: c.sheets_aba! }))
+      ? (lote[c.sheets_aba] ?? []).map((t) => ({
+          ...t,
+          id_cliente: c.id_cliente,
+          aba: c.sheets_aba!,
+        }))
       : []
   );
 }

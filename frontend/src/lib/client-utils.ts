@@ -20,19 +20,28 @@ export function formatDateFull(iso: string): string {
 
 export function planoBadgeClass(plano: string | null): string {
   switch (plano?.toLowerCase()) {
-    case "essencial":  return "bg-pink-900 text-pink-300";
-    case "growth":     return "bg-violet-900 text-violet-300";
-    case "enterprise": return "bg-amber-900 text-amber-300";
-    case "premium":    return "bg-purple-900 text-purple-300";
-    case "trial":      return "bg-gray-700 text-gray-300";
-    default:           return "bg-gray-700 text-gray-200";
+    case "essencial":
+      return "bg-pink-900 text-pink-300";
+    case "growth":
+      return "bg-violet-900 text-violet-300";
+    case "enterprise":
+      return "bg-amber-900 text-amber-300";
+    case "premium":
+      return "bg-purple-900 text-purple-300";
+    case "trial":
+      return "bg-gray-700 text-gray-300";
+    default:
+      return "bg-gray-700 text-gray-200";
   }
 }
 
 export function planoLabel(plano: string): string {
   const map: Record<string, string> = {
-    essencial: "Essencial", growth: "Growth", enterprise: "Enterprise",
-    premium: "Premium", trial: "Trial",
+    essencial: "Essencial",
+    growth: "Growth",
+    enterprise: "Enterprise",
+    premium: "Premium",
+    trial: "Trial",
   };
   return map[plano.toLowerCase()] ?? plano;
 }
@@ -54,7 +63,7 @@ export function dedupClientesByNome<T extends { nome_empresa: string; id_cliente
       seen.set(key, c);
     } else {
       const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-      const newNum   = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      const newNum = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
       if (newNum < existNum) seen.set(key, c);
     }
   }
@@ -62,9 +71,14 @@ export function dedupClientesByNome<T extends { nome_empresa: string; id_cliente
 }
 
 /** Remove tarefas duplicadas por combinação de cliente + tarefa + prazo + etapa. */
-export function dedupTarefas<T extends {
-  cliente_id: string; o_que: string; prazo: string | null; etapa: string | null;
-}>(tarefas: T[]): T[] {
+export function dedupTarefas<
+  T extends {
+    cliente_id: string;
+    o_que: string;
+    prazo: string | null;
+    etapa: string | null;
+  },
+>(tarefas: T[]): T[] {
   const seen = new Set<string>();
   return tarefas.filter((t) => {
     const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;

@@ -14,8 +14,8 @@ export default function SearchInput({
   paramName = "q",
   className = "",
 }: Props) {
-  const router       = useRouter();
-  const pathname     = usePathname();
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [valor, setValor] = useState(searchParams.get(paramName) ?? "");
@@ -43,7 +43,10 @@ export default function SearchInput({
     <div className={`relative flex items-center ${className}`}>
       <svg
         className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none"
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
       >
         <circle cx="11" cy="11" r="8" strokeLinecap="round" strokeLinejoin="round" />
         <line x1="21" y1="21" x2="16.65" y2="16.65" strokeLinecap="round" />

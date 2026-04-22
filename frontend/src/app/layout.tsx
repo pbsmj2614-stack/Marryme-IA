@@ -14,7 +14,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.variable} ${lora.variable} font-sans bg-gray-50 text-gray-900 antialiased`}>
+      <body
+        className={`${inter.variable} ${lora.variable} font-sans bg-gray-50 text-gray-900 antialiased`}
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center"
@@ -29,9 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             priority={false}
           />
         </div>
-        <div className="relative z-10">
-          {children}
-        </div>
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );

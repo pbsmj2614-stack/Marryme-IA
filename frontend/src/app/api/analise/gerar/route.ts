@@ -29,15 +29,19 @@ function buildPrompt(
   periodo: string,
   faseProjeto: string | null,
   plano: string | null,
-  objetivo: string | null,
+  objetivo: string | null
 ): string {
-  const campanhasTexto = campanhas.map((c) => `
+  const campanhasTexto = campanhas
+    .map(
+      (c) => `
   - "${c.campaign_name}" (${c.status})
     Impressões: ${fmtN(c.impressions)} | Alcance: ${fmtN(c.reach)} | Freq: ${fmtN(c.frequency, 2)}x
     CTR: ${fmtN(c.link_ctr || c.ctr, 2)}% | CPC: ${c.cpc > 0 ? fmtBRL(c.cpc) : "—"} | CPM: ${fmtBRL(c.cpm)}
     Mensagens: ${fmtN(c.results)} | Custo/mensagem: ${c.cost_per_result > 0 ? fmtBRL(c.cost_per_result) : "—"}
     Hook Rate: ${c.hook_rate > 0 ? fmtN(c.hook_rate, 1) + "%" : "—"} | ThruPlay: ${c.thruplay > 0 ? fmtN(c.thruplay) : "—"}
-    Gasto: ${fmtBRL(c.spend)}`).join("\n");
+    Gasto: ${fmtBRL(c.spend)}`
+    )
+    .join("\n");
 
   return `Você é analista sênior de tráfego pago especializado no mercado de casamentos no Brasil.
 Analise os dados abaixo e gere um diagnóstico completo e recomendações práticas.
@@ -57,7 +61,7 @@ ${periodo}
 - Alcance: ${fmtN(kpis.reach)}
 - Frequência: ${fmtN(kpis.frequency, 2)}x
 - CPM: ${fmtBRL(kpis.cpm)}
-- CTR do link: ${fmtN((kpis.link_ctr || kpis.ctr), 2)}%
+- CTR do link: ${fmtN(kpis.link_ctr || kpis.ctr, 2)}%
 - Cliques no link: ${fmtN(kpis.link_clicks || kpis.clicks)}
 - CPC: ${kpis.cpc > 0 ? fmtBRL(kpis.cpc) : "—"}
 - Mensagens iniciadas: ${fmtN(kpis.results)}
@@ -117,7 +121,7 @@ Responda APENAS com um JSON válido (sem markdown, sem explicação fora do JSON
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as { prestador_id?: string };
+    const body = (await req.json()) as { prestador_id?: string };
     const { prestador_id } = body;
     if (!prestador_id) {
       return NextResponse.json({ error: "prestador_id obrigatório" }, { status: 400 });
@@ -146,7 +150,10 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!relatorio) {
-      return NextResponse.json({ error: "Nenhum relatório de campanha encontrado. Sincronize os dados primeiro." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Nenhum relatório de campanha encontrado. Sincronize os dados primeiro." },
+        { status: 404 }
+      );
     }
 
     // Busca dados da entrevista (fase, plano)
@@ -174,7 +181,7 @@ export async function POST(req: NextRequest) {
       periodo,
       faseProjeto,
       plano,
-      null,
+      null
     );
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -195,7 +202,9 @@ export async function POST(req: NextRequest) {
           for await (const chunk of claudeStream) {
             if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
               fullText += chunk.delta.text;
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`));
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`)
+              );
             }
           }
 
@@ -208,7 +217,9 @@ export async function POST(req: NextRequest) {
               .trim();
             const jsonMatch = stripped.match(/\{[\s\S]*\}/);
             if (jsonMatch) analiseJson = JSON.parse(jsonMatch[0]);
-          } catch { /* ignora parse error */ }
+          } catch {
+            /* ignora parse error */
+          }
 
           if (Object.keys(analiseJson).length > 0) {
             await supabase.from("analises_ia").insert({
@@ -219,7 +230,9 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, analise: analiseJson })}\n\n`));
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ done: true, analise: analiseJson })}\n\n`)
+          );
         } catch (err) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: String(err) })}\n\n`));
         } finally {
@@ -232,7 +245,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
   } catch (err) {

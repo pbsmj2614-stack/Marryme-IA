@@ -51,9 +51,7 @@ export default function GerarRoteiroButton({ entrevistaId }: { entrevistaId: str
       >
         {loading ? "Gerando roteiro..." : "Gerar roteiro completo"}
       </button>
-      {loading && (
-        <p className="text-xs text-gray-400">Isso pode levar ~30 segundos...</p>
-      )}
+      {loading && <p className="text-xs text-gray-400">Isso pode levar ~30 segundos...</p>}
       {erro && <p className="text-sm text-red-600">{erro}</p>}
     </div>
   );

@@ -12,11 +12,11 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const META_APP_ID     = process.env.META_APP_ID    ?? "";
+const META_APP_ID = process.env.META_APP_ID ?? "";
 const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
 
 export async function POST(req: NextRequest) {
-  const { token } = await req.json().catch(() => ({})) as { token?: string };
+  const { token } = (await req.json().catch(() => ({}))) as { token?: string };
 
   if (!token?.trim()) {
     return NextResponse.json({ ok: false, erro: "Token não informado." }, { status: 400 });
@@ -25,14 +25,22 @@ export async function POST(req: NextRequest) {
   // 1. Valida que o token funciona via /me
   let nomeUsuario = "";
   try {
-    const res  = await fetch(`https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(token.trim())}`);
-    const json = await res.json() as { id?: string; name?: string; error?: { message: string } };
+    const res = await fetch(
+      `https://graph.facebook.com/me?fields=id,name&access_token=${encodeURIComponent(token.trim())}`
+    );
+    const json = (await res.json()) as { id?: string; name?: string; error?: { message: string } };
     if (json.error) {
-      return NextResponse.json({ ok: false, erro: `Token inválido: ${json.error.message}` }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, erro: `Token inválido: ${json.error.message}` },
+        { status: 400 }
+      );
     }
     nomeUsuario = json.name ?? json.id ?? "";
   } catch (e) {
-    return NextResponse.json({ ok: false, erro: `Erro ao validar token: ${String(e)}` }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, erro: `Erro ao validar token: ${String(e)}` },
+      { status: 500 }
+    );
   }
 
   // 2. Verifica tipo do token (permanente vs prazo) via debug_token
@@ -40,8 +48,13 @@ export async function POST(req: NextRequest) {
   if (META_APP_ID && META_APP_SECRET) {
     try {
       const appToken = `${META_APP_ID}|${META_APP_SECRET}`;
-      const res  = await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token.trim())}&access_token=${encodeURIComponent(appToken)}`);
-      const json = await res.json() as { data?: { expires_at?: number; is_valid?: boolean }; error?: unknown };
+      const res = await fetch(
+        `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(token.trim())}&access_token=${encodeURIComponent(appToken)}`
+      );
+      const json = (await res.json()) as {
+        data?: { expires_at?: number; is_valid?: boolean };
+        error?: unknown;
+      };
       if (!json.error && json.data) {
         const expiresAt = json.data.expires_at;
         if (expiresAt === 0) {
@@ -50,17 +63,28 @@ export async function POST(req: NextRequest) {
           expiraEm = new Date(expiresAt * 1000).toLocaleString("pt-BR");
         }
       }
-    } catch { /* não bloqueia o salvamento */ }
+    } catch {
+      /* não bloqueia o salvamento */
+    }
   }
 
   // 3. Salva no Supabase diretamente
   try {
-    await supabaseAdmin().from("configuracoes").upsert(
-      { chave: "meta_access_token", valor: token.trim(), atualizado_em: new Date().toISOString() },
-      { onConflict: "chave" }
-    );
+    await supabaseAdmin()
+      .from("configuracoes")
+      .upsert(
+        {
+          chave: "meta_access_token",
+          valor: token.trim(),
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: "chave" }
+      );
   } catch (e) {
-    return NextResponse.json({ ok: false, erro: `Falha ao salvar no banco: ${String(e)}` }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, erro: `Falha ao salvar no banco: ${String(e)}` },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true, expira_em: expiraEm, usuario: nomeUsuario });
