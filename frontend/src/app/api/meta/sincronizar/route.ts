@@ -372,11 +372,132 @@ export async function POST(req: NextRequest) {
     // video_3_sec_watched_actions foi depreciado no v18+, mas "video_view" dentro de
     // actions[] representa exatamente as visualizações de 3s — usamos como fallback
     const video3s = extractAction(kpisData.actions, ["video_view"]);
-    const videoP25 = extractVideoAction(kpisData.video_p25_watched_actions);
-    const videoP50 = extractVideoAction(kpisData.video_p50_watched_actions);
-    const videoP75 = extractVideoAction(kpisData.video_p75_watched_actions);
-    const videoP95 = extractVideoAction(kpisData.video_p95_watched_actions);
 
+    // p25/50/75/95 começam do nível de conta; se zerados, fallback para nível de anúncio
+    let videoP25 = extractVideoAction(kpisData.video_p25_watched_actions);
+    let videoP50 = extractVideoAction(kpisData.video_p50_watched_actions);
+    let videoP75 = extractVideoAction(kpisData.video_p75_watched_actions);
+    let videoP95 = extractVideoAction(kpisData.video_p95_watched_actions);
+
+    // ── 2. Insights por campanha ───────────────────────────────────────────────
+    let campanhasRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+      fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
+      level: "campaign",
+      time_range: timeRange,
+    })) as { data?: Array<Record<string, unknown>> };
+
+    if (!campanhasRaw.data?.length) {
+      campanhasRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+        fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
+        level: "campaign",
+        date_preset: "last_30d",
+      })) as { data?: Array<Record<string, unknown>> };
+    }
+
+    const campanhas: CampanhaInsight[] = (campanhasRaw.data ?? []).map((c) => {
+      const cImpressions = parseFloat(String(c.impressions ?? "0"));
+      const cSpend = parseFloat(String(c.spend ?? "0"));
+      const cThruplay = extractVideoAction(c.video_thruplay_watched_actions);
+      const cVideo3s = extractAction(c.actions, ["video_view"]);
+      const cResults = extractAction(c.actions, MESSAGE_TYPES);
+      const cCostPerResult = extractAction(c.cost_per_action_type, MESSAGE_TYPES);
+      return {
+        campaign_id: String(c.campaign_id ?? ""),
+        campaign_name: String(c.campaign_name ?? ""),
+        status: "ACTIVE",
+        impressions: cImpressions,
+        reach: parseFloat(String(c.reach ?? "0")),
+        frequency: parseFloat(String(c.frequency ?? "0")),
+        clicks: parseFloat(String(c.clicks ?? "0")),
+        link_clicks: parseFloat(String(c.inline_link_clicks ?? "0")),
+        spend: cSpend,
+        ctr: parseFloat(String(c.ctr ?? "0")),
+        link_ctr: parseFloat(String(c.inline_link_click_ctr ?? "0")),
+        cpc: parseFloat(String(c.cost_per_inline_link_click ?? "0")),
+        cpm: parseFloat(String(c.cpm ?? "0")),
+        results: cResults,
+        cost_per_result: cCostPerResult > 0 ? cCostPerResult : cResults > 0 ? cSpend / cResults : 0,
+        thruplay: cThruplay,
+        cost_per_thruplay: cThruplay > 0 ? cSpend / cThruplay : 0,
+        video_3s: cVideo3s,
+        hook_rate: cImpressions > 0 ? (cVideo3s / cImpressions) * 100 : 0,
+        video_p25: extractVideoAction(c.video_p25_watched_actions),
+        video_p50: extractVideoAction(c.video_p50_watched_actions),
+        video_p75: extractVideoAction(c.video_p75_watched_actions),
+        video_p100: extractVideoAction(c.video_p95_watched_actions),
+      };
+    });
+
+    // ── 2b. Fallback: busca % de vídeo no nível de anúncio ────────────────────
+    // Campanhas de Engajamento/WhatsApp não retornam video_p* no nível de conta
+    // ou campanha, mas os dados estão disponíveis no nível de anúncio (ad level).
+    if (thruplay > 0 && videoP25 === 0) {
+      try {
+        const VIDEO_PCT_FIELDS = [
+          "campaign_id",
+          "video_p25_watched_actions",
+          "video_p50_watched_actions",
+          "video_p75_watched_actions",
+          "video_p95_watched_actions",
+        ].join(",");
+
+        let adVideoRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+          fields: VIDEO_PCT_FIELDS,
+          level: "ad",
+          time_range: timeRange,
+        })) as { data?: Array<Record<string, unknown>> };
+
+        if (!adVideoRaw.data?.length) {
+          adVideoRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+            fields: VIDEO_PCT_FIELDS,
+            level: "ad",
+            date_preset: "last_30d",
+          })) as { data?: Array<Record<string, unknown>> };
+        }
+
+        // Agrega totais por conta e por campanha
+        type VideoAgg = { p25: number; p50: number; p75: number; p95: number };
+        const byCampaign: Record<string, VideoAgg> = {};
+
+        for (const ad of adVideoRaw.data ?? []) {
+          const cid = String(ad.campaign_id ?? "");
+          if (!byCampaign[cid]) byCampaign[cid] = { p25: 0, p50: 0, p75: 0, p95: 0 };
+          byCampaign[cid].p25 += extractVideoAction(ad.video_p25_watched_actions);
+          byCampaign[cid].p50 += extractVideoAction(ad.video_p50_watched_actions);
+          byCampaign[cid].p75 += extractVideoAction(ad.video_p75_watched_actions);
+          byCampaign[cid].p95 += extractVideoAction(ad.video_p95_watched_actions);
+        }
+
+        // Atualiza campanhas com dados do nível de anúncio
+        for (const c of campanhas) {
+          const agg = byCampaign[c.campaign_id];
+          if (agg) {
+            c.video_p25 = agg.p25;
+            c.video_p50 = agg.p50;
+            c.video_p75 = agg.p75;
+            c.video_p100 = agg.p95;
+          }
+        }
+
+        // Soma geral para KPIs consolidados
+        videoP25 = Object.values(byCampaign).reduce((s, v) => s + v.p25, 0);
+        videoP50 = Object.values(byCampaign).reduce((s, v) => s + v.p50, 0);
+        videoP75 = Object.values(byCampaign).reduce((s, v) => s + v.p75, 0);
+        videoP95 = Object.values(byCampaign).reduce((s, v) => s + v.p95, 0);
+
+        console.warn("[meta/sincronizar] fallback ad-level video_p*:", {
+          p25: videoP25,
+          p50: videoP50,
+          p75: videoP75,
+          p95: videoP95,
+          ads: adVideoRaw.data?.length ?? 0,
+        });
+      } catch (videoErr) {
+        console.warn("[meta/sincronizar] fallback ad-level falhou (não bloqueia):", videoErr);
+      }
+    }
+
+    // ── 3. Consolidar KPIs (após fallback de vídeo) ───────────────────────────
     const kpis: KPIsCampanha = {
       // Entrega
       impressions,
@@ -406,56 +527,7 @@ export async function POST(req: NextRequest) {
       ctr: parseFloat(String(kpisData.ctr ?? "0")),
     };
 
-    // ── 2. Insights por campanha ───────────────────────────────────────────────
-    let campanhasRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
-      fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
-      level: "campaign",
-      time_range: timeRange,
-    })) as { data?: Array<Record<string, unknown>> };
-
-    if (!campanhasRaw.data?.length) {
-      campanhasRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
-        fields: "campaign_id,campaign_name," + INSIGHT_FIELDS,
-        level: "campaign",
-        date_preset: "last_30d",
-      })) as { data?: Array<Record<string, unknown>> };
-    }
-
-    const campanhas: CampanhaInsight[] = (campanhasRaw.data ?? []).map((c) => {
-      const cImpressions = parseFloat(String(c.impressions ?? "0"));
-      const cSpend = parseFloat(String(c.spend ?? "0"));
-      const cThruplay = extractVideoAction(c.video_thruplay_watched_actions);
-      const cVideo3s = extractAction(c.actions, ["video_view"]); // via actions[] (v18+ fallback)
-      const cResults = extractAction(c.actions, MESSAGE_TYPES);
-      const cCostPerResult = extractAction(c.cost_per_action_type, MESSAGE_TYPES);
-      return {
-        campaign_id: String(c.campaign_id ?? ""),
-        campaign_name: String(c.campaign_name ?? ""),
-        status: "ACTIVE",
-        impressions: cImpressions,
-        reach: parseFloat(String(c.reach ?? "0")),
-        frequency: parseFloat(String(c.frequency ?? "0")),
-        clicks: parseFloat(String(c.clicks ?? "0")),
-        link_clicks: parseFloat(String(c.inline_link_clicks ?? "0")),
-        spend: cSpend,
-        ctr: parseFloat(String(c.ctr ?? "0")),
-        link_ctr: parseFloat(String(c.inline_link_click_ctr ?? "0")),
-        cpc: parseFloat(String(c.cost_per_inline_link_click ?? "0")),
-        cpm: parseFloat(String(c.cpm ?? "0")),
-        results: cResults,
-        cost_per_result: cCostPerResult > 0 ? cCostPerResult : cResults > 0 ? cSpend / cResults : 0,
-        thruplay: cThruplay,
-        cost_per_thruplay: cThruplay > 0 ? cSpend / cThruplay : 0,
-        video_3s: cVideo3s,
-        hook_rate: cImpressions > 0 ? (cVideo3s / cImpressions) * 100 : 0,
-        video_p25: extractVideoAction(c.video_p25_watched_actions),
-        video_p50: extractVideoAction(c.video_p50_watched_actions),
-        video_p75: extractVideoAction(c.video_p75_watched_actions),
-        video_p100: extractVideoAction(c.video_p95_watched_actions), // p95 → campo p100
-      };
-    });
-
-    // ── 3. Calcular health score ───────────────────────────────────────────────
+    // ── 4. Calcular health score ───────────────────────────────────────────────
     const healthScore = calcHealthScore(kpis);
 
     const dadosJson: DadosRelatorio = {
@@ -465,7 +537,7 @@ export async function POST(req: NextRequest) {
       periodo_fim: fim,
     };
 
-    // ── 4. Salvar relatório ───────────────────────────────────────────────────
+    // ── 5. Salvar relatório ───────────────────────────────────────────────────
     const { data: relatorio, error: rErr } = await supabase
       .from("relatorios_campanha")
       .insert({
@@ -482,7 +554,7 @@ export async function POST(req: NextRequest) {
     if (rErr || !relatorio)
       throw new Error(`Erro ao salvar relatório: ${rErr?.message ?? "sem dados retornados"}`);
 
-    // ── 5. Atualizar prestador ─────────────────────────────────────────────────
+    // ── 6. Atualizar prestador ─────────────────────────────────────────────────
     await supabase
       .from("prestadores")
       .update({
@@ -491,7 +563,7 @@ export async function POST(req: NextRequest) {
       })
       .eq("id", prestador_id);
 
-    // ── Debug: lista campanhas da conta para diagnóstico ─────────────────────
+    // ── 7. Debug: lista campanhas da conta para diagnóstico ──────────────────
     let debugCampanhasList: unknown[] = [];
     try {
       const listRaw = (await metaGet(activeToken, `/act_${accountId}/campaigns`, {
