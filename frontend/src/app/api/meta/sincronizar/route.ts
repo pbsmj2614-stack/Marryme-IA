@@ -369,17 +369,13 @@ export async function POST(req: NextRequest) {
     const thruplay = extractVideoAction(kpisData.video_thruplay_watched_actions);
     const results = extractAction(kpisData.actions, MESSAGE_TYPES);
     const costPerResult = extractAction(kpisData.cost_per_action_type, MESSAGE_TYPES);
+    // video_3_sec_watched_actions foi depreciado no v18+, mas "video_view" dentro de
+    // actions[] representa exatamente as visualizações de 3s — usamos como fallback
+    const video3s = extractAction(kpisData.actions, ["video_view"]);
     const videoP25 = extractVideoAction(kpisData.video_p25_watched_actions);
     const videoP50 = extractVideoAction(kpisData.video_p50_watched_actions);
     const videoP75 = extractVideoAction(kpisData.video_p75_watched_actions);
     const videoP95 = extractVideoAction(kpisData.video_p95_watched_actions);
-    console.warn("[meta/sincronizar] video fields conta:", {
-      thruplay: kpisData.video_thruplay_watched_actions,
-      p25: kpisData.video_p25_watched_actions,
-      p50: kpisData.video_p50_watched_actions,
-      p75: kpisData.video_p75_watched_actions,
-      p95: kpisData.video_p95_watched_actions,
-    });
 
     const kpis: KPIsCampanha = {
       // Entrega
@@ -399,12 +395,12 @@ export async function POST(req: NextRequest) {
       // Vídeo
       thruplay,
       cost_per_thruplay: thruplay > 0 ? spend / thruplay : 0,
-      video_3s: 0,
-      hook_rate: 0, // video_3_sec depreciado no v18+
+      video_3s: video3s,
+      hook_rate: impressions > 0 ? (video3s / impressions) * 100 : 0,
       video_p25: videoP25,
       video_p50: videoP50,
       video_p75: videoP75,
-      video_p100: videoP95, // p95 armazenado no campo p100
+      video_p100: videoP95,
       // Compat
       clicks: parseFloat(String(kpisData.clicks ?? "0")),
       ctr: parseFloat(String(kpisData.ctr ?? "0")),
@@ -429,7 +425,7 @@ export async function POST(req: NextRequest) {
       const cImpressions = parseFloat(String(c.impressions ?? "0"));
       const cSpend = parseFloat(String(c.spend ?? "0"));
       const cThruplay = extractVideoAction(c.video_thruplay_watched_actions);
-      const cVideo3s = 0; // video_3_sec_watched_actions depreciado no Meta API v18+
+      const cVideo3s = extractAction(c.actions, ["video_view"]); // via actions[] (v18+ fallback)
       const cResults = extractAction(c.actions, MESSAGE_TYPES);
       const cCostPerResult = extractAction(c.cost_per_action_type, MESSAGE_TYPES);
       return {
