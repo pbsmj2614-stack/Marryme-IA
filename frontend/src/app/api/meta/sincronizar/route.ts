@@ -373,6 +373,13 @@ export async function POST(req: NextRequest) {
     const videoP50 = extractVideoAction(kpisData.video_p50_watched_actions);
     const videoP75 = extractVideoAction(kpisData.video_p75_watched_actions);
     const videoP95 = extractVideoAction(kpisData.video_p95_watched_actions);
+    console.warn("[meta/sincronizar] video fields conta:", {
+      thruplay: kpisData.video_thruplay_watched_actions,
+      p25: kpisData.video_p25_watched_actions,
+      p50: kpisData.video_p50_watched_actions,
+      p75: kpisData.video_p75_watched_actions,
+      p95: kpisData.video_p95_watched_actions,
+    });
 
     const kpis: KPIsCampanha = {
       // Entrega
@@ -512,6 +519,14 @@ export async function POST(req: NextRequest) {
         meta_data_count: kpisRaw.data?.length ?? 0,
         meta_campanhas_count: campanhasRaw.data?.length ?? 0,
         meta_raw_kpis: kpisData,
+        meta_raw_primeira_campanha: campanhasRaw.data?.[0] ?? null,
+        video_fields_conta: {
+          thruplay: kpisData.video_thruplay_watched_actions ?? null,
+          p25: kpisData.video_p25_watched_actions ?? null,
+          p50: kpisData.video_p50_watched_actions ?? null,
+          p75: kpisData.video_p75_watched_actions ?? null,
+          p95: kpisData.video_p95_watched_actions ?? null,
+        },
         account_id: accountId,
         time_range: timeRange,
         campanhas_na_conta: debugCampanhasList,

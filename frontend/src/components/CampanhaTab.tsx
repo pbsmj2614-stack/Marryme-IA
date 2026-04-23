@@ -228,9 +228,33 @@ const RETENTION_COLORS = {
   seg_25_50: "#dc2626", // 25–50% — vermelho (saiu cedo)
 };
 
-function VideoRetentionChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
+function VideoRetentionChart({
+  campanhas,
+  hasThruplay,
+}: {
+  campanhas: CampanhaInsight[];
+  hasThruplay: boolean;
+}) {
   const comVideo = campanhas.filter((c) => c.video_p25 > 0);
-  if (comVideo.length === 0) return null;
+
+  if (comVideo.length === 0) {
+    if (!hasThruplay) return null;
+    return (
+      <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+          Retenção de audiência (25 / 50 / 75 / 95%)
+        </p>
+        <p className="text-sm text-gray-500">
+          Dados de retenção detalhados não retornados pela Meta API para este tipo de campanha.
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          Para campanhas com objetivo <strong>Mensagens</strong>, a Meta geralmente só reporta
+          ThruPlay. Para ver o funil completo, configure as colunas no Gerenciador de Anúncios ou
+          use campanhas com objetivo <strong>Visualizações de vídeo</strong>.
+        </p>
+      </div>
+    );
+  }
 
   const data = comVideo
     .sort((a, b) => b.video_p25 - a.video_p25)
@@ -740,7 +764,7 @@ export default function CampanhaTab({
                   </>
                 )}
               </div>
-              <VideoRetentionChart campanhas={campanhas} />
+              <VideoRetentionChart campanhas={campanhas} hasThruplay={kpis.thruplay > 0} />
             </div>
           )}
 
