@@ -338,6 +338,10 @@ export async function POST(req: NextRequest) {
       "actions",
       "cost_per_action_type",
       "video_thruplay_watched_actions",
+      "video_p25_watched_actions",
+      "video_p50_watched_actions",
+      "video_p75_watched_actions",
+      "video_p95_watched_actions",
     ].join(",");
 
     // ── 1. KPIs consolidados da conta ──────────────────────────────────────────
@@ -365,6 +369,10 @@ export async function POST(req: NextRequest) {
     const thruplay = extractVideoAction(kpisData.video_thruplay_watched_actions);
     const results = extractAction(kpisData.actions, MESSAGE_TYPES);
     const costPerResult = extractAction(kpisData.cost_per_action_type, MESSAGE_TYPES);
+    const videoP25 = extractVideoAction(kpisData.video_p25_watched_actions);
+    const videoP50 = extractVideoAction(kpisData.video_p50_watched_actions);
+    const videoP75 = extractVideoAction(kpisData.video_p75_watched_actions);
+    const videoP95 = extractVideoAction(kpisData.video_p95_watched_actions);
 
     const kpis: KPIsCampanha = {
       // Entrega
@@ -386,10 +394,10 @@ export async function POST(req: NextRequest) {
       cost_per_thruplay: thruplay > 0 ? spend / thruplay : 0,
       video_3s: 0,
       hook_rate: 0, // video_3_sec depreciado no v18+
-      video_p25: 0,
-      video_p50: 0,
-      video_p75: 0,
-      video_p100: 0,
+      video_p25: videoP25,
+      video_p50: videoP50,
+      video_p75: videoP75,
+      video_p100: videoP95, // p95 armazenado no campo p100
       // Compat
       clicks: parseFloat(String(kpisData.clicks ?? "0")),
       ctr: parseFloat(String(kpisData.ctr ?? "0")),
@@ -440,7 +448,7 @@ export async function POST(req: NextRequest) {
         video_p25: extractVideoAction(c.video_p25_watched_actions),
         video_p50: extractVideoAction(c.video_p50_watched_actions),
         video_p75: extractVideoAction(c.video_p75_watched_actions),
-        video_p100: extractVideoAction(c.video_p100_watched_actions),
+        video_p100: extractVideoAction(c.video_p95_watched_actions), // p95 → campo p100
       };
     });
 

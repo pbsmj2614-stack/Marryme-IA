@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha } from "@/lib/types";
 import AnaliseIA from "@/components/AnaliseIA";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
@@ -215,6 +215,110 @@ function CampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── Gráfico retenção de audiência (horizontal stacked) ──────────────────────
+
+const RETENTION_COLORS = {
+  seg_95: "#7c3aed", // 95%+ completou — roxo brand
+  seg_75_95: "#059669", // 75–95% — verde
+  seg_50_75: "#d97706", // 50–75% — âmbar
+  seg_25_50: "#dc2626", // 25–50% — vermelho (saiu cedo)
+};
+
+function VideoRetentionChart({ campanhas }: { campanhas: CampanhaInsight[] }) {
+  const comVideo = campanhas.filter((c) => c.video_p25 > 0);
+  if (comVideo.length === 0) return null;
+
+  const data = comVideo
+    .sort((a, b) => b.video_p25 - a.video_p25)
+    .slice(0, 8)
+    .map((c) => {
+      const p95 = c.video_p100 ?? 0;
+      const p75 = Math.max(0, c.video_p75 - p95);
+      const p50 = Math.max(0, c.video_p50 - c.video_p75);
+      const p25 = Math.max(0, c.video_p25 - c.video_p50);
+      return {
+        name: c.campaign_name.length > 22 ? c.campaign_name.slice(0, 22) + "…" : c.campaign_name,
+        seg_25_50: p25,
+        seg_50_75: p50,
+        seg_75_95: p75,
+        seg_95: p95,
+        _total: c.video_p25,
+      };
+    });
+
+  const barHeight = 36;
+  const chartHeight = data.length * barHeight + 60;
+
+  const RETENTION_LABELS: Record<string, string> = {
+    seg_25_50: "Saiu em 25–50%",
+    seg_50_75: "Saiu em 50–75%",
+    seg_75_95: "Saiu em 75–95%",
+    seg_95: "Completou 95%+",
+  };
+
+  return (
+    <div className="mt-6">
+      <SectionTitle>Retenção de audiência do vídeo por campanha</SectionTitle>
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <BarChart
+          layout="vertical"
+          data={data}
+          margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+          barSize={22}
+        >
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            tickFormatter={(v) => fmt(v)}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fontSize: 11, fill: "#6b7280" }}
+            width={140}
+          />
+          <Tooltip
+            formatter={(value, name, entry) => {
+              const n = Number(value ?? 0);
+              const total = (entry.payload as { _total: number })?._total ?? 1;
+              const pct = total > 0 ? ` (${((n / total) * 100).toFixed(1)}%)` : "";
+              return [`${fmt(n)}${pct}`, RETENTION_LABELS[String(name)] ?? String(name)];
+            }}
+            contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+          />
+          <Legend
+            iconType="square"
+            iconSize={10}
+            wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+            formatter={(value) => {
+              const labels: Record<string, string> = {
+                seg_25_50: "Saiu 25–50%",
+                seg_50_75: "Saiu 50–75%",
+                seg_75_95: "Saiu 75–95%",
+                seg_95: "Completou 95%+",
+              };
+              return labels[value] ?? value;
+            }}
+          />
+          <Bar dataKey="seg_25_50" stackId="r" fill={RETENTION_COLORS.seg_25_50} name="seg_25_50" />
+          <Bar dataKey="seg_50_75" stackId="r" fill={RETENTION_COLORS.seg_50_75} name="seg_50_75" />
+          <Bar dataKey="seg_75_95" stackId="r" fill={RETENTION_COLORS.seg_75_95} name="seg_75_95" />
+          <Bar
+            dataKey="seg_95"
+            stackId="r"
+            fill={RETENTION_COLORS.seg_95}
+            name="seg_95"
+            radius={[0, 4, 4, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+      <p className="text-xs text-gray-300 mt-1 text-center">
+        Cor: vermelho = saiu cedo · âmbar · verde · roxo = completou 95%+
+      </p>
     </div>
   );
 }
@@ -594,7 +698,7 @@ export default function CampanhaTab({
           {kpis.thruplay > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <SectionTitle>Métricas de vídeo</SectionTitle>
-              <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <KpiCard
                   label="ThruPlay"
                   value={fmt(kpis.thruplay)}
@@ -604,7 +708,39 @@ export default function CampanhaTab({
                   label="Custo / ThruPlay"
                   value={kpis.cost_per_thruplay > 0 ? fmtBRL(kpis.cost_per_thruplay) : "—"}
                 />
+                {kpis.video_p25 > 0 && (
+                  <>
+                    <KpiCard
+                      label="Chegou a 50%"
+                      value={fmt(kpis.video_p50)}
+                      sub={
+                        kpis.video_p25 > 0
+                          ? `${fmtPct((kpis.video_p50 / kpis.video_p25) * 100)} dos que viram 25%`
+                          : undefined
+                      }
+                    />
+                    <KpiCard
+                      label="Completou 95%+"
+                      value={fmt(kpis.video_p100)}
+                      sub={
+                        kpis.video_p25 > 0
+                          ? `${fmtPct((kpis.video_p100 / kpis.video_p25) * 100)} dos que viram 25%`
+                          : undefined
+                      }
+                      highlight={
+                        kpis.video_p25 > 0
+                          ? kpis.video_p100 / kpis.video_p25 >= 0.5
+                            ? "good"
+                            : kpis.video_p100 / kpis.video_p25 >= 0.25
+                              ? "warn"
+                              : "bad"
+                          : null
+                      }
+                    />
+                  </>
+                )}
               </div>
+              <VideoRetentionChart campanhas={campanhas} />
             </div>
           )}
 
