@@ -497,6 +497,104 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── 2c. Fallback: Video Insights API (total_video_retention_graph) ────────
+    // Quando ad-level também não retorna p25, busca a curva de retenção real
+    // diretamente no objeto do vídeo. Dado é do lifetime do vídeo (não filtrado
+    // por período), mas é real e suficiente para um criativo rodando em uma conta.
+    if (thruplay > 0 && videoP25 === 0 && video3s > 0) {
+      try {
+        // Buscar ads da conta para obter os video_ids dos criativos
+        type AdRec = { campaign_id?: string; creative?: { video_id?: string } };
+        const adsRaw = (await metaGet(activeToken, `/act_${accountId}/ads`, {
+          fields: "id,campaign_id,creative{video_id}",
+          limit: "25",
+        })) as { data?: AdRec[] };
+
+        const videoIds = Array.from(
+          new Set(
+            (adsRaw.data ?? [])
+              .map((a) => a.creative?.video_id)
+              .filter((id): id is string => Boolean(id))
+          )
+        );
+
+        for (const videoId of videoIds) {
+          try {
+            type RetGraph = Record<string, number>;
+            type InsightEntry = {
+              name: string;
+              values?: Array<{ value?: RetGraph }>;
+            };
+            const insightsRaw = (await metaGet(activeToken, `/${videoId}/video_insights`, {
+              fields: "total_video_retention_graph",
+              period: "lifetime",
+            })) as { data?: InsightEntry[] };
+
+            const retEntry = (insightsRaw.data ?? []).find(
+              (d) => d.name === "total_video_retention_graph"
+            );
+            const retGraph = retEntry?.values?.[0]?.value;
+            if (!retGraph || Object.keys(retGraph).length === 0) continue;
+            const graph: RetGraph = retGraph;
+
+            // Detecta se o grafo está indexado por % (0-100) ou por segundos (0-N)
+            const keys = Object.keys(graph)
+              .map(Number)
+              .sort((a, b) => a - b);
+            const maxKey = keys[keys.length - 1];
+
+            // Converte marco percentual para índice no grafo
+            const indexFor = (pct: number): number =>
+              maxKey <= 100 ? pct : Math.round(maxKey * (pct / 100));
+
+            // Interpola valor do grafo para um índice dado
+            const retFraction = (pct: number): number => {
+              const idx = indexFor(pct);
+              const base = graph[String(keys[0])] ?? 100;
+              if (base === 0) return 0;
+              const exact = graph[String(idx)];
+              if (exact !== undefined) return exact / base;
+              const lo = [...keys].reverse().find((k) => k < idx);
+              const hi = keys.find((k) => k > idx);
+              if (lo == null || hi == null) return 0;
+              const t = (idx - lo) / (hi - lo);
+              const interp = (graph[String(lo)] ?? 0) * (1 - t) + (graph[String(hi)] ?? 0) * t;
+              return interp / base;
+            };
+
+            videoP25 = Math.round(video3s * retFraction(25));
+            videoP50 = Math.round(video3s * retFraction(50));
+            videoP75 = Math.round(video3s * retFraction(75));
+            videoP95 = Math.round(video3s * retFraction(95));
+
+            for (const c of campanhas) {
+              if (c.thruplay > 0) {
+                c.video_p25 = videoP25;
+                c.video_p50 = videoP50;
+                c.video_p75 = videoP75;
+                c.video_p100 = videoP95;
+              }
+            }
+
+            console.warn("[meta/sincronizar] fallback video_insights retenção:", {
+              videoId,
+              graphKeys: keys.length,
+              maxKey,
+              p25: videoP25,
+              p50: videoP50,
+              p75: videoP75,
+              p95: videoP95,
+            });
+            break; // Usa o primeiro vídeo com dados válidos
+          } catch {
+            // Tenta próximo vídeo se este falhar
+          }
+        }
+      } catch (videoInsightsErr) {
+        console.warn("[meta/sincronizar] fallback video_insights falhou:", videoInsightsErr);
+      }
+    }
+
     // ── 3. Consolidar KPIs (após fallback de vídeo) ───────────────────────────
     const kpis: KPIsCampanha = {
       // Entrega
