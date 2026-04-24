@@ -1,5 +1,43 @@
 export type Categoria = "musico" | "fotografo" | "celebrante" | "dj" | "outro";
 
+// ─── Chat conversacional ───────────────────────────────────────────────────────
+
+export type ChatTipo =
+  | "geral"
+  | "video_apresentacao"
+  | "cta_anuncio"
+  | "direcao_criativa"
+  | "analise";
+export type ChatStatus = "ativa" | "finalizada" | "arquivada";
+
+export interface ChatArquivo {
+  nome: string;
+  url: string;
+  tipo: string;
+  tamanho: number;
+}
+
+export interface ChatMensagem {
+  id: string;
+  sessao_id: string;
+  role: "user" | "assistant";
+  content: string;
+  arquivos: ChatArquivo[];
+  criado_em: string;
+}
+
+export interface ChatSessao {
+  id: string;
+  prestador_id: string;
+  titulo: string;
+  tipo: ChatTipo;
+  status: ChatStatus;
+  roteiro_final: Record<string, unknown> | null;
+  tokens_usados: number;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export interface Prestador {
   id: string;
   nome_artistico: string;
