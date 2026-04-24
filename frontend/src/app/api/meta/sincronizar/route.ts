@@ -630,6 +630,8 @@ export async function POST(req: NextRequest) {
 
     // ── 4b. Buscar saldo e método de pagamento da conta ───────────────────────
     let conta: ContaMeta = { saldo: null, metodo: null };
+    let debugContaRaw: unknown = null;
+    let debugContaErro: string | null = null;
     try {
       const contaRaw = (await metaGet(activeToken, `/act_${accountId}`, {
         fields: "balance,spend_cap,amount_spent,funding_source_details",
@@ -639,9 +641,12 @@ export async function POST(req: NextRequest) {
         amount_spent?: string;
         funding_source_details?: { type?: number };
       };
-      const spendCap = parseFloat(contaRaw.spend_cap ?? "0");
-      const amountSpent = parseFloat(contaRaw.amount_spent ?? "0");
-      const balance = parseFloat(contaRaw.balance ?? "0");
+      debugContaRaw = contaRaw;
+
+      // Meta retorna centavos na moeda da conta (ex: "150000" = R$ 1.500,00)
+      const spendCap = parseFloat(contaRaw.spend_cap ?? "0") / 100;
+      const amountSpent = parseFloat(contaRaw.amount_spent ?? "0") / 100;
+      const balance = parseFloat(contaRaw.balance ?? "0") / 100;
 
       const saldo = spendCap > 0 ? spendCap - amountSpent : balance > 0 ? balance : null;
 
@@ -650,8 +655,10 @@ export async function POST(req: NextRequest) {
         tipo === 1 ? "cartao" : tipo === 3 ? "prepago" : tipo != null ? "outro" : null;
 
       conta = { saldo, metodo };
-    } catch {
-      /* non-fatal — saldo indisponível */
+      console.warn("[meta/sincronizar] conta:", { spendCap, amountSpent, balance, saldo, tipo });
+    } catch (contaErr) {
+      debugContaErro = contaErr instanceof Error ? contaErr.message : String(contaErr);
+      console.warn("[meta/sincronizar] conta indisponível:", debugContaErro);
     }
 
     const dadosJson: DadosRelatorio = {
@@ -720,6 +727,9 @@ export async function POST(req: NextRequest) {
           p75: kpisData.video_p75_watched_actions ?? null,
           p95: kpisData.video_p95_watched_actions ?? null,
         },
+        conta_raw: debugContaRaw,
+        conta_erro: debugContaErro,
+        conta_parsed: conta,
         account_id: accountId,
         time_range: timeRange,
         campanhas_na_conta: debugCampanhasList,
