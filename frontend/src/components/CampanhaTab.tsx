@@ -640,34 +640,36 @@ export default function CampanhaTab({
         <>
           {/* ── Bloco 1: Health Score ──────────────────────────────────────── */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center gap-6 flex-wrap">
-              {score !== null && <HealthGauge score={score} />}
-              <div className="flex-1 min-w-[200px]">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
-                  Período
-                </p>
-                <p className="text-sm text-gray-700 font-medium">
-                  {new Date(rel.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
-                  {" → "}
-                  {new Date(rel.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
-                </p>
-                <div className="mt-3 space-y-1 text-xs text-gray-500">
-                  <p>
-                    <strong className="text-gray-600">CTR link ≥ 1%</strong> · frequência ≤ 2 · CPM
-                    ≤ R$15 = saudável
+            <div className="flex items-start justify-between gap-4">
+              {/* Gauge + período */}
+              <div className="flex items-center gap-6 flex-wrap flex-1">
+                {score !== null && <HealthGauge score={score} />}
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                    Período
                   </p>
-                  <p>
-                    <strong className="text-gray-600">Score:</strong> CTR (40%) · Frequência (20%) ·
-                    CPM (40%)
+                  <p className="text-sm text-gray-700 font-medium">
+                    {new Date(rel.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
+                    {" → "}
+                    {new Date(rel.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                   </p>
+                  <div className="mt-3 space-y-1 text-xs text-gray-500">
+                    <p>
+                      <strong className="text-gray-600">CTR link ≥ 1%</strong> · frequência ≤ 2 ·
+                      CPM ≤ R$15 = saudável
+                    </p>
+                    <p>
+                      <strong className="text-gray-600">Score:</strong> CTR (40%) · Frequência (20%)
+                      · CPM (40%)
+                    </p>
+                  </div>
                 </div>
               </div>
+              {/* Saldo — canto direito */}
               {(conta?.metodo != null || conta?.saldo != null) && (
-                <div className="ml-auto text-right">
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
-                    Saldo
-                  </p>
-                  <p className="text-lg font-bold text-gray-800">
+                <div className="shrink-0 border border-gray-100 bg-gray-50 rounded-xl px-4 py-3 text-right">
+                  <p className="text-xs text-gray-400 mb-1">Saldo</p>
+                  <p className="text-lg font-bold text-gray-900">
                     {conta?.metodo === "cartao"
                       ? "Cartão"
                       : conta?.saldo != null
