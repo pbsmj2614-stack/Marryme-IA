@@ -18,7 +18,7 @@ import {
   Cell,
 } from "recharts";
 
-import type { KPIsCampanha, CampanhaInsight, DadosRelatorio } from "@/lib/types";
+import type { KPIsCampanha, CampanhaInsight, DadosRelatorio, ContaMeta } from "@/lib/types";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -181,7 +181,7 @@ function MiniGauge({ score }: { score: number | null }) {
 
 // ─── KPI inline row ───────────────────────────────────────────────────────────
 
-function KpiGrid({ kpis }: { kpis: KPIsCampanha }) {
+function KpiGrid({ kpis, conta }: { kpis: KPIsCampanha; conta?: ContaMeta | null }) {
   const items = [
     { label: "Impressões", value: fmt(kpis.impressions) },
     { label: "Alcance", value: fmt(kpis.reach) },
@@ -194,13 +194,20 @@ function KpiGrid({ kpis }: { kpis: KPIsCampanha }) {
     { label: "Hook Rate", value: kpis.hook_rate > 0 ? fmtPct(kpis.hook_rate) : "—" },
   ];
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-3">
+    <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-5 gap-3">
       {items.map(({ label, value }) => (
         <div key={label} className="bg-[#2a2a2a] rounded-lg px-3 py-2.5 border border-[#333]">
           <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{label}</p>
           <p className="text-sm font-bold text-white">{value}</p>
         </div>
       ))}
+      {conta?.saldo != null && (
+        <div className="bg-[#1a2540] rounded-lg px-3 py-2.5 border border-blue-800">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Saldo</p>
+          <p className="text-sm font-bold text-blue-300">{fmtBRL(conta.saldo)}</p>
+          {conta.metodo === "cartao" && <p className="text-[9px] text-blue-500 mt-0.5">Cartão</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -275,6 +282,7 @@ function ExpandedRow({
   const rel = prestador.relatorio;
   const kpis = rel?.dados_json?.kpis ?? null;
   const camps = rel?.dados_json?.campanhas ?? [];
+  const conta = rel?.dados_json?.conta ?? null;
 
   if (!prestador.id) {
     return (
@@ -369,7 +377,7 @@ function ExpandedRow({
       </div>
 
       {/* KPIs */}
-      <KpiGrid kpis={kpis} />
+      <KpiGrid kpis={kpis} conta={conta} />
 
       {/* Campanhas */}
       {camps.length > 0 && (

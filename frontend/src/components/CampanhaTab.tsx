@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
-import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha } from "@/lib/types";
+import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha, ContaMeta } from "@/lib/types";
 import AnaliseIA from "@/components/AnaliseIA";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
@@ -482,6 +482,7 @@ export default function CampanhaTab({
   const rel = ultimoRelatorio;
   const kpis = rel?.dados_json?.kpis as KPIsCampanha | undefined;
   const campanhas = rel?.dados_json?.campanhas ?? [];
+  const conta = rel?.dados_json?.conta as ContaMeta | undefined;
   const score = rel?.health_score ?? null;
 
   // helpers de highlight
@@ -698,6 +699,13 @@ export default function CampanhaTab({
                 sub="custo por clique no link"
               />
               <KpiCard label="Gasto total" value={fmtBRL(kpis.spend)} />
+              {conta?.saldo != null && (
+                <KpiCard
+                  label="Saldo"
+                  value={fmtBRL(conta.saldo)}
+                  sub={conta.metodo === "cartao" ? "Cartão" : undefined}
+                />
+              )}
             </div>
           </div>
 

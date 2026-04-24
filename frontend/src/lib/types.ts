@@ -179,11 +179,17 @@ export interface KPIsCampanha {
   ctr: number;
 }
 
+export interface ContaMeta {
+  saldo: number | null;
+  metodo: "cartao" | "prepago" | "outro" | null;
+}
+
 export interface DadosRelatorio {
   kpis: KPIsCampanha;
   campanhas: CampanhaInsight[];
   periodo_inicio: string;
   periodo_fim: string;
+  conta?: ContaMeta;
 }
 
 export interface RelatorioCampanha {

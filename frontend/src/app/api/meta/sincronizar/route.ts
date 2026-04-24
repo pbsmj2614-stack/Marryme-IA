@@ -16,7 +16,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import type { CampanhaInsight, KPIsCampanha, DadosRelatorio } from "@/lib/types";
+import type { CampanhaInsight, KPIsCampanha, DadosRelatorio, ContaMeta } from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const META_VERSION = process.env.META_API_VERSION ?? "v18.0";
@@ -628,11 +628,38 @@ export async function POST(req: NextRequest) {
     // ── 4. Calcular health score ───────────────────────────────────────────────
     const healthScore = calcHealthScore(kpis);
 
+    // ── 4b. Buscar saldo e método de pagamento da conta ───────────────────────
+    let conta: ContaMeta = { saldo: null, metodo: null };
+    try {
+      const contaRaw = (await metaGet(activeToken, `/act_${accountId}`, {
+        fields: "balance,spend_cap,amount_spent,funding_source_details",
+      })) as {
+        balance?: string;
+        spend_cap?: string;
+        amount_spent?: string;
+        funding_source_details?: { type?: number };
+      };
+      const spendCap = parseFloat(contaRaw.spend_cap ?? "0");
+      const amountSpent = parseFloat(contaRaw.amount_spent ?? "0");
+      const balance = parseFloat(contaRaw.balance ?? "0");
+
+      const saldo = spendCap > 0 ? spendCap - amountSpent : balance > 0 ? balance : null;
+
+      const tipo = contaRaw.funding_source_details?.type ?? null;
+      const metodo: ContaMeta["metodo"] =
+        tipo === 1 ? "cartao" : tipo === 3 ? "prepago" : tipo != null ? "outro" : null;
+
+      conta = { saldo, metodo };
+    } catch {
+      /* non-fatal — saldo indisponível */
+    }
+
     const dadosJson: DadosRelatorio = {
       kpis,
       campanhas,
       periodo_inicio: inicio,
       periodo_fim: fim,
+      conta,
     };
 
     // ── 5. Salvar relatório ───────────────────────────────────────────────────
