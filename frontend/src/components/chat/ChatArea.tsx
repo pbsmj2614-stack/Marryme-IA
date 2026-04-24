@@ -22,6 +22,9 @@ interface Props {
   isStreaming: boolean;
   isEmpty: boolean;
   onPromptBase: (prompt: string, tipo: ChatTipo) => void;
+  hasMoreMsgs?: boolean;
+  carregandoMais?: boolean;
+  onCarregarMais?: () => void;
 }
 
 function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
@@ -133,20 +136,59 @@ export default function ChatArea({
   isStreaming,
   isEmpty,
   onPromptBase,
+  hasMoreMsgs,
+  carregandoMais,
+  onCarregarMais,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [mostrarScrollBtn, setMostrarScrollBtn] = useState(false);
 
+  // Referências para controle de scroll inteligente
+  const lastMsgIdRef = useRef<string | undefined>();
+  const prevScrollHeightRef = useRef(0);
+  const isPrependingRef = useRef(false);
+
+  // Scroll ao surgir nova mensagem (não ao carregar antigas)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensagens, streamingText]);
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (isPrependingRef.current) {
+      // Mantém posição de scroll após prepend de mensagens antigas
+      const delta = container.scrollHeight - prevScrollHeightRef.current;
+      container.scrollTop = delta;
+      isPrependingRef.current = false;
+    } else {
+      const lastId = mensagens[mensagens.length - 1]?.id;
+      if (lastId !== lastMsgIdRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        lastMsgIdRef.current = lastId;
+      }
+    }
+    prevScrollHeightRef.current = container.scrollHeight;
+  }, [mensagens]);
+
+  // Scroll durante streaming
+  useEffect(() => {
+    if (streamingText) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [streamingText]);
 
   function handleScroll() {
     const el = containerRef.current;
     if (!el) return;
     const distanciaFundo = el.scrollHeight - el.scrollTop - el.clientHeight;
     setMostrarScrollBtn(distanciaFundo > 200);
+  }
+
+  function handleCarregarMais() {
+    const container = containerRef.current;
+    if (!container || !onCarregarMais) return;
+    prevScrollHeightRef.current = container.scrollHeight;
+    isPrependingRef.current = true;
+    onCarregarMais();
   }
 
   if (isEmpty) {
@@ -160,6 +202,26 @@ export default function ChatArea({
         onScroll={handleScroll}
         className="h-full overflow-y-auto px-4 py-5 space-y-4"
       >
+        {/* Botão carregar mensagens mais antigas */}
+        {hasMoreMsgs && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={handleCarregarMais}
+              disabled={carregandoMais}
+              className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg bg-white transition disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {carregandoMais ? (
+                <>
+                  <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  Carregando...
+                </>
+              ) : (
+                "↑ Carregar mensagens anteriores"
+              )}
+            </button>
+          </div>
+        )}
+
         {mensagens.map((m) => (
           <Bolha key={m.id} msg={m} />
         ))}

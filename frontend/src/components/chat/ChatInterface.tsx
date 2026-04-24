@@ -7,6 +7,8 @@ import ChatArea from "./ChatArea";
 import InputArea from "./InputArea";
 import RoteiroPainel from "./RoteiroPainel";
 
+const MSGS_POR_PAGINA = 30;
+
 interface SecaoAprovada {
   titulo: string;
   conteudo: string;
@@ -29,40 +31,69 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
   const [secoes, setSecoes] = useState<SecaoAprovada[]>([]);
   const [tabMobile, setTabMobile] = useState<TabMobile>("chat");
   const [carregandoMsgs, setCarregandoMsgs] = useState(false);
+  const [hasMoreMsgs, setHasMoreMsgs] = useState(false);
+  const [carregandoMaisAntigos, setCarregandoMaisAntigos] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const autoSelecionadoRef = useRef(false);
 
-  // Busca sessões do prestador
+  // Busca sessões do prestador — deps só em prestadorId para não re-fetchar a cada troca de sessão
   const carregarSessoes = useCallback(async () => {
     const res = await fetch(`/api/chat/sessoes?prestador_id=${prestadorId}`);
     const data = (await res.json()) as { sessoes: ChatSessao[] };
     setSessoes(data.sessoes ?? []);
-    // Abre a primeira sessão ativa automaticamente
-    if (!sessaoAtiva && data.sessoes?.[0]) {
+    if (!autoSelecionadoRef.current && data.sessoes?.[0]) {
       setSessaoAtiva(data.sessoes[0].id);
+      autoSelecionadoRef.current = true;
     }
-  }, [prestadorId, sessaoAtiva]);
+  }, [prestadorId]);
 
   useEffect(() => {
     carregarSessoes();
   }, [carregarSessoes]);
 
-  // Busca mensagens da sessão ativa
+  // Busca as últimas MSGS_POR_PAGINA mensagens (desc → reverse = ordem cronológica)
   useEffect(() => {
     if (!sessaoAtiva) {
       setMensagens([]);
+      setHasMoreMsgs(false);
       return;
     }
     setCarregandoMsgs(true);
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    fetch(`${supabaseUrl}/rest/v1/chat_mensagens?sessao_id=eq.${sessaoAtiva}&order=criado_em.asc`, {
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-    })
+    fetch(
+      `${supabaseUrl}/rest/v1/chat_mensagens?sessao_id=eq.${sessaoAtiva}&order=criado_em.desc&limit=${MSGS_POR_PAGINA}`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    )
       .then((r) => r.json())
-      .then((data: ChatMensagem[]) => setMensagens(data ?? []))
+      .then((data: ChatMensagem[]) => {
+        const msgs = (data ?? []).reverse();
+        setMensagens(msgs);
+        setHasMoreMsgs((data ?? []).length === MSGS_POR_PAGINA);
+      })
       .finally(() => setCarregandoMsgs(false));
   }, [sessaoAtiva]);
+
+  // Carrega mais mensagens antigas (paginação para cima)
+  async function carregarMaisAntigos() {
+    if (!sessaoAtiva || carregandoMaisAntigos) return;
+    setCarregandoMaisAntigos(true);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const data = (await fetch(
+      `${supabaseUrl}/rest/v1/chat_mensagens?sessao_id=eq.${sessaoAtiva}&order=criado_em.desc&limit=${MSGS_POR_PAGINA}&offset=${mensagens.length}`,
+      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+    )
+      .then((r) => r.json())
+      .catch(() => [])) as ChatMensagem[];
+
+    const novos = (data ?? []).reverse();
+    setMensagens((prev) => [...novos, ...prev]);
+    setHasMoreMsgs(data.length === MSGS_POR_PAGINA);
+    setCarregandoMaisAntigos(false);
+  }
 
   async function criarSessao(titulo?: string, tipo?: ChatTipo) {
     const res = await fetch("/api/chat/sessoes", {
@@ -75,6 +106,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
     setSessaoAtiva(data.sessao.id);
     setMensagens([]);
     setSecoes([]);
+    setHasMoreMsgs(false);
     return data.sessao;
   }
 
@@ -100,16 +132,24 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
     }
   }
 
+  // Troca de sessão: cancela stream em andamento antes de trocar
+  function selecionarSessao(id: string) {
+    if (id === sessaoAtiva) return;
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    setStreamingText("");
+    setSessaoAtiva(id);
+    setTabMobile("chat");
+  }
+
   async function enviarMensagem(content: string, arquivos: ChatArquivo[]) {
     let sid = sessaoAtiva;
 
-    // Cria sessão automaticamente na primeira mensagem
     if (!sid) {
       const nova = await criarSessao(content.slice(0, 50));
       sid = nova.id;
     }
 
-    // Adiciona mensagem do usuário otimisticamente
     const msgTemp: ChatMensagem = {
       id: `temp-${Date.now()}`,
       sessao_id: sid,
@@ -167,7 +207,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
         }
       }
 
-      // Adiciona resposta final ao array de mensagens
       const msgIA: ChatMensagem = {
         id: `ia-${Date.now()}`,
         sessao_id: sid,
@@ -177,8 +216,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
         criado_em: new Date().toISOString(),
       };
       setMensagens((prev) => [...prev, msgIA]);
-
-      // Atualiza lista de sessões (novo atualizado_em)
       carregarSessoes();
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -254,10 +291,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
           <SidebarSessoes
             sessoes={sessoes}
             sessaoAtiva={sessaoAtiva}
-            onSelecionar={(id) => {
-              setSessaoAtiva(id);
-              setTabMobile("chat");
-            }}
+            onSelecionar={selecionarSessao}
             onNova={() => criarSessao()}
             onRenomear={renomearSessao}
             onArquivar={arquivarSessao}
@@ -298,10 +332,14 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
               isStreaming={isStreaming}
               isEmpty={isEmpty}
               onPromptBase={handlePromptBase}
+              hasMoreMsgs={hasMoreMsgs}
+              carregandoMais={carregandoMaisAntigos}
+              onCarregarMais={carregarMaisAntigos}
             />
           )}
 
           <InputArea
+            key={sessaoAtiva ?? "new"}
             prestadorId={prestadorId}
             sessaoId={sessaoAtiva ?? ""}
             disabled={isStreaming}

@@ -172,12 +172,20 @@ export default async function PrestadorPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {ultimo && (
-                <ExportarButton tipo="completo" variant="primary" prestador={p} roteiro={ultimo} />
-              )}
-              {ultimo && <AprovarButton roteiroId={ultimo.id} aprovadoAtual={ultimo.aprovado} />}
-            </div>
+            {/* Botões do roteiro antigo — só aparecem na aba Campanha */}
+            {!isChat && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {ultimo && (
+                  <ExportarButton
+                    tipo="completo"
+                    variant="primary"
+                    prestador={p}
+                    roteiro={ultimo}
+                  />
+                )}
+                {ultimo && <AprovarButton roteiroId={ultimo.id} aprovadoAtual={ultimo.aprovado} />}
+              </div>
+            )}
           </div>
         </div>
 
