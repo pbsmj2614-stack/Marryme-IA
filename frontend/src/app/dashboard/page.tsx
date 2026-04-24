@@ -201,13 +201,18 @@ function KpiGrid({ kpis, conta }: { kpis: KPIsCampanha; conta?: ContaMeta | null
           <p className="text-sm font-bold text-white">{value}</p>
         </div>
       ))}
-      {conta?.saldo != null && (
+      {conta?.metodo != null || conta?.saldo != null ? (
         <div className="bg-[#1a2540] rounded-lg px-3 py-2.5 border border-blue-800">
           <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Saldo</p>
-          <p className="text-sm font-bold text-blue-300">{fmtBRL(conta.saldo)}</p>
-          {conta.metodo === "cartao" && <p className="text-[9px] text-blue-500 mt-0.5">Cartão</p>}
+          {conta?.metodo === "cartao" ? (
+            <p className="text-sm font-bold text-blue-300">Cartão</p>
+          ) : (
+            <p className="text-sm font-bold text-blue-300">
+              {conta?.saldo != null ? fmtBRL(conta.saldo) : "—"}
+            </p>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

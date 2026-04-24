@@ -699,11 +699,16 @@ export default function CampanhaTab({
                 sub="custo por clique no link"
               />
               <KpiCard label="Gasto total" value={fmtBRL(kpis.spend)} />
-              {conta?.saldo != null && (
+              {(conta?.metodo != null || conta?.saldo != null) && (
                 <KpiCard
                   label="Saldo"
-                  value={fmtBRL(conta.saldo)}
-                  sub={conta.metodo === "cartao" ? "Cartão" : undefined}
+                  value={
+                    conta?.metodo === "cartao"
+                      ? "Cartão"
+                      : conta?.saldo != null
+                        ? fmtBRL(conta.saldo)
+                        : "—"
+                  }
                 />
               )}
             </div>

@@ -648,34 +648,20 @@ export async function POST(req: NextRequest) {
       const amountSpent = parseFloat(contaRaw.amount_spent ?? "0") / 100;
       const balance = parseFloat(contaRaw.balance ?? "0") / 100;
 
-      let saldo: number | null =
-        spendCap > 0 ? spendCap - amountSpent : balance > 0 ? balance : null;
-
+      // Cartão de crédito (tipo=1): saldo não se aplica, apenas registra o método
+      // Para pré-pago ou conta com teto: calcula o restante
       const tipo = contaRaw.funding_source_details?.type ?? null;
       const metodo: ContaMeta["metodo"] =
         tipo === 1 ? "cartao" : tipo === 3 ? "prepago" : tipo != null ? "outro" : null;
 
-      // Fallback: conta pós-paga (cartão) sem spend_cap → soma budget_remaining das campanhas ativas
-      if (saldo === null) {
-        try {
-          const campRaw = (await metaGet(activeToken, `/act_${accountId}/campaigns`, {
-            fields: "budget_remaining,lifetime_budget,effective_status",
-            limit: "50",
-          })) as {
-            data?: Array<{
-              budget_remaining?: string;
-              lifetime_budget?: string;
-              effective_status?: string;
-            }>;
-          };
-          const totalRestante = (campRaw.data ?? [])
-            .filter((c) => c.effective_status === "ACTIVE" && c.lifetime_budget)
-            .reduce((acc, c) => acc + parseFloat(c.budget_remaining ?? "0") / 100, 0);
-          if (totalRestante > 0) saldo = totalRestante;
-        } catch {
-          /* não bloqueia */
-        }
-      }
+      const saldo: number | null =
+        metodo === "cartao"
+          ? null
+          : spendCap > 0
+            ? spendCap - amountSpent
+            : balance > 0
+              ? balance
+              : null;
 
       conta = { saldo, metodo };
       console.warn("[meta/sincronizar] conta:", { spendCap, amountSpent, balance, saldo, tipo });
