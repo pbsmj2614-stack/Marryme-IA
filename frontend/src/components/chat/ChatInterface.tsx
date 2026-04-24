@@ -20,11 +20,12 @@ type TabMobile = "chat" | "roteiro" | "historico";
 interface Props {
   prestadorId: string;
   roteirosAntigos: Roteiro[];
+  sessaoInicial?: string;
 }
 
-export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
+export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInicial }: Props) {
   const [sessoes, setSessoes] = useState<ChatSessao[]>([]);
-  const [sessaoAtiva, setSessaoAtiva] = useState<string | null>(null);
+  const [sessaoAtiva, setSessaoAtiva] = useState<string | null>(sessaoInicial ?? null);
   const [mensagens, setMensagens] = useState<ChatMensagem[]>([]);
   const [streamingText, setStreamingText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -34,7 +35,8 @@ export default function ChatInterface({ prestadorId, roteirosAntigos }: Props) {
   const [hasMoreMsgs, setHasMoreMsgs] = useState(false);
   const [carregandoMaisAntigos, setCarregandoMaisAntigos] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const autoSelecionadoRef = useRef(false);
+  // Se veio com sessaoInicial, não precisa auto-selecionar a primeira da lista
+  const autoSelecionadoRef = useRef(!!sessaoInicial);
 
   // Busca sessões do prestador — deps só em prestadorId para não re-fetchar a cada troca de sessão
   const carregarSessoes = useCallback(async () => {

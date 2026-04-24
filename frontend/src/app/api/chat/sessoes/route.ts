@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
   const body = (await req.json()) as {
     id: string;
     titulo?: string;
-    status?: "ativa" | "finalizada" | "arquivada";
+    status?: "ativa" | "finalizada" | "arquivada" | "aprovada";
     roteiro_final?: Record<string, unknown>;
     tokens_usados?: number;
   };

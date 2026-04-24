@@ -1,12 +1,19 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import type { Roteiro, DadosEntrevista, PrestadorMeta, RelatorioCampanha } from "@/lib/types";
+import type {
+  Roteiro,
+  DadosEntrevista,
+  PrestadorMeta,
+  RelatorioCampanha,
+  ChatSessao,
+} from "@/lib/types";
 import Header from "@/components/Header";
 import AprovarButton from "@/components/AprovarButton";
 import ExcluirPrestadorButton from "@/components/ExcluirPrestadorButton";
 import ExportarButton from "@/components/ExportarButton";
 import CampanhaTab from "@/components/CampanhaTab";
 import ChatInterface from "@/components/chat/ChatInterface";
+import RoteirosFinalizados from "@/components/chat/RoteirosFinalizados";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { formatarTelefone } from "@/lib/utils";
 
@@ -23,10 +30,10 @@ export default async function PrestadorPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; sessao?: string }>;
 }) {
   const { id } = await params;
-  const { tab = "roteiro" } = await searchParams;
+  const { tab = "roteiro", sessao } = await searchParams;
   const supabase = await createSupabaseServer();
 
   const {
@@ -40,6 +47,7 @@ export default async function PrestadorPage({
     { data: entrevista },
     { data: relatorios },
     { data: analises },
+    { data: sessoesFinalizadas },
   ] = await Promise.all([
     supabase.from("prestadores").select("*").eq("id", id).single(),
     supabase
@@ -67,6 +75,13 @@ export default async function PrestadorPage({
       .eq("prestador_id", id)
       .order("gerado_em", { ascending: false })
       .limit(1),
+    supabase
+      .from("chat_sessoes")
+      .select("id, titulo, tipo, status, roteiro_final, tokens_usados, criado_em, atualizado_em")
+      .eq("prestador_id", id)
+      .in("status", ["finalizada", "aprovada"])
+      .order("atualizado_em", { ascending: false })
+      .limit(20),
   ]);
 
   if (!prestador) notFound();
@@ -74,6 +89,7 @@ export default async function PrestadorPage({
   const p = prestador as PrestadorMeta;
   const lista = (roteiros ?? []) as Roteiro[];
   const ultimo = lista[0] ?? null;
+  const sessoesFin = (sessoesFinalizadas ?? []) as ChatSessao[];
   const dados = entrevista?.dados_json as DadosEntrevista | undefined;
   const historicoRelatorios = (relatorios ?? []) as RelatorioCampanha[];
   const ultimoRelatorio = historicoRelatorios[0] ?? null;
@@ -82,14 +98,16 @@ export default async function PrestadorPage({
     ? new Date(analises[0].gerado_em).toLocaleString("pt-BR")
     : null;
 
-  const isChat = tab !== "campanha";
+  const isChatAtivo = tab !== "campanha" && tab !== "aprovacoes";
 
   return (
-    <div className={isChat ? "h-screen flex flex-col overflow-hidden" : "min-h-screen"}>
+    <div className={isChatAtivo ? "h-screen flex flex-col overflow-hidden" : "min-h-screen"}>
       <Header user={user} />
 
       {/* Top bar — prestador info + tabs */}
-      <div className={`max-w-5xl mx-auto px-4 w-full ${isChat ? "pt-6 pb-2 shrink-0" : "py-8"}`}>
+      <div
+        className={`max-w-5xl mx-auto px-4 w-full ${isChatAtivo ? "pt-6 pb-2 shrink-0" : "py-8"}`}
+      >
         {/* Prestador header card */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
           <div className="flex items-start justify-between flex-wrap gap-4">
@@ -173,7 +191,7 @@ export default async function PrestadorPage({
             </div>
 
             {/* Botões do roteiro antigo — só aparecem na aba Campanha */}
-            {!isChat && (
+            {tab === "campanha" && (
               <div className="flex items-center gap-2 flex-wrap">
                 {ultimo && (
                   <ExportarButton
@@ -189,8 +207,8 @@ export default async function PrestadorPage({
           </div>
         </div>
 
-        {/* Entrevista profile — only shown on campanha tab */}
-        {!isChat && dados && (
+        {/* Entrevista profile — só na aba Campanha */}
+        {tab === "campanha" && dados && (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
@@ -267,10 +285,13 @@ export default async function PrestadorPage({
 
         {/* Abas */}
         <div className="flex gap-1 border-b border-gray-200 mb-0">
-          {[
-            { value: "roteiro", label: "Chat Roteiro" },
-            { value: "campanha", label: "Campanha Meta Ads" },
-          ].map(({ value, label }) => {
+          {(
+            [
+              { value: "roteiro", label: "Chat IA" },
+              { value: "aprovacoes", label: "Aprovações" },
+              { value: "campanha", label: "Campanha Meta Ads" },
+            ] as const
+          ).map(({ value, label }) => {
             const ativo = tab === value;
             return (
               <Link
@@ -283,6 +304,11 @@ export default async function PrestadorPage({
                 }`}
               >
                 {label}
+                {value === "aprovacoes" && sessoesFin.length > 0 && (
+                  <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">
+                    {sessoesFin.filter((s) => s.status === "finalizada").length || undefined}
+                  </span>
+                )}
                 {value === "campanha" &&
                   ultimoRelatorio?.health_score !== undefined &&
                   ultimoRelatorio.health_score !== null && (
@@ -304,15 +330,22 @@ export default async function PrestadorPage({
         </div>
       </div>
 
-      {/* Chat Roteiro tab */}
-      {isChat && (
+      {/* Chat IA tab */}
+      {isChatAtivo && (
         <div className="flex-1 min-h-0 max-w-5xl mx-auto px-4 pb-4 w-full flex flex-col">
-          <ChatInterface prestadorId={id} roteirosAntigos={lista} />
+          <ChatInterface prestadorId={id} roteirosAntigos={lista} sessaoInicial={sessao} />
         </div>
       )}
 
+      {/* Aprovações tab */}
+      {tab === "aprovacoes" && (
+        <main className="max-w-5xl mx-auto px-4 py-6 w-full">
+          <RoteirosFinalizados sessoes={sessoesFin} prestadorId={id} />
+        </main>
+      )}
+
       {/* Campanha tab */}
-      {!isChat && (
+      {tab === "campanha" && (
         <main className="max-w-5xl mx-auto px-4 pb-8 w-full">
           <CampanhaTab
             prestadorId={p.id}

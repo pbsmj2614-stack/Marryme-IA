@@ -8,7 +8,7 @@ export type ChatTipo =
   | "cta_anuncio"
   | "direcao_criativa"
   | "analise";
-export type ChatStatus = "ativa" | "finalizada" | "arquivada";
+export type ChatStatus = "ativa" | "finalizada" | "arquivada" | "aprovada";
 
 export interface ChatArquivo {
   nome: string;

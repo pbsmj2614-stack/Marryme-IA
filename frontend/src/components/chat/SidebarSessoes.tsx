@@ -155,7 +155,16 @@ export default function SidebarSessoes({
                   {TIPO_LABEL[s.tipo]}
                 </span>
                 <span className="text-[10px] text-gray-400">{fmtData(s.atualizado_em)}</span>
-                {s.status === "finalizada" && <span className="text-[10px] text-green-600">✓</span>}
+                {s.status === "finalizada" && (
+                  <span className="text-[10px] text-amber-600" title="Aguardando aprovação">
+                    ◷
+                  </span>
+                )}
+                {s.status === "aprovada" && (
+                  <span className="text-[10px] text-green-600" title="Aprovado">
+                    ✓
+                  </span>
+                )}
               </div>
             </div>
 
