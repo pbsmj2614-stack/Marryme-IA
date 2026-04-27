@@ -42,7 +42,7 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    el.style.height = Math.min(el.scrollHeight, 88) + "px";
   }, []);
 
   async function uploadArquivo(file: File, idx: number) {
@@ -225,7 +225,7 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
           }
           rows={1}
           className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-transparent transition disabled:opacity-50"
-          style={{ minHeight: "40px", maxHeight: "120px" }}
+          style={{ minHeight: "40px", maxHeight: "88px" }}
         />
 
         {/* Botão enviar */}

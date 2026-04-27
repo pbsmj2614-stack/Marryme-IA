@@ -12,11 +12,11 @@ const TIPO_LABEL: Record<ChatTipo, string> = {
 };
 
 const TIPO_COR: Record<ChatTipo, string> = {
-  geral: "bg-gray-100 text-gray-600",
-  video_apresentacao: "bg-purple-100 text-purple-700",
-  cta_anuncio: "bg-blue-100 text-blue-700",
-  direcao_criativa: "bg-amber-100 text-amber-700",
-  analise: "bg-green-100 text-green-700",
+  geral: "bg-slate-600 text-slate-200",
+  video_apresentacao: "bg-purple-800/60 text-purple-200",
+  cta_anuncio: "bg-blue-800/60 text-blue-200",
+  direcao_criativa: "bg-amber-800/60 text-amber-200",
+  analise: "bg-green-800/60 text-green-200",
 };
 
 interface Props {
@@ -67,12 +67,12 @@ export default function SidebarSessoes({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Cabeçalho + botão nova */}
+    <div className="flex flex-col h-full bg-slate-800">
+      {/* Botão nova conversa */}
       <div className="px-3 pt-3 pb-2">
         <button
           onClick={onNova}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg transition"
+          className="w-full flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition"
         >
           <svg
             className="w-4 h-4"
@@ -91,7 +91,7 @@ export default function SidebarSessoes({
       <div className="px-3 pb-2">
         <div className="relative">
           <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -106,16 +106,16 @@ export default function SidebarSessoes({
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar conversas…"
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-brand-300 focus:border-brand-300"
+            placeholder="Buscar…"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-700 border border-slate-600 rounded-lg outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 text-slate-100 placeholder-slate-400"
           />
         </div>
       </div>
 
       {/* Lista */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
+      <div className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-2">
         {filtradas.length === 0 && (
-          <p className="text-xs text-gray-400 text-center py-6 px-3">
+          <p className="text-xs text-slate-400 text-center py-6 px-3">
             {busca ? "Nenhuma conversa encontrada." : "Nenhuma conversa ainda."}
           </p>
         )}
@@ -124,13 +124,14 @@ export default function SidebarSessoes({
           <div
             key={s.id}
             className={`group relative flex items-start gap-2 px-2 py-2 rounded-lg cursor-pointer transition ${
-              s.id === sessaoAtiva ? "bg-brand-50 border border-brand-200" : "hover:bg-gray-50"
+              s.id === sessaoAtiva
+                ? "bg-indigo-600/30 border border-indigo-500/40"
+                : "hover:bg-slate-700/60"
             }`}
             onClick={() => {
               if (renomeandoId !== s.id) onSelecionar(s.id);
             }}
           >
-            {/* Conteúdo */}
             <div className="flex-1 min-w-0">
               {renomeandoId === s.id ? (
                 <input
@@ -143,10 +144,10 @@ export default function SidebarSessoes({
                     if (e.key === "Escape") setRenomeandoId(null);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full text-xs font-medium border border-brand-300 rounded px-1 py-0.5 outline-none"
+                  className="w-full text-xs font-medium border border-indigo-400 rounded px-1 py-0.5 outline-none bg-slate-700 text-slate-100"
                 />
               ) : (
-                <p className="text-xs font-medium text-gray-800 truncate">{s.titulo}</p>
+                <p className="text-xs font-medium text-slate-100 truncate">{s.titulo}</p>
               )}
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span
@@ -154,19 +155,19 @@ export default function SidebarSessoes({
                 >
                   {TIPO_LABEL[s.tipo]}
                 </span>
-                <span className="text-[10px] text-gray-400">{fmtData(s.atualizado_em)}</span>
+                <span className="text-[10px] text-slate-400">{fmtData(s.atualizado_em)}</span>
                 {s.status === "ativa" && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-700/50 text-green-300 font-medium">
                     Em aberto
                   </span>
                 )}
                 {s.status === "finalizada" && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-700/50 text-amber-300 font-medium">
                     Finalizado
                   </span>
                 )}
                 {s.status === "aprovada" && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-700/50 text-blue-300 font-medium">
                     Aprovado
                   </span>
                 )}
@@ -179,7 +180,7 @@ export default function SidebarSessoes({
                 e.stopPropagation();
                 setMenuAberto(menuAberto === s.id ? null : s.id);
               }}
-              className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 text-gray-400 transition-opacity"
+              className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-600 text-slate-400 hover:text-slate-200 transition-opacity"
             >
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
@@ -188,12 +189,12 @@ export default function SidebarSessoes({
 
             {menuAberto === s.id && (
               <div
-                className="absolute right-1 top-6 z-10 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px]"
+                className="absolute right-1 top-6 z-10 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 min-w-[120px]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
                   onClick={() => iniciarRenomear(s)}
-                  className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-600"
                 >
                   Renomear
                 </button>
@@ -202,7 +203,7 @@ export default function SidebarSessoes({
                     onArquivar(s.id);
                     setMenuAberto(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                  className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-slate-600"
                 >
                   Arquivar
                 </button>

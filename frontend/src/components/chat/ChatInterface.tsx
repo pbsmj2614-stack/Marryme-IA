@@ -264,7 +264,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     sessaoAtivaObj?.status === "ativa" && mensagens.length > 0 && !isStreaming;
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Tabs mobile */}
       <div className="flex lg:hidden border-b border-gray-200 bg-white">
         {(["chat", "roteiro", "historico"] as TabMobile[]).map((t) => (
@@ -286,7 +286,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
-          className={`w-[260px] shrink-0 border-r border-gray-200 bg-white overflow-hidden ${
+          className={`w-[260px] shrink-0 border-r border-slate-700 overflow-hidden ${
             tabMobile === "historico" ? "flex flex-col" : "hidden lg:flex lg:flex-col"
           }`}
         >
@@ -294,7 +294,15 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
             sessoes={sessoes}
             sessaoAtiva={sessaoAtiva}
             onSelecionar={selecionarSessao}
-            onNova={() => criarSessao()}
+            onNova={() => {
+              abortRef.current?.abort();
+              setIsStreaming(false);
+              setStreamingText("");
+              setSessaoAtiva(null);
+              setMensagens([]);
+              setHasMoreMsgs(false);
+              setTabMobile("chat");
+            }}
             onRenomear={renomearSessao}
             onArquivar={arquivarSessao}
           />

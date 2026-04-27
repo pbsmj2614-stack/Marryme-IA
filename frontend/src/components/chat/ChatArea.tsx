@@ -40,18 +40,15 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
 
   return (
     <div className={`flex gap-3 group ${isIA ? "" : "flex-row-reverse"}`}>
-      {/* Avatar */}
       <div
-        className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
-          isIA ? "bg-brand-100 text-brand-700" : "bg-gray-200 text-gray-600"
+        className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
+          isIA ? "bg-brand-100 text-brand-700" : "bg-slate-600 text-white"
         }`}
       >
         {isIA ? "IA" : "Vc"}
       </div>
 
-      {/* Conteúdo */}
       <div className={`flex flex-col gap-1 max-w-[78%] ${isIA ? "" : "items-end"}`}>
-        {/* Arquivos anexados */}
         {(msg.arquivos ?? []).length > 0 && (
           <div className={`flex flex-wrap gap-1.5 ${isIA ? "" : "justify-end"}`}>
             {msg.arquivos.map((a, i) =>
@@ -78,13 +75,12 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
           </div>
         )}
 
-        {/* Bolha de texto */}
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
             isIA
-              ? "bg-white border border-gray-200 text-gray-800 rounded-tl-sm"
+              ? "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
               : "bg-brand-600 text-white rounded-tr-sm"
-          } ${"streaming" in msg && msg.streaming ? "animate-pulse" : ""}`}
+          } ${"streaming" in msg && msg.streaming ? "opacity-80" : ""}`}
         >
           {isIA ? (
             <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:mb-2 prose-headings:mt-3 prose-li:my-0 prose-code:text-brand-700 prose-code:bg-brand-50 prose-code:px-1 prose-code:rounded">
@@ -95,11 +91,10 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
           )}
         </div>
 
-        {/* Botão copiar (IA) */}
         {isIA && (
           <button
             onClick={copiar}
-            className="opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-gray-700 transition-opacity self-start ml-1"
+            className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-400 hover:text-gray-600 transition-opacity self-start ml-1"
           >
             {copiado ? "✓ Copiado" : "Copiar"}
           </button>
@@ -112,10 +107,10 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
 function TypingIndicator() {
   return (
     <div className="flex gap-3">
-      <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-xs font-bold text-brand-700">
+      <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-bold text-brand-700">
         IA
       </div>
-      <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3">
+      <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
         <div className="flex gap-1 items-center h-4">
           {[0, 1, 2].map((i) => (
             <span
@@ -144,18 +139,15 @@ export default function ChatArea({
   const containerRef = useRef<HTMLDivElement>(null);
   const [mostrarScrollBtn, setMostrarScrollBtn] = useState(false);
 
-  // Referências para controle de scroll inteligente
   const lastMsgIdRef = useRef<string | undefined>();
   const prevScrollHeightRef = useRef(0);
   const isPrependingRef = useRef(false);
 
-  // Scroll ao surgir nova mensagem (não ao carregar antigas)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     if (isPrependingRef.current) {
-      // Mantém posição de scroll após prepend de mensagens antigas
       const delta = container.scrollHeight - prevScrollHeightRef.current;
       container.scrollTop = delta;
       isPrependingRef.current = false;
@@ -169,7 +161,6 @@ export default function ChatArea({
     prevScrollHeightRef.current = container.scrollHeight;
   }, [mensagens]);
 
-  // Scroll durante streaming
   useEffect(() => {
     if (streamingText) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -179,8 +170,7 @@ export default function ChatArea({
   function handleScroll() {
     const el = containerRef.current;
     if (!el) return;
-    const distanciaFundo = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setMostrarScrollBtn(distanciaFundo > 200);
+    setMostrarScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
   }
 
   function handleCarregarMais() {
@@ -192,16 +182,16 @@ export default function ChatArea({
   }
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative flex-1 min-h-0">
       {isEmpty ? (
         <PromptsBase onSelect={onPromptBase} />
       ) : (
+        // absolute inset-0 garante altura definida para o overflow-y-auto funcionar
         <div
           ref={containerRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-auto px-4 py-5 space-y-4"
+          className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-4"
         >
-          {/* Botão carregar mensagens mais antigas */}
           {hasMoreMsgs && (
             <div className="flex justify-center pb-2">
               <button
@@ -225,7 +215,6 @@ export default function ChatArea({
             <Bolha key={m.id} msg={m} />
           ))}
 
-          {/* Streaming atual */}
           {isStreaming && streamingText && (
             <Bolha
               msg={{
@@ -239,18 +228,16 @@ export default function ChatArea({
             />
           )}
 
-          {/* Typing indicator quando aguarda primeiro delta */}
           {isStreaming && !streamingText && <TypingIndicator />}
 
-          <div ref={bottomRef} />
+          <div ref={bottomRef} className="h-2" />
         </div>
       )}
 
-      {/* Botão "ir para o fim" */}
       {!isEmpty && mostrarScrollBtn && (
         <button
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
-          className="absolute bottom-4 right-4 w-8 h-8 bg-white border border-gray-300 rounded-full shadow flex items-center justify-center text-gray-500 hover:bg-gray-50 transition"
+          className="absolute bottom-4 right-4 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-50 transition z-10"
         >
           ↓
         </button>
