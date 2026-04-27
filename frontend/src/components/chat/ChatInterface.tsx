@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { ChatSessao, ChatMensagem, ChatArquivo, ChatTipo, Roteiro } from "@/lib/types";
+import { createClient } from "@/lib/supabase";
 import SidebarSessoes from "./SidebarSessoes";
 import ChatArea from "./ChatArea";
 import InputArea from "./InputArea";
@@ -76,38 +77,41 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
       return;
     }
     setCarregandoMsgs(true);
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const sb = createClient();
 
-    fetch(
-      `${supabaseUrl}/rest/v1/chat_mensagens?sessao_id=eq.${sessaoAtiva}&order=criado_em.desc&limit=${MSGS_POR_PAGINA}`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    )
-      .then((r) => r.json())
-      .then((data: ChatMensagem[]) => {
-        const msgs = (data ?? []).reverse();
+    void (async () => {
+      try {
+        const { data } = await sb
+          .from("chat_mensagens")
+          .select("*")
+          .eq("sessao_id", sessaoAtiva)
+          .order("criado_em", { ascending: false })
+          .limit(MSGS_POR_PAGINA);
+        const msgs = ((data ?? []) as ChatMensagem[]).reverse();
         setMensagens(msgs);
         setHasMoreMsgs((data ?? []).length === MSGS_POR_PAGINA);
-      })
-      .finally(() => setCarregandoMsgs(false));
+      } finally {
+        setCarregandoMsgs(false);
+      }
+    })();
   }, [sessaoAtiva]);
 
   async function carregarMaisAntigos() {
     if (!sessaoAtiva || carregandoMaisAntigos) return;
     setCarregandoMaisAntigos(true);
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const sb = createClient();
 
-    const data = (await fetch(
-      `${supabaseUrl}/rest/v1/chat_mensagens?sessao_id=eq.${sessaoAtiva}&order=criado_em.desc&limit=${MSGS_POR_PAGINA}&offset=${mensagens.length}`,
-      { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
-    )
-      .then((r) => r.json())
-      .catch(() => [])) as ChatMensagem[];
+    const { data } = await sb
+      .from("chat_mensagens")
+      .select("*")
+      .eq("sessao_id", sessaoAtiva)
+      .order("criado_em", { ascending: false })
+      .limit(MSGS_POR_PAGINA)
+      .range(mensagens.length, mensagens.length + MSGS_POR_PAGINA - 1);
 
-    const novos = (data ?? []).reverse();
+    const novos = ((data ?? []) as ChatMensagem[]).reverse();
     setMensagens((prev) => [...novos, ...prev]);
-    setHasMoreMsgs(data.length === MSGS_POR_PAGINA);
+    setHasMoreMsgs((data ?? []).length === MSGS_POR_PAGINA);
     setCarregandoMaisAntigos(false);
   }
 
