@@ -81,7 +81,7 @@ export function dedupTarefas<
 >(tarefas: T[]): T[] {
   const seen = new Set<string>();
   return tarefas.filter((t) => {
-    const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
+    const key = `${t.cliente_id}|${t.o_que.trim().toLowerCase()}|${t.prazo ?? ""}|${(t.etapa ?? "").trim().toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

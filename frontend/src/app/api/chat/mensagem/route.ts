@@ -75,6 +75,15 @@ export async function POST(req: NextRequest) {
       const send = (payload: Record<string, unknown>) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
+      // Keepalive: evita timeout em proxies/conexões lentas (a cada 20s)
+      const heartbeatId = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": heartbeat\n\n"));
+        } catch {
+          /* fechado */
+        }
+      }, 20_000);
+
       try {
         // 2. Histórico de mensagens
         const { data: historico } = await supabase
@@ -145,6 +154,7 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         send({ error: err instanceof Error ? err.message : String(err) });
       } finally {
+        clearInterval(heartbeatId);
         controller.close();
       }
     },

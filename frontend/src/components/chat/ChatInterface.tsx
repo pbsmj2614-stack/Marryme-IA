@@ -9,12 +9,6 @@ import RoteiroPainel from "./RoteiroPainel";
 
 const MSGS_POR_PAGINA = 30;
 
-interface SecaoAprovada {
-  titulo: string;
-  conteudo: string;
-  aprovada_em: string;
-}
-
 type TabMobile = "chat" | "roteiro" | "historico";
 
 interface Props {
@@ -29,18 +23,27 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
   const [mensagens, setMensagens] = useState<ChatMensagem[]>([]);
   const [streamingText, setStreamingText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [secoes, setSecoes] = useState<SecaoAprovada[]>([]);
   const [tabMobile, setTabMobile] = useState<TabMobile>("chat");
   const [carregandoMsgs, setCarregandoMsgs] = useState(false);
   const [hasMoreMsgs, setHasMoreMsgs] = useState(false);
   const [carregandoMaisAntigos, setCarregandoMaisAntigos] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  // Se veio com sessaoInicial, não precisa auto-selecionar a primeira da lista
   const autoSelecionadoRef = useRef(!!sessaoInicial);
 
-  // Busca sessões do prestador — deps só em prestadorId para não re-fetchar a cada troca de sessão
+  // Cancela stream em andamento ao desmontar o componente (evita request órfã)
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    []
+  );
+
+  const sessaoAtivaObj = sessoes.find((s) => s.id === sessaoAtiva);
+
   const carregarSessoes = useCallback(async () => {
-    const res = await fetch(`/api/chat/sessoes?prestador_id=${prestadorId}`);
+    const res = await fetch(`/api/chat/sessoes?prestador_id=${prestadorId}`, {
+      cache: "no-store",
+    });
     const data = (await res.json()) as { sessoes: ChatSessao[] };
     setSessoes(data.sessoes ?? []);
     if (!autoSelecionadoRef.current && data.sessoes?.[0]) {
@@ -53,7 +56,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     carregarSessoes();
   }, [carregarSessoes]);
 
-  // Busca as últimas MSGS_POR_PAGINA mensagens (desc → reverse = ordem cronológica)
   useEffect(() => {
     if (!sessaoAtiva) {
       setMensagens([]);
@@ -77,7 +79,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
       .finally(() => setCarregandoMsgs(false));
   }, [sessaoAtiva]);
 
-  // Carrega mais mensagens antigas (paginação para cima)
   async function carregarMaisAntigos() {
     if (!sessaoAtiva || carregandoMaisAntigos) return;
     setCarregandoMaisAntigos(true);
@@ -107,7 +108,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     setSessoes((prev) => [data.sessao, ...prev]);
     setSessaoAtiva(data.sessao.id);
     setMensagens([]);
-    setSecoes([]);
     setHasMoreMsgs(false);
     return data.sessao;
   }
@@ -134,7 +134,6 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     }
   }
 
-  // Troca de sessão: cancela stream em andamento antes de trocar
   function selecionarSessao(id: string) {
     if (id === sessaoAtiva) return;
     abortRef.current?.abort();
@@ -144,8 +143,12 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     setTabMobile("chat");
   }
 
-  async function enviarMensagem(content: string, arquivos: ChatArquivo[]) {
-    let sid = sessaoAtiva;
+  async function enviarMensagem(
+    content: string,
+    arquivos: ChatArquivo[],
+    sessaoIdOverride?: string
+  ) {
+    let sid = sessaoIdOverride ?? sessaoAtiva;
 
     if (!sid) {
       const nova = await criarSessao(content.slice(0, 50));
@@ -238,23 +241,17 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
   }
 
   function handlePromptBase(prompt: string, tipo: ChatTipo) {
-    criarSessao(prompt.slice(0, 50), tipo).then(() => {
-      enviarMensagem(prompt, []);
+    criarSessao(prompt.slice(0, 50), tipo).then((nova) => {
+      enviarMensagem(prompt, [], nova.id);
     });
-  }
-
-  function copiarTudo() {
-    const texto = secoes.map((s) => `## ${s.titulo}\n\n${s.conteudo}`).join("\n\n---\n\n");
-    navigator.clipboard.writeText(texto);
   }
 
   async function finalizar() {
     if (!sessaoAtiva) return;
-    const roteiro = Object.fromEntries(secoes.map((s) => [s.titulo, s.conteudo]));
     await fetch("/api/chat/sessoes", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: sessaoAtiva, status: "finalizada", roteiro_final: roteiro }),
+      body: JSON.stringify({ id: sessaoAtiva, status: "finalizada" }),
     });
     setSessoes((prev) =>
       prev.map((s) => (s.id === sessaoAtiva ? { ...s, status: "finalizada" } : s))
@@ -262,6 +259,8 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
   }
 
   const isEmpty = mensagens.length === 0 && !isStreaming;
+  const podeFinalizarSessao =
+    sessaoAtivaObj?.status === "ativa" && mensagens.length > 0 && !isStreaming;
 
   return (
     <div className="flex flex-col flex-1">
@@ -277,12 +276,12 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "chat" ? "💬 Chat" : t === "roteiro" ? "📄 Roteiro" : "📁 Histórico"}
+            {t === "chat" ? "💬 Chat" : t === "roteiro" ? "📄 Referência" : "📁 Histórico"}
           </button>
         ))}
       </div>
 
-      {/* Layout desktop: sidebar | chat | roteiro */}
+      {/* Layout desktop: sidebar | chat | painel */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside
@@ -306,12 +305,33 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
             tabMobile === "chat" ? "flex" : "hidden lg:flex"
           }`}
         >
-          {/* Título da sessão ativa */}
+          {/* Barra de status da sessão ativa */}
           {sessaoAtiva && (
-            <div className="px-4 py-2.5 border-b border-gray-100 bg-white">
-              <p className="text-xs font-semibold text-gray-700 truncate">
-                {sessoes.find((s) => s.id === sessaoAtiva)?.titulo ?? "Conversa"}
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-white flex items-center gap-2 min-w-0">
+              <p className="text-xs font-semibold text-gray-700 truncate flex-1">
+                {sessaoAtivaObj?.titulo ?? "Conversa"}
               </p>
+
+              {podeFinalizarSessao && (
+                <button
+                  onClick={finalizar}
+                  className="shrink-0 text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
+                >
+                  ✓ Finalizar sessão
+                </button>
+              )}
+
+              {sessaoAtivaObj?.status === "finalizada" && (
+                <span className="shrink-0 text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium whitespace-nowrap">
+                  ◷ Aguarda revisão
+                </span>
+              )}
+
+              {sessaoAtivaObj?.status === "aprovada" && (
+                <span className="shrink-0 text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium whitespace-nowrap">
+                  ✓ Aprovado
+                </span>
+              )}
             </div>
           )}
 
@@ -340,26 +360,38 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
             />
           )}
 
+          {/* Banner quando sessão está fechada */}
+          {(sessaoAtivaObj?.status === "finalizada" || sessaoAtivaObj?.status === "aprovada") && (
+            <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 text-xs text-amber-800 text-center">
+              {sessaoAtivaObj.status === "finalizada"
+                ? "Sessão finalizada — acesse Aprovações para revisar ou reabrir."
+                : "Sessão aprovada — reabra na aba Aprovações para editar."}
+            </div>
+          )}
+
           <InputArea
             key={sessaoAtiva ?? "new"}
             prestadorId={prestadorId}
             sessaoId={sessaoAtiva ?? ""}
-            disabled={isStreaming}
+            disabled={
+              isStreaming ||
+              sessaoAtivaObj?.status === "finalizada" ||
+              sessaoAtivaObj?.status === "aprovada"
+            }
             onEnviar={enviarMensagem}
           />
         </div>
 
-        {/* Painel do roteiro */}
+        {/* Painel de referência */}
         <aside
           className={`w-[380px] xl:w-[420px] shrink-0 border-l border-gray-200 bg-white overflow-hidden ${
             tabMobile === "roteiro" ? "flex flex-col w-full" : "hidden lg:flex lg:flex-col"
           }`}
         >
           <RoteiroPainel
-            secoes={secoes}
+            sessaoStatus={sessaoAtivaObj?.status}
+            onFinalizar={podeFinalizarSessao ? finalizar : undefined}
             roteirosAntigos={roteirosAntigos}
-            onCopiarTudo={copiarTudo}
-            onFinalizar={finalizar}
             onUsarComoBase={(c) => enviarMensagem(c, [])}
           />
         </aside>

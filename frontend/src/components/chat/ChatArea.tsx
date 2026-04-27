@@ -191,63 +191,63 @@ export default function ChatArea({
     onCarregarMais();
   }
 
-  if (isEmpty) {
-    return <PromptsBase onSelect={onPromptBase} />;
-  }
-
   return (
     <div className="relative flex-1 overflow-hidden">
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="h-full overflow-y-auto px-4 py-5 space-y-4"
-      >
-        {/* Botão carregar mensagens mais antigas */}
-        {hasMoreMsgs && (
-          <div className="flex justify-center pb-2">
-            <button
-              onClick={handleCarregarMais}
-              disabled={carregandoMais}
-              className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg bg-white transition disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {carregandoMais ? (
-                <>
-                  <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  Carregando...
-                </>
-              ) : (
-                "↑ Carregar mensagens anteriores"
-              )}
-            </button>
-          </div>
-        )}
+      {isEmpty ? (
+        <PromptsBase onSelect={onPromptBase} />
+      ) : (
+        <div
+          ref={containerRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto px-4 py-5 space-y-4"
+        >
+          {/* Botão carregar mensagens mais antigas */}
+          {hasMoreMsgs && (
+            <div className="flex justify-center pb-2">
+              <button
+                onClick={handleCarregarMais}
+                disabled={carregandoMais}
+                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg bg-white transition disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {carregandoMais ? (
+                  <>
+                    <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    Carregando...
+                  </>
+                ) : (
+                  "↑ Carregar mensagens anteriores"
+                )}
+              </button>
+            </div>
+          )}
 
-        {mensagens.map((m) => (
-          <Bolha key={m.id} msg={m} />
-        ))}
+          {mensagens.map((m) => (
+            <Bolha key={m.id} msg={m} />
+          ))}
 
-        {/* Streaming atual */}
-        {isStreaming && streamingText && (
-          <Bolha
-            msg={{
-              id: "streaming",
-              role: "assistant",
-              content: streamingText,
-              arquivos: [],
-              criado_em: new Date().toISOString(),
-              streaming: true,
-            }}
-          />
-        )}
+          {/* Streaming atual */}
+          {isStreaming && streamingText && (
+            <Bolha
+              msg={{
+                id: "streaming",
+                role: "assistant",
+                content: streamingText,
+                arquivos: [],
+                criado_em: new Date().toISOString(),
+                streaming: true,
+              }}
+            />
+          )}
 
-        {/* Typing indicator quando aguarda primeiro delta */}
-        {isStreaming && !streamingText && <TypingIndicator />}
+          {/* Typing indicator quando aguarda primeiro delta */}
+          {isStreaming && !streamingText && <TypingIndicator />}
 
-        <div ref={bottomRef} />
-      </div>
+          <div ref={bottomRef} />
+        </div>
+      )}
 
       {/* Botão "ir para o fim" */}
-      {mostrarScrollBtn && (
+      {!isEmpty && mostrarScrollBtn && (
         <button
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
           className="absolute bottom-4 right-4 w-8 h-8 bg-white border border-gray-300 rounded-full shadow flex items-center justify-center text-gray-500 hover:bg-gray-50 transition"

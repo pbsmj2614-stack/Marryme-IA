@@ -3,14 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+interface Resultado {
+  nome: string;
+  ok: boolean;
+  erro?: string;
+  health_score?: number;
+}
+
 export default function AtualizarTodosButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<string | null>(null);
+  const [popup, setPopup] = useState<{ tipo: "ok" | "erro"; linhas: string[] } | null>(null);
 
   async function handleClick() {
     setLoading(true);
-    setResultado(null);
+    setPopup(null);
     try {
       const res = await fetch("/api/meta/sincronizar-todos", { method: "POST" });
       const data = (await res.json()) as {
@@ -18,25 +25,35 @@ export default function AtualizarTodosButton() {
         sincronizados?: number;
         total?: number;
         erros?: number;
+        resultados?: Resultado[];
         mensagem?: string;
         error?: string;
       };
+
       if (!res.ok || !data.ok) {
-        setResultado(`Erro: ${data.error ?? "falha desconhecida"}`);
-      } else if (data.sincronizados === 0 && data.mensagem) {
-        setResultado(data.mensagem);
-      } else {
-        setResultado(
-          `${data.sincronizados}/${data.total} contas atualizadas${data.erros ? ` · ${data.erros} erro(s)` : ""}`
-        );
-        router.refresh();
+        setPopup({ tipo: "erro", linhas: [data.error ?? "Falha desconhecida"] });
+        return;
       }
+
+      if (data.sincronizados === 0 && data.mensagem) {
+        setPopup({ tipo: "ok", linhas: [data.mensagem] });
+        return;
+      }
+
+      const linhas: string[] = [`${data.sincronizados}/${data.total} contas atualizadas`];
+
+      const falhas = (data.resultados ?? []).filter((r) => !r.ok);
+      if (falhas.length > 0) {
+        linhas.push(...falhas.map((f) => `✕ ${f.nome}: ${f.erro ?? "erro"}`));
+      }
+
+      setPopup({ tipo: falhas.length > 0 ? "erro" : "ok", linhas });
+      router.refresh();
     } catch (e) {
-      setResultado(`Erro: ${e instanceof Error ? e.message : String(e)}`);
+      setPopup({ tipo: "erro", linhas: [e instanceof Error ? e.message : String(e)] });
     } finally {
       setLoading(false);
-      // Limpa a mensagem após 5s
-      setTimeout(() => setResultado(null), 5000);
+      setTimeout(() => setPopup(null), 8000);
     }
   }
 
@@ -65,15 +82,19 @@ export default function AtualizarTodosButton() {
         {loading ? "Atualizando…" : "Atualizar Meta Ads"}
       </button>
 
-      {resultado && (
+      {popup && (
         <div
-          className={`absolute right-0 top-10 z-20 text-xs px-3 py-2 rounded-lg shadow-md whitespace-nowrap ${
-            resultado.startsWith("Erro")
+          className={`absolute right-0 top-10 z-20 text-xs px-3 py-2 rounded-lg shadow-md min-w-[200px] max-w-xs space-y-0.5 ${
+            popup.tipo === "erro"
               ? "bg-red-50 text-red-700 border border-red-200"
               : "bg-green-50 text-green-700 border border-green-200"
           }`}
         >
-          {resultado}
+          {popup.linhas.map((l, i) => (
+            <p key={i} className={i === 0 ? "font-medium" : "text-[11px] opacity-80"}>
+              {l}
+            </p>
+          ))}
         </div>
       )}
     </div>

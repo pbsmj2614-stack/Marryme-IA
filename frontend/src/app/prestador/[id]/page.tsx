@@ -304,11 +304,12 @@ export default async function PrestadorPage({
                 }`}
               >
                 {label}
-                {value === "aprovacoes" && sessoesFin.length > 0 && (
-                  <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">
-                    {sessoesFin.filter((s) => s.status === "finalizada").length || undefined}
-                  </span>
-                )}
+                {value === "aprovacoes" &&
+                  sessoesFin.filter((s) => s.status === "finalizada").length > 0 && (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">
+                      {sessoesFin.filter((s) => s.status === "finalizada").length}
+                    </span>
+                  )}
                 {value === "campanha" &&
                   ultimoRelatorio?.health_score !== undefined &&
                   ultimoRelatorio.health_score !== null && (
