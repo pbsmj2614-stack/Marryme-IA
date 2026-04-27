@@ -1,6 +1,13 @@
 "use client";
 
-import { useRef, useState, useCallback, type KeyboardEvent, type DragEvent } from "react";
+import {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  type KeyboardEvent,
+  type DragEvent,
+} from "react";
 import type { ChatArquivo } from "@/lib/types";
 import { createClient } from "@/lib/supabase";
 
@@ -38,6 +45,12 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   const inputFileRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
+  // Garante um diretório de upload válido mesmo antes da sessão existir (criação lazy)
+  const uploadDirRef = useRef<string>(sessaoId || `tmp-${Date.now()}`);
+  useEffect(() => {
+    if (sessaoId) uploadDirRef.current = sessaoId;
+  }, [sessaoId]);
+
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -46,14 +59,17 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   }, []);
 
   async function uploadArquivo(file: File, idx: number) {
-    const caminho = `${prestadorId}/${sessaoId}/${Date.now()}-${file.name}`;
+    // Usa uploadDirRef para nunca gerar caminho com segmento vazio
+    const caminho = `${prestadorId}/${uploadDirRef.current}/${Date.now()}-${file.name}`;
     const { data, error } = await supabase.storage
       .from("chat-arquivos")
       .upload(caminho, file, { upsert: false });
 
     if (error || !data) {
       setArquivos((prev) =>
-        prev.map((a, i) => (i === idx ? { ...a, uploading: false, erro: "Falha no upload" } : a))
+        prev.map((a, i) =>
+          i === idx ? { ...a, uploading: false, erro: error?.message ?? "Falha no upload" } : a
+        )
       );
       return;
     }
@@ -65,9 +81,13 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   }
 
   function adicionarArquivos(files: File[]) {
+    const existentes = arquivos.length;
     const validos = files
       .filter((f) => TIPOS_ACEITOS.includes(f.type))
-      .slice(0, MAX_ARQUIVOS - arquivos.length);
+      .slice(0, MAX_ARQUIVOS - existentes);
+
+    if (validos.length === 0) return;
+
     const totalMB =
       [...arquivos, ...validos].reduce(
         (s, a) =>
@@ -84,13 +104,10 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
       uploading: true,
     }));
 
-    setArquivos((prev) => {
-      const atualizados = [...prev, ...novos];
-      novos.forEach((_, i) => {
-        const idx = prev.length + i;
-        uploadArquivo(validos[i], idx);
-      });
-      return atualizados;
+    // setState puro — uploads disparados depois, fora do updater
+    setArquivos((prev) => [...prev, ...novos]);
+    validos.forEach((file, i) => {
+      void uploadArquivo(file, existentes + i);
     });
   }
 
@@ -156,20 +173,33 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
           {arquivos.map((a, i) => (
             <div
               key={i}
-              className="relative flex items-center gap-1.5 bg-gray-100 rounded-lg px-2 py-1 text-xs text-gray-600"
+              title={a.erro ?? undefined}
+              className={`relative flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs border ${
+                a.erro
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-gray-100 border-gray-200 text-gray-600"
+              }`}
             >
               {a.preview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={a.preview} alt={a.file.name} className="w-8 h-8 object-cover rounded" />
               ) : (
-                <span className="text-base">📄</span>
+                <span className="text-base">{a.erro ? "⚠️" : "📄"}</span>
               )}
-              <span className="max-w-[100px] truncate">{a.file.name}</span>
-              {a.uploading && <span className="text-gray-400 animate-pulse">↑</span>}
-              {a.erro && <span className="text-red-400">!</span>}
+              <div className="flex flex-col min-w-0">
+                <span className="max-w-[100px] truncate">{a.file.name}</span>
+                {a.erro && (
+                  <span className="text-[10px] text-red-500 truncate max-w-[100px]">
+                    Falha no upload
+                  </span>
+                )}
+              </div>
+              {a.uploading && (
+                <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              )}
               <button
                 onClick={() => removerArquivo(i)}
-                className="ml-1 text-gray-400 hover:text-gray-700"
+                className={`ml-1 shrink-0 hover:opacity-80 ${a.erro ? "text-red-400" : "text-gray-400 hover:text-gray-700"}`}
               >
                 ×
               </button>
