@@ -29,6 +29,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
   const [carregandoMaisAntigos, setCarregandoMaisAntigos] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const autoSelecionadoRef = useRef(!!sessaoInicial);
+  const sessaoInicialRef = useRef(sessaoInicial);
 
   // Cancela stream em andamento ao desmontar o componente (evita request órfã)
   useEffect(
@@ -38,6 +39,13 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     []
   );
 
+  // Persiste sessão ativa no sessionStorage para sobreviver à navegação entre abas
+  useEffect(() => {
+    if (sessaoAtiva) {
+      sessionStorage.setItem(`mm_sessao_${prestadorId}`, sessaoAtiva);
+    }
+  }, [sessaoAtiva, prestadorId]);
+
   const sessaoAtivaObj = sessoes.find((s) => s.id === sessaoAtiva);
 
   const carregarSessoes = useCallback(async () => {
@@ -46,9 +54,14 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
     });
     const data = (await res.json()) as { sessoes: ChatSessao[] };
     setSessoes(data.sessoes ?? []);
-    if (!autoSelecionadoRef.current && data.sessoes?.[0]) {
-      setSessaoAtiva(data.sessoes[0].id);
+    if (!autoSelecionadoRef.current) {
       autoSelecionadoRef.current = true;
+      const lista = data.sessoes ?? [];
+      // Prefere: sessão da URL > última salva no sessionStorage > primeira da lista
+      const stored = sessionStorage.getItem(`mm_sessao_${prestadorId}`);
+      const preferida = sessaoInicialRef.current ?? stored ?? null;
+      const existe = preferida ? lista.find((s) => s.id === preferida) : null;
+      setSessaoAtiva(existe?.id ?? lista[0]?.id ?? null);
     }
   }, [prestadorId]);
 

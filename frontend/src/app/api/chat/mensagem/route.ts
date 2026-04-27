@@ -26,21 +26,42 @@ import type { ChatArquivo } from "@/lib/types";
 
 type MsgRow = { role: "user" | "assistant"; content: string; arquivos: ChatArquivo[] };
 
-function buildContent(content: string, arquivos: ChatArquivo[]): Anthropic.MessageParam["content"] {
-  const imagens = arquivos.filter((a) =>
-    ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(a.tipo)
-  );
+type SbAdmin = ReturnType<typeof supabaseAdmin>;
+
+const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type ImageMediaType = (typeof MEDIA_TYPES)[number];
+
+async function buildContent(
+  content: string,
+  arquivos: ChatArquivo[],
+  sb: SbAdmin
+): Promise<Anthropic.MessageParam["content"]> {
+  const imagens = arquivos.filter((a) => (MEDIA_TYPES as readonly string[]).includes(a.tipo));
   if (imagens.length === 0) return content;
 
-  return [
-    ...imagens.map(
-      (img): Anthropic.ImageBlockParam => ({
-        type: "image",
-        source: { type: "url", url: img.url },
-      })
-    ),
-    { type: "text", text: content },
-  ];
+  const blocos = await Promise.all(
+    imagens.map(async (img): Promise<Anthropic.ImageBlockParam> => {
+      try {
+        // Extrai o caminho relativo dentro do bucket a partir da URL pública
+        const match = img.url.match(/\/storage\/v1\/object\/(?:public\/)?chat-arquivos\/(.+)/);
+        if (match) {
+          const { data } = await sb.storage.from("chat-arquivos").download(match[1]);
+          if (data) {
+            const b64 = Buffer.from(await data.arrayBuffer()).toString("base64");
+            return {
+              type: "image",
+              source: { type: "base64", media_type: img.tipo as ImageMediaType, data: b64 },
+            };
+          }
+        }
+      } catch {
+        /* fallback para URL se download falhar */
+      }
+      return { type: "image", source: { type: "url", url: img.url } };
+    })
+  );
+
+  return [...blocos, { type: "text", text: content }];
 }
 
 export async function POST(req: NextRequest) {
@@ -93,10 +114,12 @@ export async function POST(req: NextRequest) {
           .order("criado_em", { ascending: true })
           .limit(40);
 
-        const mensagens: Anthropic.MessageParam[] = (historico ?? []).map((m: MsgRow) => ({
-          role: m.role,
-          content: buildContent(m.content, m.arquivos ?? []),
-        }));
+        const mensagens: Anthropic.MessageParam[] = await Promise.all(
+          (historico ?? []).map(async (m: MsgRow) => ({
+            role: m.role,
+            content: await buildContent(m.content, m.arquivos ?? [], supabase),
+          }))
+        );
 
         // 3. System prompt
         const systemPrompt = await montarSystemPrompt(body.prestador_id);

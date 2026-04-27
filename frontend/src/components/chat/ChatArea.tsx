@@ -76,14 +76,14 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
         )}
 
         <div
-          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
             isIA
               ? "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
               : "bg-brand-600 text-white rounded-tr-sm"
           } ${"streaming" in msg && msg.streaming ? "opacity-80" : ""}`}
         >
           {isIA ? (
-            <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:mb-2 prose-headings:mt-3 prose-li:my-0 prose-code:text-brand-700 prose-code:bg-brand-50 prose-code:px-1 prose-code:rounded">
+            <div className="prose prose-base max-w-none prose-p:my-1.5 prose-headings:mb-2 prose-headings:mt-3 prose-li:my-0.5 prose-code:text-brand-700 prose-code:bg-brand-50 prose-code:px-1 prose-code:rounded prose-p:text-[15px] prose-li:text-[15px]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
             </div>
           ) : (
