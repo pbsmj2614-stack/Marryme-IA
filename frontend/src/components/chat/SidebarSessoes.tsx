@@ -148,21 +148,26 @@ export default function SidebarSessoes({
               ) : (
                 <p className="text-xs font-medium text-gray-800 truncate">{s.titulo}</p>
               )}
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TIPO_COR[s.tipo]}`}
                 >
                   {TIPO_LABEL[s.tipo]}
                 </span>
                 <span className="text-[10px] text-gray-400">{fmtData(s.atualizado_em)}</span>
+                {s.status === "ativa" && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
+                    Em aberto
+                  </span>
+                )}
                 {s.status === "finalizada" && (
-                  <span className="text-[10px] text-amber-600" title="Aguardando aprovação">
-                    ◷
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                    Finalizado
                   </span>
                 )}
                 {s.status === "aprovada" && (
-                  <span className="text-[10px] text-green-600" title="Aprovado">
-                    ✓
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                    Aprovado
                   </span>
                 )}
               </div>

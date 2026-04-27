@@ -106,106 +106,136 @@ export default async function PrestadorPage({
 
       {/* Top bar — prestador info + tabs */}
       <div
-        className={`max-w-5xl mx-auto px-4 w-full ${isChatAtivo ? "pt-6 pb-2 shrink-0" : "py-8"}`}
+        className={`max-w-5xl mx-auto px-4 w-full ${isChatAtivo ? "pt-3 pb-0 shrink-0" : "py-8"}`}
       >
-        {/* Prestador header card */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-2xl font-bold text-gray-900">{p.nome_artistico}</h2>
-                <span className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                  {CATEGORIA_LABEL[p.categoria] ?? p.categoria}
+        {/* Prestador header — compacto em chat, completo nas outras abas */}
+        {isChatAtivo ? (
+          <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 mb-2 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold text-gray-900 truncate">{p.nome_artistico}</span>
+              <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+                {CATEGORIA_LABEL[p.categoria] ?? p.categoria}
+              </span>
+              {p.cidade_base && (
+                <span className="text-xs text-gray-400 hidden sm:inline truncate">
+                  {p.cidade_base}
                 </span>
-                {p.cidade_base && <span className="text-sm text-gray-400">{p.cidade_base}</span>}
-              </div>
-
-              <div className="mt-3 space-y-1.5 text-sm text-gray-600">
-                {p.whatsapp && (
-                  <div className="flex items-center gap-1.5">
-                    <svg
-                      className="w-3.5 h-3.5 shrink-0 text-gray-400"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.03 2.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span>{formatarTelefone(p.whatsapp)}</span>
-                  </div>
-                )}
-                {p.instagram && (
-                  <div className="flex items-start gap-1.5">
-                    <svg
-                      className="w-3.5 h-3.5 shrink-0 text-gray-400 mt-0.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect
-                        x="2"
-                        y="2"
-                        width="20"
-                        height="20"
-                        rx="5"
-                        ry="5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <circle cx="12" cy="12" r="4" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
-                    </svg>
-                    <span className="break-all whitespace-pre-wrap">{p.instagram}</span>
-                  </div>
-                )}
-                {p.email && (
-                  <div className="flex items-center gap-1.5">
-                    <svg
-                      className="w-3.5 h-3.5 shrink-0 text-gray-400"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <polyline
-                        points="22,6 12,13 2,6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span className="break-all">{p.email}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-
-            {/* Botões do roteiro antigo — só aparecem na aba Campanha */}
-            {tab === "campanha" && (
-              <div className="flex items-center gap-2 flex-wrap">
-                {ultimo && (
-                  <ExportarButton
-                    tipo="completo"
-                    variant="primary"
-                    prestador={p}
-                    roteiro={ultimo}
-                  />
-                )}
-                {ultimo && <AprovarButton roteiroId={ultimo.id} aprovadoAtual={ultimo.aprovado} />}
-              </div>
-            )}
+            <Link
+              href={`/prestador/${id}/editar`}
+              className="text-xs text-gray-400 hover:text-brand-600 transition shrink-0"
+            >
+              Editar
+            </Link>
           </div>
-        </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="text-2xl font-bold text-gray-900">{p.nome_artistico}</h2>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {CATEGORIA_LABEL[p.categoria] ?? p.categoria}
+                  </span>
+                  {p.cidade_base && <span className="text-sm text-gray-400">{p.cidade_base}</span>}
+                </div>
+
+                <div className="mt-3 space-y-1.5 text-sm text-gray-600">
+                  {p.whatsapp && (
+                    <div className="flex items-center gap-1.5">
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 text-gray-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path
+                          d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.81 19.79 19.79 0 01.03 2.18 2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span>{formatarTelefone(p.whatsapp)}</span>
+                    </div>
+                  )}
+                  {p.instagram && (
+                    <div className="flex items-start gap-1.5">
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 text-gray-400 mt-0.5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <rect
+                          x="2"
+                          y="2"
+                          width="20"
+                          height="20"
+                          rx="5"
+                          ry="5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle
+                          cx="12"
+                          cy="12"
+                          r="4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
+                      </svg>
+                      <span className="break-all whitespace-pre-wrap">{p.instagram}</span>
+                    </div>
+                  )}
+                  {p.email && (
+                    <div className="flex items-center gap-1.5">
+                      <svg
+                        className="w-3.5 h-3.5 shrink-0 text-gray-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path
+                          d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <polyline
+                          points="22,6 12,13 2,6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <span className="break-all">{p.email}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botões do roteiro antigo — só aparecem na aba Campanha */}
+              {tab === "campanha" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {ultimo && (
+                    <ExportarButton
+                      tipo="completo"
+                      variant="primary"
+                      prestador={p}
+                      roteiro={ultimo}
+                    />
+                  )}
+                  {ultimo && (
+                    <AprovarButton roteiroId={ultimo.id} aprovadoAtual={ultimo.aprovado} />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Entrevista profile — só na aba Campanha */}
         {tab === "campanha" && dados && (
@@ -270,18 +300,20 @@ export default async function PrestadorPage({
           </div>
         )}
 
-        {/* Ações */}
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-          <ExcluirPrestadorButton prestadorId={p.id} />
-          {!entrevista && (
-            <Link
-              href={`/prestador/${id}/editar`}
-              className="text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg transition"
-            >
-              Cadastrar entrevista
-            </Link>
-          )}
-        </div>
+        {/* Ações — visíveis apenas fora do chat */}
+        {!isChatAtivo && (
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <ExcluirPrestadorButton prestadorId={p.id} />
+            {!entrevista && (
+              <Link
+                href={`/prestador/${id}/editar`}
+                className="text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg transition"
+              >
+                Cadastrar entrevista
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Abas */}
         <div className="flex gap-1 border-b border-gray-200 mb-0">

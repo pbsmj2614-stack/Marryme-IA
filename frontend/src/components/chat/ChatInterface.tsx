@@ -193,21 +193,22 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
 
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
+            let payload: { delta?: string; done?: boolean; error?: string };
             try {
-              const payload = JSON.parse(line.slice(6)) as {
+              payload = JSON.parse(line.slice(6)) as {
                 delta?: string;
                 done?: boolean;
                 error?: string;
               };
-              if (payload.error) throw new Error(payload.error);
-              if (payload.delta) {
-                fullText += payload.delta;
-                setStreamingText(fullText);
-              }
-              if (payload.done) break;
             } catch {
-              // continua
+              continue; // ignora linhas com JSON malformado
             }
+            if (payload.error) throw new Error(payload.error);
+            if (payload.delta) {
+              fullText += payload.delta;
+              setStreamingText(fullText);
+            }
+            if (payload.done) break;
           }
         }
       }

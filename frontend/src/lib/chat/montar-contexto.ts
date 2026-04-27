@@ -1,15 +1,10 @@
-import fs from "fs";
-import path from "path";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type { Roteiro } from "@/lib/types";
+import { INSTRUCOES_MARRYME } from "./instrucoes-base";
 
 export async function montarSystemPrompt(prestadorId: string): Promise<string> {
-  // 1. Lê o CONTEXT.md base na raiz do projeto
-  const contextoBase = fs.readFileSync(path.join(process.cwd(), "..", "CONTEXT.md"), "utf-8");
-
   const supabase = supabaseAdmin();
 
-  // 2. Busca dados do prestador + entrevista + roteiros aprovados
   const [{ data: prestador }, { data: entrevistaRow }, { data: roteiros }] = await Promise.all([
     supabase.from("prestadores").select("*").eq("id", prestadorId).single(),
     supabase
@@ -31,14 +26,12 @@ export async function montarSystemPrompt(prestadorId: string): Promise<string> {
 
   const entrevista = (entrevistaRow?.dados_json ?? {}) as Record<string, unknown>;
 
-  // 3. Análise aprovada mais recente como referência
   const analiseAprovada =
     ((roteiros ?? []) as Roteiro[])
       .filter((r) => r.aprovado && r.analise_estrategica)
       .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())[0]
       ?.analise_estrategica ?? null;
 
-  // 4. Bloco dinâmico com dados do prestador
   const entrevistaTexto =
     Object.keys(entrevista).length > 0
       ? Object.entries(entrevista)
@@ -81,5 +74,5 @@ Gatilhos: ${analiseAprovada.gatilhos_emocionais?.join(", ")}`
 - Ao finalizar uma seção, sinalize claramente para o usuário aprovar antes de continuar
 `;
 
-  return `${contextoBase}\n\n${contextoDinamico}`.trim();
+  return `${INSTRUCOES_MARRYME}\n\n${contextoDinamico}`.trim();
 }
