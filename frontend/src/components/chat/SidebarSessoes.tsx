@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { ChatSessao, ChatTipo } from "@/lib/types";
 
 const TIPO_LABEL: Record<ChatTipo, string> = {
@@ -50,6 +50,14 @@ export default function SidebarSessoes({
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
   const [renomeandoId, setRenomeandoId] = useState<string | null>(null);
   const [novoTitulo, setNovoTitulo] = useState("");
+
+  // Fecha o menu ao clicar em qualquer lugar da página
+  useEffect(() => {
+    if (!menuAberto) return;
+    const fechar = () => setMenuAberto(null);
+    document.addEventListener("mousedown", fechar);
+    return () => document.removeEventListener("mousedown", fechar);
+  }, [menuAberto]);
 
   const filtradas = sessoes.filter(
     (s) => busca === "" || s.titulo.toLowerCase().includes(busca.toLowerCase())

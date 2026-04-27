@@ -14,6 +14,7 @@ import ExportarButton from "@/components/ExportarButton";
 import CampanhaTab from "@/components/CampanhaTab";
 import ChatInterface from "@/components/chat/ChatInterface";
 import RoteirosFinalizados from "@/components/chat/RoteirosFinalizados";
+import PrestadorSwitcher from "@/components/PrestadorSwitcher";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { formatarTelefone } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export default async function PrestadorPage({
     { data: relatorios },
     { data: analises },
     { data: sessoesFinalizadas },
+    { data: todosPrestadores },
   ] = await Promise.all([
     supabase.from("prestadores").select("*").eq("id", id).single(),
     supabase
@@ -82,12 +84,21 @@ export default async function PrestadorPage({
       .in("status", ["finalizada", "aprovada"])
       .order("atualizado_em", { ascending: false })
       .limit(20),
+    supabase
+      .from("prestadores")
+      .select("id, nome_artistico, categoria")
+      .order("nome_artistico", { ascending: true }),
   ]);
 
   if (!prestador) notFound();
 
   const p = prestador as PrestadorMeta;
   const lista = (roteiros ?? []) as Roteiro[];
+  const listaPrestadores = (todosPrestadores ?? []) as {
+    id: string;
+    nome_artistico: string;
+    categoria: string;
+  }[];
   const ultimo = lista[0] ?? null;
   const sessoesFin = (sessoesFinalizadas ?? []) as ChatSessao[];
   const dados = entrevista?.dados_json as DadosEntrevista | undefined;
@@ -155,10 +166,10 @@ export default async function PrestadorPage({
 
         {/* Barra compacta + tabs — full-width, sem max-w */}
         <div className="bg-white border-b border-gray-200 shrink-0">
-          <div className="px-5 pt-2.5 pb-0 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-sm font-bold text-gray-900 truncate">{p.nome_artistico}</span>
-              <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+          <div className="px-5 pt-3 pb-0 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <PrestadorSwitcher atual={p} todos={listaPrestadores} />
+              <span className="text-xs font-medium text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full shrink-0">
                 {CATEGORIA_LABEL[p.categoria] ?? p.categoria}
               </span>
               {p.cidade_base && (
@@ -167,9 +178,9 @@ export default async function PrestadorPage({
             </div>
             <Link
               href={`/prestador/${id}/editar`}
-              className="text-xs text-gray-400 hover:text-brand-600 transition shrink-0"
+              className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 text-gray-600 border border-gray-200 hover:border-brand-200 rounded-lg transition"
             >
-              Editar
+              Editar cadastro
             </Link>
           </div>
           <div className="px-5">{tabLinks}</div>
