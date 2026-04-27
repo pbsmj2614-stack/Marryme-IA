@@ -9,7 +9,6 @@ import {
   type DragEvent,
 } from "react";
 import type { ChatArquivo } from "@/lib/types";
-import { createClient } from "@/lib/supabase";
 
 const TIPOS_ACEITOS = [
   "image/jpeg",
@@ -43,9 +42,8 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   const [arrastando, setArrastando] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputFileRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
 
-  // Garante um diretório de upload válido mesmo antes da sessão existir (criação lazy)
+  // Diretório de upload estável — fallback para antes da sessão existir
   const uploadDirRef = useRef<string>(sessaoId || `tmp-${Date.now()}`);
   useEffect(() => {
     if (sessaoId) uploadDirRef.current = sessaoId;
@@ -59,25 +57,26 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   }, []);
 
   async function uploadArquivo(file: File, idx: number) {
-    // Usa uploadDirRef para nunca gerar caminho com segmento vazio
-    const caminho = `${prestadorId}/${uploadDirRef.current}/${Date.now()}-${file.name}`;
-    const { data, error } = await supabase.storage
-      .from("chat-arquivos")
-      .upload(caminho, file, { upsert: false });
+    // Upload via API route server-side (usa supabaseAdmin — sem dependência de políticas de bucket)
+    const form = new FormData();
+    form.append("file", file);
+    form.append("prestadorId", prestadorId);
+    form.append("dir", uploadDirRef.current);
 
-    if (error || !data) {
+    const res = await fetch("/api/chat/upload", { method: "POST", body: form });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
       setArquivos((prev) =>
         prev.map((a, i) =>
-          i === idx ? { ...a, uploading: false, erro: error?.message ?? "Falha no upload" } : a
+          i === idx ? { ...a, uploading: false, erro: body.error ?? "Falha no upload" } : a
         )
       );
       return;
     }
 
-    const { data: urlData } = supabase.storage.from("chat-arquivos").getPublicUrl(data.path);
-    setArquivos((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, uploading: false, url: urlData.publicUrl } : a))
-    );
+    const { url } = (await res.json()) as { url: string };
+    setArquivos((prev) => prev.map((a, i) => (i === idx ? { ...a, uploading: false, url } : a)));
   }
 
   function adicionarArquivos(files: File[]) {
