@@ -167,7 +167,11 @@ export async function POST(req: NextRequest) {
         const systemPrompt = await montarSystemPrompt(body.prestador_id);
 
         // 4. Stream Claude
-        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        // defaultHeaders inclui o beta de PDFs — necessário para DocumentBlockParam funcionar
+        const anthropic = new Anthropic({
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          defaultHeaders: { "anthropic-beta": "pdfs-2024-09-25" },
+        });
 
         let fullText = "";
         let inputTokens = 0;
