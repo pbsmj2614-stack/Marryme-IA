@@ -30,18 +30,18 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as co
 type ImageMediaType = (typeof IMAGE_TYPES)[number];
 
 // Baixa arquivo via URL pública (bucket é PUBLIC — não precisa do SDK Supabase)
-async function baixarBase64(url: string): Promise<string | null> {
+async function baixarBuffer(url: string): Promise<Buffer | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error("[baixarBase64] HTTP", res.status, res.statusText, url);
+      console.error("[baixarBuffer] HTTP", res.status, res.statusText, url);
       return null;
     }
-    const buf = await res.arrayBuffer();
-    console.log("[baixarBase64] ok — bytes:", buf.byteLength, "url:", url.slice(-80));
-    return Buffer.from(buf).toString("base64");
+    const buf = Buffer.from(await res.arrayBuffer());
+    console.log("[baixarBuffer] ok — bytes:", buf.byteLength, "url:", url.slice(-80));
+    return buf;
   } catch (e) {
-    console.error("[baixarBase64] fetch error:", e, "url:", url);
+    console.error("[baixarBuffer] fetch error:", e);
     return null;
   }
 }
@@ -58,33 +58,49 @@ async function buildContent(
 
   const imagemBlocos = await Promise.all(
     imagens.map(async (img): Promise<Anthropic.ImageBlockParam> => {
-      const b64 = await baixarBase64(img.url);
-      if (b64) {
+      const buf = await baixarBuffer(img.url);
+      if (buf) {
         return {
           type: "image",
-          source: { type: "base64", media_type: img.tipo as ImageMediaType, data: b64 },
+          source: {
+            type: "base64",
+            media_type: img.tipo as ImageMediaType,
+            data: buf.toString("base64"),
+          },
         };
       }
       return { type: "image", source: { type: "url", url: img.url } };
     })
   );
 
+  // PDFs: extrai texto com pdf-parse → bloco de texto puro (compatível com qualquer modelo Claude)
   const pdfBlocos = await Promise.all(
-    pdfs.map(async (pdf): Promise<Anthropic.DocumentBlockParam> => {
-      const b64 = await baixarBase64(pdf.url);
-      if (b64) {
-        return {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: b64 },
-          title: pdf.nome,
-        } as Anthropic.DocumentBlockParam;
+    pdfs.map(async (pdf): Promise<Anthropic.TextBlockParam> => {
+      const buf = await baixarBuffer(pdf.url);
+      if (!buf) {
+        return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
-      // Fallback: URL direta — o Claude busca o PDF do Supabase
-      return {
-        type: "document",
-        source: { type: "url", url: pdf.url },
-        title: pdf.nome,
-      } as Anthropic.DocumentBlockParam;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse") as (
+          buf: Buffer
+        ) => Promise<{ text: string; numpages: number }>;
+        const parsed = await pdfParse(buf);
+        const texto = parsed.text?.trim();
+        if (!texto) {
+          return {
+            type: "text",
+            text: `[PDF: ${pdf.nome} — PDF baseado em imagem, sem camada de texto. Peça ao usuário para enviar as páginas como imagem ou copiar o conteúdo.]`,
+          };
+        }
+        return {
+          type: "text",
+          text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
+        };
+      } catch (e) {
+        console.error("[buildContent] pdf-parse error:", e);
+        return { type: "text", text: `[PDF: ${pdf.nome} — erro ao extrair texto]` };
+      }
     })
   );
 
@@ -167,11 +183,7 @@ export async function POST(req: NextRequest) {
         const systemPrompt = await montarSystemPrompt(body.prestador_id);
 
         // 4. Stream Claude
-        // defaultHeaders inclui o beta de PDFs — necessário para DocumentBlockParam funcionar
-        const anthropic = new Anthropic({
-          apiKey: process.env.ANTHROPIC_API_KEY,
-          defaultHeaders: { "anthropic-beta": "pdfs-2024-09-25" },
-        });
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
         let fullText = "";
         let inputTokens = 0;
