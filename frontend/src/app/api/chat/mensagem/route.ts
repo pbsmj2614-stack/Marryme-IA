@@ -26,43 +26,39 @@ import type { ChatArquivo } from "@/lib/types";
 
 type MsgRow = { role: "user" | "assistant"; content: string; arquivos: ChatArquivo[] };
 
-type SbAdmin = ReturnType<typeof supabaseAdmin>;
-
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof IMAGE_TYPES)[number];
 
-async function baixarBase64(url: string, sb: SbAdmin): Promise<string | null> {
+// Baixa arquivo via URL pública (bucket é PUBLIC — não precisa do SDK Supabase)
+async function baixarBase64(url: string): Promise<string | null> {
   try {
-    const match = url.match(/\/storage\/v1\/object\/(?:public\/)?chat-arquivos\/(.+)/);
-    if (!match) return null;
-    // Remove query params e decodifica caracteres especiais do nome do arquivo
-    const caminho = decodeURIComponent(match[1].split("?")[0]);
-    const { data, error } = await sb.storage.from("chat-arquivos").download(caminho);
-    if (error) {
-      console.error("[baixarBase64] download error:", error.message, "path:", caminho);
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error("[baixarBase64] HTTP", res.status, res.statusText, url);
       return null;
     }
-    if (!data) return null;
-    return Buffer.from(await data.arrayBuffer()).toString("base64");
+    const buf = await res.arrayBuffer();
+    console.log("[baixarBase64] ok — bytes:", buf.byteLength, "url:", url.slice(-80));
+    return Buffer.from(buf).toString("base64");
   } catch (e) {
-    console.error("[baixarBase64] unexpected error:", e);
+    console.error("[baixarBase64] fetch error:", e, "url:", url);
     return null;
   }
 }
 
 async function buildContent(
   content: string,
-  arquivos: ChatArquivo[],
-  sb: SbAdmin
+  arquivos: ChatArquivo[]
 ): Promise<Anthropic.MessageParam["content"]> {
   const imagens = arquivos.filter((a) => (IMAGE_TYPES as readonly string[]).includes(a.tipo));
   const pdfs = arquivos.filter((a) => a.tipo === "application/pdf");
+  const textos = arquivos.filter((a) => a.tipo === "text/plain");
 
-  if (imagens.length === 0 && pdfs.length === 0) return content;
+  if (imagens.length === 0 && pdfs.length === 0 && textos.length === 0) return content;
 
   const imagemBlocos = await Promise.all(
     imagens.map(async (img): Promise<Anthropic.ImageBlockParam> => {
-      const b64 = await baixarBase64(img.url, sb);
+      const b64 = await baixarBase64(img.url);
       if (b64) {
         return {
           type: "image",
@@ -74,8 +70,8 @@ async function buildContent(
   );
 
   const pdfBlocos = await Promise.all(
-    pdfs.map(async (pdf): Promise<Anthropic.DocumentBlockParam | Anthropic.TextBlockParam> => {
-      const b64 = await baixarBase64(pdf.url, sb);
+    pdfs.map(async (pdf): Promise<Anthropic.DocumentBlockParam> => {
+      const b64 = await baixarBase64(pdf.url);
       if (b64) {
         return {
           type: "document",
@@ -83,7 +79,7 @@ async function buildContent(
           title: pdf.nome,
         } as Anthropic.DocumentBlockParam;
       }
-      // Fallback: envia via URL pública para o Claude buscar diretamente
+      // Fallback: URL direta — o Claude busca o PDF do Supabase
       return {
         type: "document",
         source: { type: "url", url: pdf.url },
@@ -92,7 +88,22 @@ async function buildContent(
     })
   );
 
-  return [...imagemBlocos, ...pdfBlocos, { type: "text", text: content }];
+  const textoBlocos = await Promise.all(
+    textos.map(async (txt): Promise<Anthropic.TextBlockParam> => {
+      try {
+        const res = await fetch(txt.url);
+        if (res.ok) {
+          const conteudo = await res.text();
+          return { type: "text", text: `=== ${txt.nome} ===\n${conteudo}\n===` };
+        }
+      } catch (e) {
+        console.error("[buildContent] text fetch error:", e);
+      }
+      return { type: "text", text: `[Arquivo de texto: ${txt.nome} — não foi possível carregar]` };
+    })
+  );
+
+  return [...imagemBlocos, ...pdfBlocos, ...textoBlocos, { type: "text", text: content }];
 }
 
 export async function POST(req: NextRequest) {
@@ -148,7 +159,7 @@ export async function POST(req: NextRequest) {
         const mensagens: Anthropic.MessageParam[] = await Promise.all(
           (historico ?? []).map(async (m: MsgRow) => ({
             role: m.role,
-            content: await buildContent(m.content, m.arquivos ?? [], supabase),
+            content: await buildContent(m.content, m.arquivos ?? []),
           }))
         );
 
