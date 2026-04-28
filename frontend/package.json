@@ -36,7 +36,7 @@
     "@tanstack/react-query-devtools": "^5.99.2",
     "docx": "^9.6.1",
     "next": "14.2.15",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^2.16.105",
     "posthog-js": "^1.370.1",
     "posthog-node": "^5.29.5",
     "react": "^18",

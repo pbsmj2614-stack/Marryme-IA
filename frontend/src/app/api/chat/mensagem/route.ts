@@ -80,24 +80,38 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
-        // pdf-parse com pdfjs-dist@2.x (CommonJS, compatível com Node.js)
+        // pdfjs-dist v2 legacy (CommonJS puro, sem DOM, sem worker)
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
-          buf: Buffer
-        ) => Promise<{ text: string; numpages: number }>;
-        const parsed = await pdfParse(buf);
-        const texto = parsed.text?.trim() ?? "";
-        console.log("[pdf-parse] extraído — chars:", texto.length, "págs:", parsed.numpages);
+        const pdfjs = require("pdfjs-dist/legacy/build/pdf.js") as typeof import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = "";
+
+        const pdfDoc = await pdfjs.getDocument({
+          data: new Uint8Array(buf),
+          useWorkerFetch: false,
+          isEvalSupported: false,
+        }).promise;
+
+        const paginas: string[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const pagina = await pdfDoc.getPage(i);
+          const tc = await pagina.getTextContent();
+          paginas.push(
+            tc.items.map((it) => ("str" in it ? it.str + (it.hasEOL ? "\n" : " ") : "")).join("")
+          );
+        }
+
+        const texto = paginas.join("\n").trim();
+        console.log("[pdfjs] extraído — chars:", texto.length, "págs:", pdfDoc.numPages);
 
         if (!texto) {
           return {
             type: "text",
-            text: `[PDF: ${pdf.nome} — PDF baseado em imagem, sem camada de texto. Peça ao usuário enviar as páginas como imagem ou copiar o conteúdo.]`,
+            text: `[PDF: ${pdf.nome} — PDF baseado em imagem, sem texto extraível. Envie as páginas como imagem ou copie o conteúdo.]`,
           };
         }
         return {
           type: "text",
-          text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
+          text: `=== PDF: ${pdf.nome} (${pdfDoc.numPages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
         console.error("[pdf] erro:", e);
@@ -194,7 +208,7 @@ export async function POST(req: NextRequest) {
         let inputTokens = 0;
         let outputTokens = 0;
 
-        const claudeStream = await anthropic.messages.stream({
+        const claudeStream = anthropic.messages.stream({
           model: "claude-sonnet-4-6",
           max_tokens: 2048,
           system: systemPrompt,

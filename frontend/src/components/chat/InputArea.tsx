@@ -18,6 +18,8 @@ const TIPOS_ACEITOS = [
   "application/pdf",
   "text/plain",
 ];
+// Extensões aceitas como fallback (alguns SOs omitem o MIME type)
+const EXTENSOES_ACEITAS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt"];
 const MAX_ARQUIVOS = 10;
 const MAX_TOTAL_MB = 50;
 
@@ -82,7 +84,11 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   function adicionarArquivos(files: File[]) {
     const existentes = arquivos.length;
     const validos = files
-      .filter((f) => TIPOS_ACEITOS.includes(f.type))
+      .filter((f) => {
+        const baseType = f.type.split(";")[0].trim();
+        const ext = "." + f.name.split(".").pop()?.toLowerCase();
+        return TIPOS_ACEITOS.includes(baseType) || EXTENSOES_ACEITAS.includes(ext);
+      })
       .slice(0, MAX_ARQUIVOS - existentes);
 
     if (validos.length === 0) return;
@@ -234,7 +240,7 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
           ref={inputFileRef}
           type="file"
           multiple
-          accept={TIPOS_ACEITOS.join(",")}
+          accept={[...TIPOS_ACEITOS, ...EXTENSOES_ACEITAS].join(",")}
           className="hidden"
           onChange={(e) => adicionarArquivos(Array.from(e.target.files ?? []))}
         />
