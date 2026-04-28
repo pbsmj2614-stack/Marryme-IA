@@ -29,6 +29,15 @@ type MsgRow = { role: "user" | "assistant"; content: string; arquivos: ChatArqui
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageMediaType = (typeof IMAGE_TYPES)[number];
 
+const DOCX_TYPES = [
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+];
+
+function baseMime(tipo: string) {
+  return tipo.split(";")[0].trim().toLowerCase();
+}
+
 // Baixa arquivo via URL pública (bucket é PUBLIC — não precisa do SDK Supabase)
 async function baixarBuffer(url: string): Promise<Buffer | null> {
   try {
@@ -50,11 +59,19 @@ async function buildContent(
   content: string,
   arquivos: ChatArquivo[]
 ): Promise<Anthropic.MessageParam["content"]> {
-  const imagens = arquivos.filter((a) => (IMAGE_TYPES as readonly string[]).includes(a.tipo));
-  const pdfs = arquivos.filter((a) => a.tipo === "application/pdf");
-  const textos = arquivos.filter((a) => a.tipo === "text/plain");
+  const imagens = arquivos.filter((a) =>
+    (IMAGE_TYPES as readonly string[]).includes(baseMime(a.tipo))
+  );
+  const pdfs = arquivos.filter((a) => baseMime(a.tipo) === "application/pdf");
+  const docxs = arquivos.filter((a) => DOCX_TYPES.includes(baseMime(a.tipo)));
+  const textos = arquivos.filter((a) => baseMime(a.tipo) === "text/plain");
 
-  if (imagens.length === 0 && pdfs.length === 0 && textos.length === 0) return content;
+  console.log(
+    `[buildContent] arquivos — imagens:${imagens.length} pdfs:${pdfs.length} docx:${docxs.length} txt:${textos.length} total:${arquivos.length}`
+  );
+
+  if (imagens.length === 0 && pdfs.length === 0 && docxs.length === 0 && textos.length === 0)
+    return content;
 
   const imagemBlocos = await Promise.all(
     imagens.map(async (img): Promise<Anthropic.ImageBlockParam> => {
@@ -64,7 +81,7 @@ async function buildContent(
           type: "image",
           source: {
             type: "base64",
-            media_type: img.tipo as ImageMediaType,
+            media_type: baseMime(img.tipo) as ImageMediaType,
             data: buf.toString("base64"),
           },
         };
@@ -80,7 +97,7 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
-        // pdfjs-dist v2 legacy (CommonJS puro, sem DOM, sem worker)
+        // pdfjs-dist v2 legacy — CommonJS puro, sem DOM, sem worker
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const pdfjs = require("pdfjs-dist/legacy/build/pdf.js") as typeof import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "";
@@ -101,7 +118,7 @@ async function buildContent(
         }
 
         const texto = paginas.join("\n").trim();
-        console.log("[pdfjs] extraído — chars:", texto.length, "págs:", pdfDoc.numPages);
+        console.log(`[pdf] "${pdf.nome}" — chars:${texto.length} págs:${pdfDoc.numPages}`);
 
         if (!texto) {
           return {
@@ -114,10 +131,41 @@ async function buildContent(
           text: `=== PDF: ${pdf.nome} (${pdfDoc.numPages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
-        console.error("[pdf] erro:", e);
+        console.error(`[pdf] erro em "${pdf.nome}":`, e);
         return {
           type: "text",
           text: `[PDF: ${pdf.nome} — erro ao extrair: ${e instanceof Error ? e.message : String(e)}]`,
+        };
+      }
+    })
+  );
+
+  const docxBlocos = await Promise.all(
+    docxs.map(async (doc): Promise<Anthropic.TextBlockParam> => {
+      const buf = await baixarBuffer(doc.url);
+      if (!buf) {
+        return { type: "text", text: `[Documento: ${doc.nome} — não foi possível baixar]` };
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const mammoth = require("mammoth") as {
+          extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }>;
+        };
+        const result = await mammoth.extractRawText({ buffer: buf });
+        const texto = result.value.trim();
+        console.log(`[docx] "${doc.nome}" — chars:${texto.length}`);
+        if (!texto) {
+          return {
+            type: "text",
+            text: `[Documento: ${doc.nome} — sem conteúdo de texto extraível]`,
+          };
+        }
+        return { type: "text", text: `=== Documento: ${doc.nome} ===\n${texto}\n===` };
+      } catch (e) {
+        console.error(`[docx] erro em "${doc.nome}":`, e);
+        return {
+          type: "text",
+          text: `[Documento: ${doc.nome} — erro ao extrair: ${e instanceof Error ? e.message : String(e)}]`,
         };
       }
     })
@@ -129,16 +177,20 @@ async function buildContent(
         const res = await fetch(txt.url);
         if (res.ok) {
           const conteudo = await res.text();
+          console.log(`[txt] "${txt.nome}" — chars:${conteudo.length}`);
           return { type: "text", text: `=== ${txt.nome} ===\n${conteudo}\n===` };
         }
+        console.error(`[txt] "${txt.nome}" HTTP ${res.status}`);
       } catch (e) {
-        console.error("[buildContent] text fetch error:", e);
+        console.error(`[txt] erro em "${txt.nome}":`, e);
       }
       return { type: "text", text: `[Arquivo de texto: ${txt.nome} — não foi possível carregar]` };
     })
   );
 
-  return [...imagemBlocos, ...pdfBlocos, ...textoBlocos, { type: "text", text: content }];
+  const blocos = [...imagemBlocos, ...pdfBlocos, ...docxBlocos, ...textoBlocos];
+  console.log(`[buildContent] blocos montados: ${blocos.length} + 1 texto`);
+  return [...blocos, { type: "text", text: content }];
 }
 
 export async function POST(req: NextRequest) {
@@ -203,6 +255,20 @@ export async function POST(req: NextRequest) {
 
         // 4. Stream Claude
         const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+        // Log de diagnóstico antes de enviar para a API
+        const payloadSize = JSON.stringify(mensagens).length;
+        console.log(
+          `[claude] enviando — msgs:${mensagens.length} payload:${(payloadSize / 1024).toFixed(1)}KB arquivos:${(body.arquivos ?? []).length}`
+        );
+        mensagens.forEach((m, i) => {
+          const c = m.content;
+          if (Array.isArray(c)) {
+            console.log(
+              `  msg[${i}] role:${m.role} blocos:${c.length} tipos:${c.map((b) => b.type).join(",")}`
+            );
+          }
+        });
 
         let fullText = "";
         let inputTokens = 0;

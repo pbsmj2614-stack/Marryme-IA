@@ -17,9 +17,21 @@ const TIPOS_ACEITOS = [
   "image/webp",
   "application/pdf",
   "text/plain",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
 ];
 // Extensões aceitas como fallback (alguns SOs omitem o MIME type)
-const EXTENSOES_ACEITAS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt"];
+const EXTENSOES_ACEITAS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
+  ".pdf",
+  ".txt",
+  ".docx",
+  ".doc",
+];
 const MAX_ARQUIVOS = 10;
 const MAX_TOTAL_MB = 50;
 
