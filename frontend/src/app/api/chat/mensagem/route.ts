@@ -28,40 +28,71 @@ type MsgRow = { role: "user" | "assistant"; content: string; arquivos: ChatArqui
 
 type SbAdmin = ReturnType<typeof supabaseAdmin>;
 
-const MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-type ImageMediaType = (typeof MEDIA_TYPES)[number];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type ImageMediaType = (typeof IMAGE_TYPES)[number];
+
+async function baixarBase64(url: string, sb: SbAdmin): Promise<string | null> {
+  try {
+    const match = url.match(/\/storage\/v1\/object\/(?:public\/)?chat-arquivos\/(.+)/);
+    if (!match) return null;
+    // Remove query params e decodifica caracteres especiais do nome do arquivo
+    const caminho = decodeURIComponent(match[1].split("?")[0]);
+    const { data, error } = await sb.storage.from("chat-arquivos").download(caminho);
+    if (error) {
+      console.error("[baixarBase64] download error:", error.message, "path:", caminho);
+      return null;
+    }
+    if (!data) return null;
+    return Buffer.from(await data.arrayBuffer()).toString("base64");
+  } catch (e) {
+    console.error("[baixarBase64] unexpected error:", e);
+    return null;
+  }
+}
 
 async function buildContent(
   content: string,
   arquivos: ChatArquivo[],
   sb: SbAdmin
 ): Promise<Anthropic.MessageParam["content"]> {
-  const imagens = arquivos.filter((a) => (MEDIA_TYPES as readonly string[]).includes(a.tipo));
-  if (imagens.length === 0) return content;
+  const imagens = arquivos.filter((a) => (IMAGE_TYPES as readonly string[]).includes(a.tipo));
+  const pdfs = arquivos.filter((a) => a.tipo === "application/pdf");
 
-  const blocos = await Promise.all(
+  if (imagens.length === 0 && pdfs.length === 0) return content;
+
+  const imagemBlocos = await Promise.all(
     imagens.map(async (img): Promise<Anthropic.ImageBlockParam> => {
-      try {
-        // Extrai o caminho relativo dentro do bucket a partir da URL pública
-        const match = img.url.match(/\/storage\/v1\/object\/(?:public\/)?chat-arquivos\/(.+)/);
-        if (match) {
-          const { data } = await sb.storage.from("chat-arquivos").download(match[1]);
-          if (data) {
-            const b64 = Buffer.from(await data.arrayBuffer()).toString("base64");
-            return {
-              type: "image",
-              source: { type: "base64", media_type: img.tipo as ImageMediaType, data: b64 },
-            };
-          }
-        }
-      } catch {
-        /* fallback para URL se download falhar */
+      const b64 = await baixarBase64(img.url, sb);
+      if (b64) {
+        return {
+          type: "image",
+          source: { type: "base64", media_type: img.tipo as ImageMediaType, data: b64 },
+        };
       }
       return { type: "image", source: { type: "url", url: img.url } };
     })
   );
 
-  return [...blocos, { type: "text", text: content }];
+  const pdfBlocos = await Promise.all(
+    pdfs.map(async (pdf): Promise<Anthropic.DocumentBlockParam | Anthropic.TextBlockParam> => {
+      const b64 = await baixarBase64(pdf.url, sb);
+      if (b64) {
+        return {
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: b64 },
+          title: pdf.nome,
+        } as Anthropic.DocumentBlockParam;
+      }
+      // Fallback: envia via URL pública para o Claude buscar diretamente
+      return {
+        type: "document",
+        source: { type: "url", url: pdf.url },
+        title: pdf.nome,
+      } as Anthropic.DocumentBlockParam;
+    })
+  );
+
+  return [...imagemBlocos, ...pdfBlocos, { type: "text", text: content }];
 }
 
 export async function POST(req: NextRequest) {
