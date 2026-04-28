@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { ChatSessao, ChatMensagem, ChatArquivo, ChatTipo, Roteiro } from "@/lib/types";
 import { createClient } from "@/lib/supabase";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import SidebarSessoes from "./SidebarSessoes";
 import ChatArea from "./ChatArea";
 import InputArea from "./InputArea";
@@ -19,6 +20,14 @@ interface Props {
 }
 
 export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInicial }: Props) {
+  const { user } = useCurrentUser();
+  const userInitial = (
+    user?.user_metadata?.full_name?.[0] ??
+    user?.user_metadata?.name?.[0] ??
+    user?.email?.[0] ??
+    "U"
+  ).toUpperCase();
+
   const [sessoes, setSessoes] = useState<ChatSessao[]>([]);
   const [sessaoAtiva, setSessaoAtiva] = useState<string | null>(sessaoInicial ?? null);
   const [mensagens, setMensagens] = useState<ChatMensagem[]>([]);
@@ -383,6 +392,7 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
               hasMoreMsgs={hasMoreMsgs}
               carregandoMais={carregandoMaisAntigos}
               onCarregarMais={carregarMaisAntigos}
+              userInitial={userInitial}
             />
           )}
 

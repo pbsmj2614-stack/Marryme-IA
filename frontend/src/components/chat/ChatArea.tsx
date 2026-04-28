@@ -25,9 +25,16 @@ interface Props {
   hasMoreMsgs?: boolean;
   carregandoMais?: boolean;
   onCarregarMais?: () => void;
+  userInitial?: string;
 }
 
-function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
+function Bolha({
+  msg,
+  userInitial,
+}: {
+  msg: ChatMensagem | MensagemTemporaria;
+  userInitial?: string;
+}) {
   const [copiado, setCopiado] = useState(false);
   const isIA = msg.role === "assistant";
 
@@ -45,7 +52,7 @@ function Bolha({ msg }: { msg: ChatMensagem | MensagemTemporaria }) {
           isIA ? "bg-brand-100 text-brand-700" : "bg-slate-600 text-white"
         }`}
       >
-        {isIA ? "IA" : "Vc"}
+        {isIA ? "C" : (userInitial ?? "U")}
       </div>
 
       <div className={`flex flex-col gap-1 max-w-[78%] ${isIA ? "" : "items-end"}`}>
@@ -108,7 +115,7 @@ function TypingIndicator() {
   return (
     <div className="flex gap-3">
       <div className="shrink-0 w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-bold text-brand-700">
-        IA
+        C
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
         <div className="flex gap-1 items-center h-4">
@@ -134,6 +141,7 @@ export default function ChatArea({
   hasMoreMsgs,
   carregandoMais,
   onCarregarMais,
+  userInitial,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -212,7 +220,7 @@ export default function ChatArea({
           )}
 
           {mensagens.map((m) => (
-            <Bolha key={m.id} msg={m} />
+            <Bolha key={m.id} msg={m} userInitial={userInitial} />
           ))}
 
           {isStreaming && streamingText && (
@@ -225,6 +233,7 @@ export default function ChatArea({
                 criado_em: new Date().toISOString(),
                 streaming: true,
               }}
+              userInitial={userInitial}
             />
           )}
 
