@@ -73,7 +73,6 @@ async function buildContent(
     })
   );
 
-  // PDFs: extrai texto com pdf-parse → bloco de texto puro (compatível com qualquer modelo Claude)
   const pdfBlocos = await Promise.all(
     pdfs.map(async (pdf): Promise<Anthropic.TextBlockParam> => {
       const buf = await baixarBuffer(pdf.url);
@@ -81,28 +80,14 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
-        // pdfjs-dist v5 (ESM) — extrai texto diretamente sem worker (Node.js server)
-        const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-        GlobalWorkerOptions.workerSrc = "";
-
-        const pdfDoc = await getDocument({
-          data: new Uint8Array(buf),
-          useWorkerFetch: false,
-          useSystemFonts: true,
-        }).promise;
-
-        const paginas: string[] = [];
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-          const pagina = await pdfDoc.getPage(i);
-          const conteudo = await pagina.getTextContent();
-          const textoPagina = conteudo.items
-            .map((item) => ("str" in item ? item.str + (item.hasEOL ? "\n" : " ") : ""))
-            .join("");
-          paginas.push(textoPagina);
-        }
-
-        const texto = paginas.join("\n").trim();
-        console.log("[pdf] extraído — chars:", texto.length, "págs:", pdfDoc.numPages);
+        // pdf-parse com pdfjs-dist@2.x (CommonJS, compatível com Node.js)
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
+          buf: Buffer
+        ) => Promise<{ text: string; numpages: number }>;
+        const parsed = await pdfParse(buf);
+        const texto = parsed.text?.trim() ?? "";
+        console.log("[pdf-parse] extraído — chars:", texto.length, "págs:", parsed.numpages);
 
         if (!texto) {
           return {
@@ -112,7 +97,7 @@ async function buildContent(
         }
         return {
           type: "text",
-          text: `=== PDF: ${pdf.nome} (${pdfDoc.numPages} p.) ===\n${texto}\n===`,
+          text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
         console.error("[pdf] erro:", e);
