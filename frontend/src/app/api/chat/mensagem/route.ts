@@ -81,30 +81,44 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
-        // Usa o caminho interno do pdf-parse para evitar o bug de carregamento
-        // de arquivos de teste que quebra a inicialização no ambiente Next.js
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
-          buf: Buffer
-        ) => Promise<{ text: string; numpages: number }>;
-        const parsed = await pdfParse(buf);
-        const texto = parsed.text?.trim();
-        console.log("[pdf-parse] extraído — chars:", texto?.length, "págs:", parsed.numpages);
+        // pdfjs-dist v5 (ESM) — extrai texto diretamente sem worker (Node.js server)
+        const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
+        GlobalWorkerOptions.workerSrc = "";
+
+        const pdfDoc = await getDocument({
+          data: new Uint8Array(buf),
+          useWorkerFetch: false,
+          useSystemFonts: true,
+        }).promise;
+
+        const paginas: string[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const pagina = await pdfDoc.getPage(i);
+          const conteudo = await pagina.getTextContent();
+          const textoPagina = conteudo.items
+            .map((item) => ("str" in item ? item.str + (item.hasEOL ? "\n" : " ") : ""))
+            .join("");
+          paginas.push(textoPagina);
+        }
+
+        const texto = paginas.join("\n").trim();
+        console.log("[pdf] extraído — chars:", texto.length, "págs:", pdfDoc.numPages);
+
         if (!texto) {
           return {
             type: "text",
-            text: `[PDF: ${pdf.nome} — PDF baseado em imagem, sem camada de texto. Peça ao usuário para enviar as páginas como imagem ou copiar o conteúdo.]`,
+            text: `[PDF: ${pdf.nome} — PDF baseado em imagem, sem camada de texto. Peça ao usuário enviar as páginas como imagem ou copiar o conteúdo.]`,
           };
         }
         return {
           type: "text",
-          text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
+          text: `=== PDF: ${pdf.nome} (${pdfDoc.numPages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
-        console.error("[pdf-parse] erro:", e);
+        console.error("[pdf] erro:", e);
         return {
           type: "text",
-          text: `[PDF: ${pdf.nome} — erro ao extrair texto: ${e instanceof Error ? e.message : String(e)}]`,
+          text: `[PDF: ${pdf.nome} — erro ao extrair: ${e instanceof Error ? e.message : String(e)}]`,
         };
       }
     })
