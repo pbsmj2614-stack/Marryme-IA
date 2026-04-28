@@ -81,12 +81,15 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
+        // Usa o caminho interno do pdf-parse para evitar o bug de carregamento
+        // de arquivos de teste que quebra a inicialização no ambiente Next.js
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse") as (
+        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
           buf: Buffer
         ) => Promise<{ text: string; numpages: number }>;
         const parsed = await pdfParse(buf);
         const texto = parsed.text?.trim();
+        console.log("[pdf-parse] extraído — chars:", texto?.length, "págs:", parsed.numpages);
         if (!texto) {
           return {
             type: "text",
@@ -98,8 +101,11 @@ async function buildContent(
           text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
-        console.error("[buildContent] pdf-parse error:", e);
-        return { type: "text", text: `[PDF: ${pdf.nome} — erro ao extrair texto]` };
+        console.error("[pdf-parse] erro:", e);
+        return {
+          type: "text",
+          text: `[PDF: ${pdf.nome} — erro ao extrair texto: ${e instanceof Error ? e.message : String(e)}]`,
+        };
       }
     })
   );
