@@ -47,6 +47,7 @@ interface ArquivoPreview {
   preview?: string;
   uploading: boolean;
   url?: string;
+  tipoServidor?: string;
   erro?: string;
 }
 
@@ -89,8 +90,10 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
       return;
     }
 
-    const { url } = (await res.json()) as { url: string };
-    setArquivos((prev) => prev.map((a, i) => (i === idx ? { ...a, uploading: false, url } : a)));
+    const { url, tipo: tipoServidor } = (await res.json()) as { url: string; tipo?: string };
+    setArquivos((prev) =>
+      prev.map((a, i) => (i === idx ? { ...a, uploading: false, url, tipoServidor } : a))
+    );
   }
 
   function adicionarArquivos(files: File[]) {
@@ -154,7 +157,8 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
       .map((a) => ({
         nome: a.file.name,
         url: a.url!,
-        tipo: a.file.type,
+        // usa o tipo retornado pelo servidor (corrigido por extensão) ou o do browser
+        tipo: a.tipoServidor ?? a.file.type,
         tamanho: a.file.size,
       }));
 
