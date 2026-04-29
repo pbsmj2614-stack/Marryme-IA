@@ -6,7 +6,7 @@ const nextConfig = {
     instrumentationHook: true,
   },
   // Impede o Next.js de empacotar esses módulos CommonJS — devem ser resolvidos do node_modules
-  serverExternalPackages: ["pdfjs-dist", "mammoth"],
+  serverExternalPackages: ["pdfjs-dist", "mammoth", "pdf-parse"],
 };
 
 export default withSentryConfig(nextConfig, {

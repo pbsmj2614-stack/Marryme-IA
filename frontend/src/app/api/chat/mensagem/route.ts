@@ -97,28 +97,16 @@ async function buildContent(
         return { type: "text", text: `[PDF: ${pdf.nome} — não foi possível baixar]` };
       }
       try {
-        // pdfjs-dist v2 legacy — CommonJS puro, sem DOM, sem worker
+        // pdf-parse v1.1.1 — autocontido, pdfjs embutido, sem DOM, sem worker
+        // Path interno evita o código de teste do index.js que carrega arquivo inexistente
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfjs = require("pdfjs-dist/legacy/build/pdf.js") as typeof import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "";
+        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
+          buf: Buffer
+        ) => Promise<{ text: string; numpages: number }>;
 
-        const pdfDoc = await pdfjs.getDocument({
-          data: new Uint8Array(buf),
-          useWorkerFetch: false,
-          isEvalSupported: false,
-        }).promise;
-
-        const paginas: string[] = [];
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
-          const pagina = await pdfDoc.getPage(i);
-          const tc = await pagina.getTextContent();
-          paginas.push(
-            tc.items.map((it) => ("str" in it ? it.str + (it.hasEOL ? "\n" : " ") : "")).join("")
-          );
-        }
-
-        const texto = paginas.join("\n").trim();
-        console.log(`[pdf] "${pdf.nome}" — chars:${texto.length} págs:${pdfDoc.numPages}`);
+        const parsed = await pdfParse(buf);
+        const texto = (parsed.text ?? "").trim();
+        console.log(`[pdf] "${pdf.nome}" — chars:${texto.length} págs:${parsed.numpages}`);
 
         if (!texto) {
           return {
@@ -128,7 +116,7 @@ async function buildContent(
         }
         return {
           type: "text",
-          text: `=== PDF: ${pdf.nome} (${pdfDoc.numPages} p.) ===\n${texto}\n===`,
+          text: `=== PDF: ${pdf.nome} (${parsed.numpages} p.) ===\n${texto}\n===`,
         };
       } catch (e) {
         console.error(`[pdf] erro em "${pdf.nome}":`, e);
