@@ -35,9 +35,15 @@ export async function POST(req: NextRequest) {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   const contentType = file.type || EXT_MIME[ext] || "application/octet-stream";
 
-  console.log(`[upload] "${file.name}" tipo:${contentType} bytes:${file.size}`);
+  // Sanitiza nome: remove acentos, substitui espaços/chars especiais por underscore
+  const nomeBase = file.name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_");
 
-  const caminho = `${prestadorId}/${dir}/${Date.now()}-${file.name}`;
+  console.log(`[upload] "${file.name}" → "${nomeBase}" tipo:${contentType} bytes:${file.size}`);
+
+  const caminho = `${prestadorId}/${dir}/${Date.now()}-${nomeBase}`;
   const bytes = await file.arrayBuffer();
 
   const supabase = supabaseAdmin();

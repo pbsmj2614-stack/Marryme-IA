@@ -208,10 +208,10 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
                 <span className="text-base">{a.erro ? "⚠️" : "📄"}</span>
               )}
               <div className="flex flex-col min-w-0">
-                <span className="max-w-[100px] truncate">{a.file.name}</span>
+                <span className="max-w-[120px] truncate">{a.file.name}</span>
                 {a.erro && (
-                  <span className="text-[10px] text-red-500 truncate max-w-[100px]">
-                    Falha no upload
+                  <span className="text-[10px] text-red-500 max-w-[160px] break-words leading-tight">
+                    {a.erro}
                   </span>
                 )}
               </div>
