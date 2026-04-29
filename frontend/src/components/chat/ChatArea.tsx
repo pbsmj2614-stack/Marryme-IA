@@ -175,18 +175,22 @@ export default function ChatArea({
     }
   }, [streamingText]);
 
-  function handleScroll() {
-    const el = containerRef.current;
-    if (!el) return;
-    setMostrarScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
-  }
-
   function handleCarregarMais() {
     const container = containerRef.current;
     if (!container || !onCarregarMais) return;
     prevScrollHeightRef.current = container.scrollHeight;
     isPrependingRef.current = true;
     onCarregarMais();
+  }
+
+  function handleScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    setMostrarScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+    // Dispara carregamento automático ao chegar perto do topo (dentro de 80px)
+    if (el.scrollTop < 80 && hasMoreMsgs && !carregandoMais) {
+      handleCarregarMais();
+    }
   }
 
   return (
