@@ -18,6 +18,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import type { CampanhaInsight, KPIsCampanha, DadosRelatorio, ContaMeta } from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { metaSincronizarSchema } from "@/lib/schemas";
 
 const META_VERSION = process.env.META_API_VERSION ?? "v18.0";
 const META_BASE = `https://graph.facebook.com/${META_VERSION}`;
@@ -273,16 +275,16 @@ const MESSAGE_TYPES = [
 export async function POST(req: NextRequest) {
   let prestador_id_global = "";
   try {
-    const body = await req.json().catch(() => null);
-    if (!body?.prestador_id) {
-      return NextResponse.json({ error: "prestador_id obrigatório." }, { status: 400 });
-    }
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
 
-    const { prestador_id, periodo_inicio, periodo_fim } = body as {
-      prestador_id: string;
-      periodo_inicio?: string;
-      periodo_fim?: string;
-    };
+    const parsed = metaSincronizarSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+        { status: 400 }
+      );
+    const { prestador_id, periodo_inicio, periodo_fim } = parsed.data;
     prestador_id_global = prestador_id;
 
     // Período padrão: últimos 30 dias

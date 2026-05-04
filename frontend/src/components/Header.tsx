@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { useRole } from "@/hooks/useRole";
 import type { User } from "@supabase/supabase-js";
+import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   user?: User | null;
@@ -80,12 +81,9 @@ export default function Header({ user }: HeaderProps) {
             );
           })}
 
-          <Link
-            href="/novo"
-            className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg transition font-medium ml-1"
-          >
-            + Novo
-          </Link>
+          <Button asChild size="sm" className="ml-1">
+            <Link href="/novo">+ Novo</Link>
+          </Button>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -116,12 +114,9 @@ export default function Header({ user }: HeaderProps) {
                 </Link>
               )}
 
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-500 hover:text-gray-800 transition"
-              >
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
                 Sair
-              </button>
+              </Button>
             </>
           )}
         </div>

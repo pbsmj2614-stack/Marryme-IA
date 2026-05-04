@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 
 const META_VERSION = process.env.META_API_VERSION ?? "v18.0";
 const META_BASE = `https://graph.facebook.com/${META_VERSION}`;
@@ -29,6 +30,9 @@ async function getTokenFromDB(): Promise<string | null> {
 }
 
 export async function GET(req: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
+
   const accountId = req.nextUrl.searchParams.get("account_id")?.replace(/^act_/i, "") ?? "";
 
   const tokenDB = await getTokenFromDB();

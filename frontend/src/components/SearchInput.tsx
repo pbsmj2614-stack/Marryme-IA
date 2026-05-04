@@ -2,6 +2,8 @@
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
+import { Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   placeholder?: string;
@@ -20,7 +22,6 @@ export default function SearchInput({
 
   const [valor, setValor] = useState(searchParams.get(paramName) ?? "");
 
-  // Debounce: só atualiza a URL 300ms após parar de digitar
   const pushURL = useCallback(
     (v: string) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -41,31 +42,24 @@ export default function SearchInput({
 
   return (
     <div className={`relative flex items-center ${className}`}>
-      <svg
-        className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <circle cx="11" cy="11" r="8" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" strokeLinecap="round" />
-      </svg>
+      <Search className="absolute left-3 w-4 h-4 text-gray-400 pointer-events-none" />
       <input
         type="text"
         value={valor}
         onChange={(e) => setValor(e.target.value)}
         placeholder={placeholder}
-        className="pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400 transition w-full"
+        className="pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400 transition w-full"
       />
       {valor && (
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setValor("")}
-          className="absolute right-2.5 text-gray-300 hover:text-gray-500 text-base leading-none"
           aria-label="Limpar busca"
+          className="absolute right-1 h-6 w-6 text-gray-300 hover:text-gray-500 hover:bg-transparent"
         >
-          ✕
-        </button>
+          <X className="w-3.5 h-3.5" />
+        </Button>
       )}
     </div>
   );

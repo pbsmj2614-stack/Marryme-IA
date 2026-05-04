@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import type { KPIsCampanha, CampanhaInsight } from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { analiseGerarSchema } from "@/lib/schemas";
 
 function fmtBRL(n: number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -121,11 +123,16 @@ Responda APENAS com um JSON válido (sem markdown, sem explicação fora do JSON
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { prestador_id?: string };
-    const { prestador_id } = body;
-    if (!prestador_id) {
-      return NextResponse.json({ error: "prestador_id obrigatório" }, { status: 400 });
-    }
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
+
+    const parsed = analiseGerarSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+        { status: 400 }
+      );
+    const { prestador_id } = parsed.data;
 
     const supabase = supabaseAdmin();
 
@@ -192,6 +199,15 @@ export async function POST(req: NextRequest) {
       async start(controller) {
         let fullText = "";
 
+        // Keepalive: evita timeout em proxies/conexões lentas (a cada 20s)
+        const heartbeatId = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(": heartbeat\n\n"));
+          } catch {
+            /* stream já fechado */
+          }
+        }, 20_000);
+
         try {
           const claudeStream = await anthropic.messages.stream({
             model: "claude-sonnet-4-6",
@@ -234,8 +250,10 @@ export async function POST(req: NextRequest) {
             encoder.encode(`data: ${JSON.stringify({ done: true, analise: analiseJson })}\n\n`)
           );
         } catch (err) {
+          console.error("[analise/gerar] erro durante stream:", err);
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: String(err) })}\n\n`));
         } finally {
+          clearInterval(heartbeatId);
           controller.close();
         }
       },
@@ -249,6 +267,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
+    console.error("[analise/gerar] erro pré-stream:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

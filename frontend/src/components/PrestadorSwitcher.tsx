@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   musico: "Músico",
@@ -48,28 +50,24 @@ export default function PrestadorSwitcher({ atual, todos }: Props) {
       <span className="text-[17px] font-bold text-gray-900 truncate leading-tight">
         {atual.nome_artistico}
       </span>
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => {
           setAberto((v) => !v);
           setBusca("");
         }}
         title="Trocar prestador"
-        className={`shrink-0 p-0.5 rounded transition ${
+        className={`shrink-0 h-7 w-7 p-0.5 ${
           aberto
             ? "bg-gray-200 text-gray-700"
             : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
         }`}
       >
-        <svg
+        <ChevronDown
           className={`w-4 h-4 transition-transform duration-150 ${aberto ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+        />
+      </Button>
 
       {aberto && (
         <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-72">

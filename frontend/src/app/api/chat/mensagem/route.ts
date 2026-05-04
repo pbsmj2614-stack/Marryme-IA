@@ -20,6 +20,8 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { chatMensagemSchema } from "@/lib/schemas";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { montarSystemPrompt } from "@/lib/chat/montar-contexto";
 import type { ChatArquivo } from "@/lib/types";
@@ -182,21 +184,18 @@ async function buildContent(
 }
 
 export async function POST(req: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
+
   const encoder = new TextEncoder();
 
-  const body = (await req.json().catch(() => null)) as {
-    sessao_id: string;
-    prestador_id: string;
-    content: string;
-    arquivos?: ChatArquivo[];
-  } | null;
-
-  if (!body?.sessao_id || !body?.prestador_id || !body?.content) {
+  const parsed = chatMensagemSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
     return new Response(
-      `data: ${JSON.stringify({ error: "sessao_id, prestador_id e content são obrigatórios" })}\n\n`,
+      `data: ${JSON.stringify({ error: parsed.error.issues[0]?.message ?? "Dados inválidos" })}\n\n`,
       { status: 400, headers: { "Content-Type": "text/event-stream" } }
     );
-  }
+  const body = parsed.data;
 
   const supabase = supabaseAdmin();
 

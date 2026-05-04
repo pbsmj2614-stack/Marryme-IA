@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
+import { Zap, RefreshCw, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -149,15 +152,15 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
   const [analise, setAnalise] = useState<AnaliseData | null>(ultimaAnalise ?? null);
   const [analiseEm, setAnaliseEm] = useState<string | null>(ultimaAnaliseEm ?? null);
-  const [erro, setErro] = useState<string | null>(null);
+  const [erroGeração, setErroGeração] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>("resumo");
   const [copiado, setCopiado] = useState(false);
   const [passosFe, setPassosFe] = useState<boolean[]>([]);
 
   const gerarAnalise = useCallback(async () => {
     setGerando(true);
-    setErro(null);
     setAnalise(null);
+    setErroGeração(null);
     let msgIdx = 0;
     setLoadingMsg(LOADING_MSGS[0]);
 
@@ -180,33 +183,37 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const lines = decoder.decode(value).split("\n");
+
+        // Acumula chunks — SSE pode chegar fragmentado em múltiplos pacotes TCP
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // guarda linha incompleta para o próximo chunk
+
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
+          let msg: { text?: string; done?: boolean; analise?: AnaliseData; error?: string };
           try {
-            const msg = JSON.parse(line.slice(6)) as {
-              text?: string;
-              done?: boolean;
-              analise?: AnaliseData;
-              error?: string;
-            };
-            if (msg.error) throw new Error(msg.error);
-            if (msg.done && msg.analise) {
-              setAnalise(msg.analise);
-              setAnaliseEm(new Date().toLocaleString("pt-BR"));
-              setPassosFe(new Array((msg.analise.proximos_passos ?? []).length).fill(false));
-            }
+            msg = JSON.parse(line.slice(6)) as typeof msg;
           } catch {
-            /* chunk parcial */
+            continue; // JSON malformado no meio de um chunk — aguarda o restante no buffer
+          }
+          if (msg.error) throw new Error(msg.error); // propaga para o catch externo
+          if (msg.done && msg.analise) {
+            setAnalise(msg.analise);
+            setAnaliseEm(new Date().toLocaleString("pt-BR"));
+            setPassosFe(new Array((msg.analise.proximos_passos ?? []).length).fill(false));
           }
         }
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg);
+      setErroGeração(msg);
     } finally {
       clearInterval(interval);
       setGerando(false);
@@ -256,30 +263,16 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
           Diagnóstico completo dos seus dados Meta Ads com recomendações estratégicas
           personalizadas.
         </p>
-        {erro && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700">
-            {erro}
+        <Button onClick={gerarAnalise} className="mx-auto flex items-center gap-2">
+          <Zap className="w-4 h-4" />
+          Gerar Análise IA
+        </Button>
+        {erroGeração && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700 max-w-sm mx-auto text-left">
+            <p className="font-semibold mb-0.5">Erro ao gerar análise</p>
+            <p className="break-words">{erroGeração}</p>
           </div>
         )}
-        <button
-          onClick={gerarAnalise}
-          className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition flex items-center gap-2 mx-auto"
-        >
-          <svg
-            className="w-4 h-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <polygon
-              points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Gerar Análise IA
-        </button>
       </div>
     );
   }
@@ -292,12 +285,7 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
         <p className="text-xs text-red-500 mb-4">
           O modelo retornou um formato inesperado. Tente gerar novamente.
         </p>
-        <button
-          onClick={gerarAnalise}
-          className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-        >
-          Tentar novamente
-        </button>
+        <Button onClick={gerarAnalise}>Tentar novamente</Button>
       </div>
     );
   }
@@ -329,26 +317,15 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
           </div>
           {analise.nota_geral != null && <NotaGeral nota={analise.nota_geral} />}
         </div>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={gerarAnalise}
-          className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex items-center gap-1.5"
+          className="flex items-center gap-1.5 text-xs"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <polyline points="23 4 23 10 17 10" strokeLinecap="round" strokeLinejoin="round" />
-            <path
-              d="M20.49 15a9 9 0 11-2.12-9.36L23 10"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <RefreshCw className="w-3.5 h-3.5" />
           Regenerar
-        </button>
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -532,55 +509,24 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">
                 Pauta da reunião
               </p>
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={copiarPauta}
-                className="text-xs text-brand-600 hover:text-brand-700 border border-brand-200 px-3 py-1.5 rounded-lg hover:bg-brand-50 transition flex items-center gap-1.5"
+                className="text-xs text-brand-600 border-brand-200 hover:bg-brand-50 flex items-center gap-1.5"
               >
                 {copiado ? (
                   <>
-                    <svg
-                      className="w-3.5 h-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline
-                        points="20 6 9 17 4 12"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Check className="w-3.5 h-3.5" />
                     Copiado!
                   </>
                 ) : (
                   <>
-                    <svg
-                      className="w-3.5 h-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect
-                        x="9"
-                        y="9"
-                        width="13"
-                        height="13"
-                        rx="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Copy className="w-3.5 h-3.5" />
                     Copiar pauta
                   </>
                 )}
-              </button>
+              </Button>
             </div>
             <ol className="space-y-2">
               {(analise.pauta_reuniao ?? []).map((item, i) => (

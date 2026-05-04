@@ -22,6 +22,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { requireRole } from "@/lib/api-auth";
+import { novoClienteSchema } from "@/lib/schemas";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -152,9 +154,15 @@ function normalizePhone(phone: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
-    if (!body) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    const auth = await requireRole("cs_senior");
+    if (auth instanceof NextResponse) return auth;
 
+    const parsed = novoClienteSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+        { status: 400 }
+      );
     const {
       nome_empresa,
       segmento,
@@ -165,18 +173,7 @@ export async function POST(req: NextRequest) {
       fase_projeto,
       responsavel_mm,
       observacoes,
-    } = body as Record<string, string>;
-
-    // ── Validações ──
-    if (!nome_empresa?.trim() || nome_empresa.trim().length < 2) {
-      return NextResponse.json(
-        { error: "Nome da empresa é obrigatório (mínimo 2 caracteres)." },
-        { status: 400 }
-      );
-    }
-    if (email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      return NextResponse.json({ error: "E-mail inválido." }, { status: 400 });
-    }
+    } = parsed.data;
 
     // ── 0. Verificar duplicata no banco ANTES de fazer qualquer coisa ──
     const supabaseUrlCheck = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";

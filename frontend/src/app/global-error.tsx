@@ -2,6 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   useEffect(() => {
@@ -16,12 +17,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
           <p className="text-gray-500 text-sm mb-6">
             Um erro inesperado ocorreu. Nossa equipe foi notificada.
           </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition"
-          >
-            Recarregar página
-          </button>
+          <Button onClick={() => window.location.reload()}>Recarregar página</Button>
         </div>
       </body>
     </html>

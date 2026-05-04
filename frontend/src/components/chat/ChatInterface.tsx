@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { ChatSessao, ChatMensagem, ChatArquivo, ChatTipo, Roteiro } from "@/lib/types";
 import { createClient } from "@/lib/supabase";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { Button } from "@/components/ui/button";
 import SidebarSessoes from "./SidebarSessoes";
 import ChatArea from "./ChatArea";
 import InputArea from "./InputArea";
@@ -348,12 +349,12 @@ export default function ChatInterface({ prestadorId, roteirosAntigos, sessaoInic
               </p>
 
               {podeFinalizarSessao && (
-                <button
+                <Button
                   onClick={finalizar}
-                  className="shrink-0 text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
+                  className="shrink-0 text-xs px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg transition h-auto"
                 >
                   ✓ Finalizar sessão
-                </button>
+                </Button>
               )}
 
               {sessaoAtivaObj?.status === "finalizada" && (

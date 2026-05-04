@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 
 // Fallback de MIME por extensão — browsers no Windows às vezes retornam type vazio
 const EXT_MIME: Record<string, string> = {
@@ -17,6 +18,9 @@ const EXT_MIME: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
+
   let formData: FormData;
   try {
     formData = await req.formData();

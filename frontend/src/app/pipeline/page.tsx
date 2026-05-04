@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
@@ -18,6 +19,9 @@ import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
+import { useUIStore } from "@/store/uiStore";
+import { Loader2, RefreshCw, X, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,36 +86,6 @@ const FILTROS: FiltroStatus[] = [
 const RESPONSAVEIS = ["Todos", ...RESPONSAVEIS_BASE] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// ─── Toast ────────────────────────────────────────────────────────────────────
-
-interface ToastState {
-  msg: string;
-  type: "success" | "error";
-}
-
-function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 4000);
-    return () => clearTimeout(t);
-  }, [onClose, toast]);
-
-  return (
-    <div
-      className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium transition-all ${
-        toast.type === "success"
-          ? "bg-green-950 border-green-700 text-green-300"
-          : "bg-red-950 border-red-700 text-red-300"
-      }`}
-    >
-      <span>{toast.type === "success" ? "✓" : "✕"}</span>
-      <span>{toast.msg}</span>
-      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100 text-xs">
-        ✕
-      </button>
-    </div>
-  );
-}
 
 // ─── Status badges ────────────────────────────────────────────────────────────
 
@@ -305,21 +279,21 @@ function TabelaTarefas({
                   {/* Ações */}
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     {isEdit ? (
-                      <button
+                      <Button
                         onClick={() => setEditingId(null)}
                         className="text-gray-500 hover:text-gray-300 px-1"
                         title="Cancelar"
                       >
                         ✕
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
                         onClick={() => startEdit(t)}
                         className="text-gray-600 hover:text-gray-300 px-1 transition"
                         title="Editar tarefa"
                       >
                         ✎
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -373,13 +347,13 @@ function TabelaTarefas({
                       </select>
                     </td>
                     <td className="px-2 py-2">
-                      <button
+                      <Button
                         onClick={() => saveEdit(t)}
                         disabled={saving}
                         className="text-xs px-3 py-1 rounded bg-brand-700 hover:bg-brand-600 text-white disabled:opacity-40 transition whitespace-nowrap"
                       >
                         {saving ? "…" : "Salvar"}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 )}
@@ -460,15 +434,22 @@ export default function PipelinePage() {
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
   const invalidatePipeline = useInvalidatePipeline();
 
+  const {
+    filtroResponsavel: responsavel,
+    setFiltroResponsavel: setResponsavel,
+    pipelineFiltroStatus: filtro,
+    pipelineBusca: busca,
+    pipelineSortKey: sortKey,
+    pipelineSortDir: sortDir,
+    setPipelineFiltroStatus: setFiltro,
+    setPipelineBusca: setBusca,
+    setPipelineSortKey: setSortKey,
+    setPipelineSortDir: setSortDir,
+  } = useUIStore();
+
   const [clientes, setClientes] = useState<ClienteComMetricas[]>([]);
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const [filtro, setFiltro] = useState<FiltroStatus>("Todos");
-  const [busca, setBusca] = useState("");
-  const [responsavel, setResponsavel] = useState("Todos");
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
   const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
@@ -500,19 +481,15 @@ export default function PipelinePage() {
     try {
       const result = await importarPlanilha();
       if (result.erros.length === 0) {
-        setToast({
-          type: "success",
-          msg: `${result.clientes} clientes e ${result.tarefas} tarefas importados`,
-        });
+        toast.success(`${result.clientes} clientes e ${result.tarefas} tarefas importados`);
       } else {
-        setToast({
-          type: "error",
-          msg: `${result.clientes} clientes · ${result.tarefas} tarefas · ${result.erros.length} erro(s): ${result.erros[0]}`,
-        });
+        toast.error(
+          `${result.clientes} clientes · ${result.tarefas} tarefas · ${result.erros.length} erro(s): ${result.erros[0]}`
+        );
       }
       await invalidatePipeline();
     } catch (err) {
-      setToast({ type: "error", msg: String(err) });
+      toast.error(String(err));
     } finally {
       setSyncing(false);
     }
@@ -563,7 +540,7 @@ export default function PipelinePage() {
           ),
         }))
       );
-      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
     }
   }
 
@@ -607,7 +584,7 @@ export default function PipelinePage() {
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar");
-      setToast({ type: "success", msg: "Tarefa atualizada na planilha" });
+      toast.success("Tarefa atualizada na planilha");
     } catch (err) {
       // Revert
       setClientes((prev) =>
@@ -616,7 +593,7 @@ export default function PipelinePage() {
           tarefas: c.tarefas.map((t) => (t.id === tarefa.id ? tarefa : t)),
         }))
       );
-      setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao atualizar" });
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar");
     }
   }
 
@@ -627,14 +604,14 @@ export default function PipelinePage() {
       .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
       .eq("id_cliente", idCliente);
     if (error) {
-      setToast({ type: "error", msg: `Erro: ${error.message}` });
+      toast.error(`Erro: ${error.message}`);
     } else {
       const labels: Record<StatusCliente, string> = {
         Ativo: "reativado",
         Pausado: "pausado",
         Encerrado: "encerrado",
       };
-      setToast({ type: "success", msg: `Cliente ${labels[novoStatus]}` });
+      toast.success(`Cliente ${labels[novoStatus]}`);
       setExpandedId(null);
       await invalidatePipeline();
     }
@@ -651,7 +628,7 @@ export default function PipelinePage() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error ?? "Erro ao salvar");
-      setToast({ type: "success", msg: "Tarefa adicionada na planilha e no sistema" });
+      toast.success("Tarefa adicionada na planilha e no sistema");
       setAddTarefaFor(null);
       setAddTarefaForm({
         etapa: "",
@@ -664,10 +641,7 @@ export default function PipelinePage() {
       });
       await invalidatePipeline();
     } catch (err) {
-      setToast({
-        type: "error",
-        msg: err instanceof Error ? err.message : "Erro ao salvar tarefa",
-      });
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar tarefa");
     } finally {
       setSavingTarefa(false);
     }
@@ -714,8 +688,8 @@ export default function PipelinePage() {
     // Ordenação
     if (sortKey) {
       lista = [...lista].sort((a, b) => {
-        const av = a[sortKey];
-        const bv = b[sortKey];
+        const av = a[sortKey as SortKey];
+        const bv = b[sortKey as SortKey];
         if (typeof av === "number" && typeof bv === "number")
           return sortDir === "asc" ? av - bv : bv - av;
         return sortDir === "asc"
@@ -730,7 +704,7 @@ export default function PipelinePage() {
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else {
-      setSortKey(key);
+      setSortKey(key as string);
       setSortDir("asc");
     }
   }
@@ -742,8 +716,6 @@ export default function PipelinePage() {
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-white">
       <Header user={user} />
-
-      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* ── Cabeçalho ── */}
@@ -767,20 +739,22 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          <button
+          <Button
             onClick={handleSync}
             disabled={syncing}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2a2a2a] border border-[#444] text-sm text-gray-200 hover:border-[#666] hover:text-white transition disabled:opacity-50 whitespace-nowrap"
           >
             {syncing ? (
               <>
-                <span className="w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Sincronizando...
               </>
             ) : (
-              <>↓ Sincronizar Sheets</>
+              <>
+                <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
+              </>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* ── Filtros ── */}
@@ -788,7 +762,7 @@ export default function PipelinePage() {
           {/* Pills de status */}
           <div className="flex flex-wrap gap-1.5">
             {FILTROS.map((f) => (
-              <button
+              <Button
                 key={f}
                 onClick={() => setFiltro(f)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
@@ -798,7 +772,7 @@ export default function PipelinePage() {
                 }`}
               >
                 {f}
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -824,12 +798,12 @@ export default function PipelinePage() {
               className="pl-8 pr-7 py-1.5 text-sm bg-[#1a1a1a] border border-[#444] rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-[#666] w-48"
             />
             {busca && (
-              <button
+              <Button
                 onClick={() => setBusca("")}
                 className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs"
               >
-                ✕
-              </button>
+                <X className="w-3 h-3" />
+              </Button>
             )}
           </div>
 
@@ -970,16 +944,16 @@ export default function PipelinePage() {
                                   {c.finalizadas}/{c.total_tarefas} concluídas
                                 </span>
                                 {c.finalizadas > 0 && (
-                                  <button
+                                  <Button
                                     onClick={() => setMostrarFinalizadas((v) => !v)}
                                     className="text-xs px-2 py-0.5 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition"
                                   >
                                     {mostrarFinalizadas
                                       ? "Ocultar concluídas"
                                       : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
-                                  </button>
+                                  </Button>
                                 )}
-                                <button
+                                <Button
                                   onClick={() =>
                                     setAddTarefaFor(
                                       addTarefaFor === c.id_cliente ? null : c.id_cliente
@@ -987,8 +961,8 @@ export default function PipelinePage() {
                                   }
                                   className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
                                 >
-                                  + Tarefa
-                                </button>
+                                  <Plus className="w-3 h-3" /> Tarefa
+                                </Button>
                               </div>
                             </div>
                             <TabelaTarefas
@@ -1075,19 +1049,25 @@ export default function PipelinePage() {
                                     <option>Finalizado</option>
                                   </select>
                                   <div className="flex gap-2">
-                                    <button
+                                    <Button
                                       onClick={() => handleAddTarefa(c.id_cliente)}
                                       disabled={savingTarefa || !addTarefaForm.o_que.trim()}
                                       className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium"
                                     >
-                                      {savingTarefa ? "Salvando…" : "Salvar"}
-                                    </button>
-                                    <button
+                                      {savingTarefa ? (
+                                        <>
+                                          <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                                        </>
+                                      ) : (
+                                        "Salvar"
+                                      )}
+                                    </Button>
+                                    <Button
                                       onClick={() => setAddTarefaFor(null)}
                                       className="text-xs px-3 py-1.5 rounded-lg border border-[#444] text-gray-500 hover:text-gray-300 transition"
                                     >
-                                      ✕
-                                    </button>
+                                      <X className="w-3 h-3" />
+                                    </Button>
                                   </div>
                                 </div>
                               </div>
@@ -1099,7 +1079,7 @@ export default function PipelinePage() {
                             >
                               <span className="text-xs text-gray-500">Status do contrato:</span>
                               {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
-                                <button
+                                <Button
                                   key={s}
                                   onClick={() =>
                                     c.status !== s && handleStatusChange(c.id_cliente, s)
@@ -1115,7 +1095,7 @@ export default function PipelinePage() {
                                   }`}
                                 >
                                   {s === c.status ? `● ${s}` : s}
-                                </button>
+                                </Button>
                               ))}
                             </div>
                           </td>

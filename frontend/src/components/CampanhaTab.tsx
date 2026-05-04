@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
+import { Button } from "@/components/ui/button";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha, ContaMeta } from "@/lib/types";
 import AnaliseIA from "@/components/AnaliseIA";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
@@ -579,45 +581,18 @@ export default function CampanhaTab({
                 className="text-xs text-gray-600 bg-transparent outline-none"
               />
             </div>
-            <button
+            <Button
               onClick={handleSincronizar}
               disabled={sincronizando}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition h-auto"
             >
               {sincronizando ? (
-                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
+                <Loader2 className="animate-spin h-3.5 w-3.5" />
               ) : (
-                <svg
-                  className="w-3.5 h-3.5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline
-                    points="23 4 23 10 17 10"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M20.49 15a9 9 0 11-2.12-9.36L23 10"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <RefreshCw className="w-3.5 h-3.5" />
               )}
               {sincronizando ? "Sincronizando…" : "Atualizar dados"}
-            </button>
+            </Button>
           </div>
         </div>
         {erroSync && (

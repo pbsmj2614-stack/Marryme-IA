@@ -4,6 +4,8 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Roteiro, ChatStatus } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 
 interface Props {
   sessaoStatus?: ChatStatus;
@@ -45,9 +47,10 @@ function AntigoCard({ campo, roteiro, onUsarComoBase }: AntigoCardProps) {
 
   return (
     <div className="border-b border-gray-100 last:border-b-0">
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setAberto(!aberto)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left"
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 text-left h-auto rounded-none"
       >
         <div className="flex items-center gap-2">
           <span>{ICONES_ANTIGOS[campo]}</span>
@@ -59,32 +62,27 @@ function AntigoCard({ campo, roteiro, onUsarComoBase }: AntigoCardProps) {
             </p>
           </div>
         </div>
-        <svg
+        <ChevronDown
           className={`w-3.5 h-3.5 text-gray-400 transition-transform shrink-0 ${aberto ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+        />
+      </Button>
 
       {aberto && (
         <div className="px-4 pb-3">
           <div className="prose prose-sm max-w-none text-gray-700 prose-p:my-1 prose-headings:mb-2 prose-headings:mt-3 prose-li:my-0 max-h-48 overflow-y-auto">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{conteudo}</ReactMarkdown>
           </div>
-          <button
+          <Button
+            variant="outline"
             onClick={() =>
               onUsarComoBase(
                 `Aqui está o conteúdo anterior de "${LABELS_ANTIGOS[campo]}" para usar como base:\n\n\`\`\`json\n${conteudo}\n\`\`\`\n\nPor favor, revise e sugira melhorias.`
               )
             }
-            className="mt-2 text-[10px] px-2 py-1 border border-brand-200 text-brand-700 rounded-md hover:bg-brand-50 transition"
+            className="mt-2 text-[10px] px-2 py-1 border border-brand-200 text-brand-700 rounded-md hover:bg-brand-50 transition h-auto"
           >
             Usar como base no chat
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -118,12 +116,12 @@ export default function RoteiroPainel({
             <p className="text-[11px] text-green-700 mb-3">
               Finalize a sessão para enviá-la para a aba Aprovações.
             </p>
-            <button
+            <Button
               onClick={onFinalizar}
-              className="w-full text-xs py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium"
+              className="w-full text-xs py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium h-auto"
             >
               ✓ Finalizar sessão
-            </button>
+            </Button>
           </div>
         )}
 
@@ -156,23 +154,18 @@ export default function RoteiroPainel({
         {/* Roteiros anteriores */}
         {temAntigos && (
           <div className="mx-3 mt-3 mb-3 border border-gray-200 rounded-xl overflow-hidden">
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setAntigoAberto(!antigoAberto)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-left"
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-left h-auto rounded-none"
             >
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Roteiros gerados anteriormente
               </span>
-              <svg
+              <ChevronDown
                 className={`w-3.5 h-3.5 text-gray-400 transition-transform ${antigoAberto ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+              />
+            </Button>
 
             {antigoAberto && (
               <div>

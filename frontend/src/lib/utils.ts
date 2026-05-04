@@ -1,3 +1,10 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 /** Formata uma string de telefone para exibição: (XX) XXXXX-XXXX ou (XX) XXXX-XXXX */
 export function formatarTelefone(valor: string): string {
   const digits = valor.replace(/\D/g, "").slice(0, 11);

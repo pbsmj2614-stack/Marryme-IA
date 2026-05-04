@@ -1,5 +1,10 @@
 export type Categoria = "musico" | "fotografo" | "celebrante" | "dj" | "outro";
 
+// DadosEntrevista é derivada do schema Zod — não editar manualmente.
+// Fonte de verdade: src/lib/schemas.ts → entrevistaSchema
+import type { EntrevistaFormData } from "./schemas";
+export type DadosEntrevista = EntrevistaFormData;
+
 // ─── Chat conversacional ───────────────────────────────────────────────────────
 
 export type ChatTipo =
@@ -54,36 +59,6 @@ export interface Entrevista {
   prestador_id: string;
   dados_json: DadosEntrevista;
   criado_em: string;
-}
-
-export interface DadosEntrevista {
-  // Dados básicos
-  nome_artistico: string;
-  categoria: Categoria;
-  whatsapp: string;
-  email: string;
-  cidade_base: string;
-  instagram: string;
-
-  // Gestão interna (opcionais para compatibilidade retroativa)
-  plano?: string;
-  fase_projeto?: string;
-  responsavel_mm?: string;
-  mm_id?: string; // ID gerado na planilha Google Sheets (ex: MM001)
-
-  // Dados da entrevista
-  anos_experiencia: string;
-  especialidade: string;
-  preco_medio: string;
-  numero_casamentos: string;
-  formacao: string;
-  equipamentos: string;
-  diferenciais: string;
-  estilo_trabalho: string;
-  depoimento_favorito: string;
-  momentos_especiais: string;
-  como_conheceu_noivos: string;
-  informacoes_adicionais: string;
 }
 
 export interface AnaliseEstrategica {

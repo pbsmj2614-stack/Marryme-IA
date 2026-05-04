@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
 
 interface AprovarButtonProps {
   roteiroId: string;
@@ -32,16 +34,24 @@ export default function AprovarButton({ roteiroId, aprovadoAtual }: AprovarButto
   }
 
   return (
-    <button
+    <Button
       onClick={toggleAprovado}
       disabled={loading}
-      className={`text-sm font-semibold px-4 py-2 rounded-lg transition disabled:opacity-60 ${
+      variant="outline"
+      size="sm"
+      className={`font-semibold transition ${
         aprovado
-          ? "bg-green-100 text-green-700 hover:bg-green-200"
-          : "bg-gray-100 text-gray-600 hover:bg-brand-100 hover:text-brand-700"
+          ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200 hover:text-green-700"
+          : "text-gray-600 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200"
       }`}
     >
-      {loading ? "..." : aprovado ? "✓ Aprovado" : "Marcar como aprovado"}
-    </button>
+      {loading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : aprovado ? (
+        "✓ Aprovado"
+      ) : (
+        "Marcar como aprovado"
+      )}
+    </Button>
   );
 }

@@ -3,10 +3,12 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Loader2, RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
 import Header from "@/components/Header";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDashboardRaw, useInvalidateDashboard } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
+import { Button } from "@/components/ui/button";
 import {
   BarChart,
   Bar,
@@ -321,20 +323,25 @@ function ExpandedRow({
     return (
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-gray-500">Nenhum relatório gerado ainda.</p>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => onSincronizar(prestador.id!)}
           disabled={sincronizando}
-          className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition disabled:opacity-50 flex items-center gap-1.5"
+          className="text-xs bg-[#333] text-gray-300 hover:bg-[#444] hover:text-gray-300 flex items-center gap-1.5"
         >
           {sincronizando ? (
             <>
-              <span className="w-3 h-3 border border-gray-400 border-t-white rounded-full animate-spin" />
+              <Loader2 className="w-3 h-3 animate-spin" />
               Sincronizando...
             </>
           ) : (
-            "↻ Buscar dados"
+            <>
+              <RefreshCw className="w-3 h-3" />
+              Buscar dados
+            </>
           )}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -358,22 +365,28 @@ function ExpandedRow({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onSincronizar(prestador.id!)}
             disabled={sincronizando}
-            className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition disabled:opacity-50 flex items-center gap-1.5"
+            title="Sincroniza com a Meta usando o período padrão (30 dias). Para escolher o período, use 'Ver relatório completo'"
+            className="text-xs bg-[#333] text-gray-300 hover:bg-[#444] hover:text-gray-300 flex items-center gap-1.5"
           >
             {sincronizando ? (
               <>
-                <span className="w-3 h-3 border border-gray-400 border-t-white rounded-full animate-spin" />
+                <Loader2 className="w-3 h-3 animate-spin" />
                 Sincronizando...
               </>
             ) : (
-              "↻ Atualizar"
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Atualizar
+              </>
             )}
-          </button>
+          </Button>
           <Link
-            href={`/prestador/${prestador.id}?tab=campanha`}
+            href={`/prestador/${prestador.id}?tab=campanha#campanha`}
             className="text-xs px-3 py-1.5 rounded-lg bg-brand-800 text-brand-300 hover:bg-brand-700 transition"
           >
             Ver relatório completo →
@@ -431,20 +444,24 @@ function AtualizarTodosBtn({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
+      <Button
+        variant="ghost"
         onClick={handleClick}
         disabled={loading}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2a2a2a] border border-[#444] text-sm text-gray-200 hover:border-[#666] hover:text-white transition disabled:opacity-50"
+        className="flex items-center gap-2 bg-[#2a2a2a] border border-[#444] text-sm text-gray-200 hover:border-[#666] hover:text-white hover:bg-[#2a2a2a]"
       >
         {loading ? (
           <>
-            <span className="w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
             Sincronizando...
           </>
         ) : (
-          "↻ Atualizar todos"
+          <>
+            <RefreshCw className="w-4 h-4" />
+            Atualizar todos
+          </>
         )}
-      </button>
+      </Button>
       {resultado && (
         <p className={`text-xs ${resultado.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
           {resultado}
@@ -748,20 +765,22 @@ export default function DashboardBIPage() {
         {/* ── Filtros ── */}
         <div className="flex gap-2 mb-4 flex-wrap">
           {FILTROS.map((f) => (
-            <button
+            <Button
               key={f}
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setFiltro(f);
                 setTableExpanded(false);
               }}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition border ${
+              className={`rounded-full text-sm font-medium border ${
                 filtro === f
-                  ? "border-white text-white bg-white/10"
-                  : "border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-200"
+                  ? "border-white text-white bg-white/10 hover:bg-white/15 hover:text-white"
+                  : "border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-200 hover:bg-transparent"
               }`}
             >
               {f}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -932,20 +951,23 @@ export default function DashboardBIPage() {
           </div>
 
           {filtrados.length > TABLE_LIMIT && (
-            <button
+            <Button
+              variant="ghost"
               onClick={() => setTableExpanded(!tableExpanded)}
-              className="w-full flex items-center justify-center gap-2 py-3 text-xs text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2a] transition border-t border-[#333]"
+              className="w-full rounded-none py-3 text-xs text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2a] border-t border-[#333] gap-2"
             >
               {tableExpanded ? (
                 <>
-                  <span>▲</span> Minimizar
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  Minimizar
                 </>
               ) : (
                 <>
-                  <span>▼</span> Ver todos os {filtrados.length} clientes
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  Ver todos os {filtrados.length} clientes
                 </>
               )}
-            </button>
+            </Button>
           )}
         </div>
 
@@ -1035,12 +1057,14 @@ export default function DashboardBIPage() {
         >
           <span>{toast.type === "success" ? "✓" : "✕"}</span>
           <span>{toast.msg}</span>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setToast(null)}
-            className="ml-2 opacity-60 hover:opacity-100 text-xs"
+            className="ml-2 h-5 w-5 opacity-60 hover:opacity-100 hover:bg-transparent"
           >
-            ✕
-          </button>
+            <X className="w-3 h-3" />
+          </Button>
         </div>
       )}
     </div>

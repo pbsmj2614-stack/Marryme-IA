@@ -3,9 +3,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Loader2, MoreVertical, Check, Pencil, Copy, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import ExportarButton from "@/components/ExportarButton";
 import { ConfirmDialog } from "@/components/ui";
+import { Button } from "@/components/ui/button";
 import type { Categoria } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
 
@@ -313,23 +315,7 @@ export default function PrestadorCard({
             ▼
           </span>
         </div>
-        {savingFase && (
-          <svg
-            className="animate-spin h-3 w-3 text-brand-500 shrink-0"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        )}
+        {savingFase && <Loader2 className="animate-spin h-3 w-3 text-brand-500 shrink-0" />}
       </div>
 
       {/* Linha 3: telefone e cidade */}
@@ -381,7 +367,7 @@ export default function PrestadorCard({
           </span>
           {healthScore !== null && healthScore !== undefined && (
             <Link
-              href={`/prestador/${prestadorId}?tab=campanha`}
+              href={`/prestador/${prestadorId}?tab=campanha#campanha`}
               onClick={(e) => e.stopPropagation()}
               className={`shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full border transition hover:opacity-80 ${
                 healthScore >= 70
@@ -408,125 +394,62 @@ export default function PrestadorCard({
 
       {/* Botão 3 pontos */}
       <div ref={menuRef} className="absolute top-3 right-3" onClick={(e) => e.stopPropagation()}>
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setMenuOpen((v) => !v)}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+          className="h-7 w-7 text-gray-400 hover:text-gray-600"
           title="Opções"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="5" r="1.5" />
-            <circle cx="12" cy="12" r="1.5" />
-            <circle cx="12" cy="19" r="1.5" />
-          </svg>
-        </button>
+          <MoreVertical className="w-4 h-4" />
+        </Button>
 
         {menuOpen && (
           <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
             {/* Aprovar */}
-            <button
+            <Button
+              variant="ghost"
               onClick={handleAprovar}
               disabled={!ultimoRoteiroId}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50 disabled:opacity-40"
             >
-              <svg
-                className="w-4 h-4 text-green-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <Check className="w-4 h-4 text-green-500" />
               <span className="text-gray-700">
                 {ultimoRoteiroAprovado ? "Desaprovar" : "Aprovar"}
               </span>
-            </button>
+            </Button>
 
             {/* Renomear */}
-            <button
+            <Button
+              variant="ghost"
               onClick={handleRenomear}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition"
+              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50"
             >
-              <svg
-                className="w-4 h-4 text-blue-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Pencil className="w-4 h-4 text-blue-500" />
               <span className="text-gray-700">Renomear</span>
-            </button>
+            </Button>
 
             {/* Duplicar */}
-            <button
+            <Button
+              variant="ghost"
               onClick={handleDuplicar}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-gray-50 transition"
+              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50"
             >
-              <svg
-                className="w-4 h-4 text-brand-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <rect
-                  x="9"
-                  y="9"
-                  width="13"
-                  height="13"
-                  rx="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Copy className="w-4 h-4 text-brand-500" />
               <span className="text-gray-700">Duplicar</span>
-            </button>
+            </Button>
 
             <div className="my-1 border-t border-gray-100" />
 
             {/* Excluir */}
-            <button
+            <Button
+              variant="ghost"
               onClick={handleExcluir}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-red-50 transition"
+              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-red-50"
             >
-              <svg
-                className="w-4 h-4 text-red-500"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
-                <path
-                  d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
-                <path
-                  d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Trash2 className="w-4 h-4 text-red-500" />
               <span className="text-red-600 font-medium">Excluir</span>
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -534,17 +457,7 @@ export default function PrestadorCard({
       {/* Indicador de loading */}
       {carregando && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-xl">
-          <svg className="animate-spin h-5 w-5 text-brand-500" viewBox="0 0 24 24" fill="none">
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
+          <Loader2 className="animate-spin h-5 w-5 text-brand-500" />
         </div>
       )}
 

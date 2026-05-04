@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import type {
   Roteiro,
   DadosEntrevista,
@@ -176,12 +177,14 @@ export default async function PrestadorPage({
                 <span className="text-xs text-gray-400 hidden sm:inline">{p.cidade_base}</span>
               )}
             </div>
-            <Link
-              href={`/prestador/${id}/editar`}
-              className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 text-gray-600 border border-gray-200 hover:border-brand-200 rounded-lg transition"
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="shrink-0 text-xs font-semibold text-gray-600 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200"
             >
-              Editar cadastro
-            </Link>
+              <Link href={`/prestador/${id}/editar`}>Editar cadastro</Link>
+            </Button>
           </div>
           <div className="px-5">{tabLinks}</div>
         </div>
@@ -360,12 +363,9 @@ export default async function PrestadorPage({
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <ExcluirPrestadorButton prestadorId={p.id} />
           {!entrevista && (
-            <Link
-              href={`/prestador/${id}/editar`}
-              className="text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg transition"
-            >
-              Cadastrar entrevista
-            </Link>
+            <Button asChild>
+              <Link href={`/prestador/${id}/editar`}>Cadastrar entrevista</Link>
+            </Button>
           )}
         </div>
 
@@ -381,7 +381,7 @@ export default async function PrestadorPage({
 
       {/* Campanha tab */}
       {tab === "campanha" && (
-        <main className="max-w-5xl mx-auto px-4 pb-8 w-full">
+        <main id="campanha" className="max-w-5xl mx-auto px-4 pb-8 w-full">
           <CampanhaTab
             prestadorId={p.id}
             prestadorNome={p.nome_artistico}

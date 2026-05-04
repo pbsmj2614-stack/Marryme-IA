@@ -30,6 +30,10 @@ export async function middleware(request: NextRequest) {
 
   // Redireciona para /login se não autenticado (exceto a própria /login)
   if (!user && !request.nextUrl.pathname.startsWith("/login")) {
+    // Rotas de API retornam 401 JSON — nunca redirecionar fetch/XHR para /login
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

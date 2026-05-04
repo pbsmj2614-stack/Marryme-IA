@@ -2,12 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [confirmar, setConfirmar] = useState(false);
 
   async function handleExcluir() {
     setLoading(true);
@@ -19,39 +31,41 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
       router.push("/");
       router.refresh();
     } else {
-      alert("Erro ao excluir: " + r3.error.message);
+      toast.error("Erro ao excluir: " + r3.error.message);
       setLoading(false);
-      setConfirmar(false);
     }
   }
 
-  if (confirmar) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-600">Confirmar exclusão?</span>
-        <button
-          onClick={handleExcluir}
-          disabled={loading}
-          className="text-sm font-semibold px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60 transition"
-        >
-          {loading ? "Excluindo..." : "Excluir"}
-        </button>
-        <button
-          onClick={() => setConfirmar(false)}
-          className="text-sm px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
-        >
-          Cancelar
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => setConfirmar(true)}
-      className="text-sm font-medium px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-    >
-      Excluir prestador
-    </button>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          Excluir prestador
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir prestador?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Esta ação é irreversível. Todos os roteiros e entrevistas deste prestador serão
+            apagados.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleExcluir}
+            disabled={loading}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {loading ? "Excluindo..." : "Excluir"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import Header from "@/components/Header";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
@@ -11,6 +12,9 @@ import { RESPONSAVEIS } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
+import { useUIStore } from "@/store/uiStore";
+import { Loader2, RefreshCw, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,35 +68,6 @@ const TOMORROW = (() => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-
-interface ToastState {
-  msg: string;
-  type: "success" | "error";
-}
-
-function Toast({ toast, onClose }: { toast: ToastState; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 4500);
-    return () => clearTimeout(t);
-  }, [onClose, toast]);
-  return (
-    <div
-      className={`fixed bottom-24 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium ${
-        toast.type === "success"
-          ? "bg-green-950 border-green-700 text-green-300"
-          : "bg-red-950 border-red-700 text-red-300"
-      }`}
-    >
-      <span>{toast.type === "success" ? "✓" : "✕"}</span>
-      <span>{toast.msg}</span>
-      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100">
-        ✕
-      </button>
-    </div>
-  );
-}
-
 // ─── Modal de tarefas ─────────────────────────────────────────────────────────
 
 function ModalTarefas({
@@ -129,21 +104,21 @@ function ModalTarefas({
             </p>
           </div>
           {finalizadas.length > 0 && (
-            <button
+            <Button
               onClick={() => setMostrarFeitas((v) => !v)}
               className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition mr-6"
             >
               {mostrarFeitas
                 ? "Ocultar concluídas"
                 : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={onClose}
             className="text-gray-500 hover:text-white text-lg leading-none p-1"
           >
-            ✕
-          </button>
+            <X className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Lista de tarefas */}
@@ -309,16 +284,20 @@ export default function DailyPage() {
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
   const invalidatePipeline = useInvalidatePipeline();
 
+  const {
+    filtroResponsavel: filtroResp,
+    setFiltroResponsavel: setFiltroResp,
+    dailyBusca: busca,
+    setDailyBusca: setBusca,
+  } = useUIStore();
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
-  const [toast, setToast] = useState<ToastState | null>(null);
   const [modalCliente, setModalCliente] = useState<ClienteComMetricas | null>(null);
   // Atrasados: controla qual grupo está expandido
   const [atrasadosOpen, setAtrasadosOpen] = useState<Set<string>>(new Set());
-  const [filtroResp, setFiltroResp] = useState("Todos");
-  const [busca, setBusca] = useState("");
   const [buscaDelay, setBuscaDelay] = useState("");
   const [atrasadosExp, setAtrasadosExp] = useState(false);
   const [hojeExp, setHojeExp] = useState(false);
@@ -381,7 +360,7 @@ export default function DailyPage() {
         setTarefas((prev) =>
           prev.map((t) => (t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t))
         );
-        setToast({ type: "error", msg: err instanceof Error ? err.message : "Erro ao salvar" });
+        toast.error(err instanceof Error ? err.message : "Erro ao salvar");
       }
     },
     [tarefas]
@@ -392,16 +371,14 @@ export default function DailyPage() {
     setSyncing(true);
     try {
       const r = await importarPlanilha();
-      setToast({
-        type: r.erros.length === 0 ? "success" : "error",
-        msg:
-          r.erros.length === 0
-            ? `${r.clientes} clientes e ${r.tarefas} tarefas importados`
-            : `${r.clientes} clientes · ${r.tarefas} tarefas · ${r.erros[0]}`,
-      });
+      if (r.erros.length === 0) {
+        toast.success(`${r.clientes} clientes e ${r.tarefas} tarefas importados`);
+      } else {
+        toast.error(`${r.clientes} clientes · ${r.tarefas} tarefas · ${r.erros[0]}`);
+      }
       await invalidatePipeline();
     } catch (err) {
-      setToast({ type: "error", msg: String(err) });
+      toast.error(String(err));
     } finally {
       setSyncing(false);
     }
@@ -566,8 +543,6 @@ export default function DailyPage() {
     <div className="min-h-screen bg-[#1a1a1a] text-white pb-24">
       <Header user={user} />
 
-      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
-
       {/* Modal */}
       {modalCliente && (
         <ModalTarefas
@@ -606,12 +581,12 @@ export default function DailyPage() {
               className="pl-8 pr-7 py-2 text-sm bg-[#242424] border border-[#444] text-gray-200 rounded-lg placeholder-gray-600 focus:outline-none focus:border-[#666] transition w-44"
             />
             {busca && (
-              <button
+              <Button
                 onClick={() => setBusca("")}
                 className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs"
               >
-                ✕
-              </button>
+                <X className="w-3 h-3" />
+              </Button>
             )}
           </div>
 
@@ -651,7 +626,7 @@ export default function DailyPage() {
               expanded={atrasadosExp}
               footer={
                 atrasados.length > CARD_LIMIT ? (
-                  <button
+                  <Button
                     onClick={() => setAtrasadosExp(!atrasadosExp)}
                     className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
                   >
@@ -664,7 +639,7 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({atrasados.length} clientes)
                       </>
                     )}
-                  </button>
+                  </Button>
                 ) : undefined
               }
             >
@@ -675,7 +650,7 @@ export default function DailyPage() {
                     return (
                       <div key={cliente.id_cliente}>
                         {/* Cabeçalho do grupo */}
-                        <button
+                        <Button
                           className="w-full flex items-center justify-between py-2 text-left hover:text-white transition-colors"
                           onClick={() =>
                             setAtrasadosOpen((prev) => {
@@ -698,7 +673,7 @@ export default function DailyPage() {
                             </span>
                             <span>{open ? "▲" : "▼"}</span>
                           </span>
-                        </button>
+                        </Button>
 
                         {/* Tarefas expandidas */}
                         {open && (
@@ -738,7 +713,7 @@ export default function DailyPage() {
               expanded={hojeExp}
               footer={
                 prioHoje.length > CARD_LIMIT ? (
-                  <button
+                  <Button
                     onClick={() => setHojeExp(!hojeExp)}
                     className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
                   >
@@ -751,7 +726,7 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({prioHoje.length} tarefas)
                       </>
                     )}
-                  </button>
+                  </Button>
                 ) : undefined
               }
             >
@@ -781,7 +756,7 @@ export default function DailyPage() {
               expanded={semanaExp}
               footer={
                 prioSemana.length > CARD_LIMIT ? (
-                  <button
+                  <Button
                     onClick={() => setSemanaExp(!semanaExp)}
                     className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
                   >
@@ -794,7 +769,7 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({prioSemana.length} dias)
                       </>
                     )}
-                  </button>
+                  </Button>
                 ) : undefined
               }
             >
@@ -882,12 +857,12 @@ export default function DailyPage() {
                   )}
 
                   {/* Botão ver tarefas */}
-                  <button
+                  <Button
                     onClick={() => setModalCliente(c)}
                     className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
                   >
                     Ver tarefas
-                  </button>
+                  </Button>
                 </div>
               ))
             )}
@@ -948,23 +923,23 @@ export default function DailyPage() {
       </main>
 
       {/* ── Botão flutuante ── */}
-      <button
+      <Button
         onClick={handleSync}
         disabled={syncing}
         className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-[#2a2a2a] border border-[#555] text-sm font-medium text-gray-200 hover:border-[#888] hover:text-white shadow-xl transition disabled:opacity-50"
       >
         {syncing ? (
           <>
-            <span className="w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
             Atualizando...
           </>
         ) : (
           <>
-            <span className="text-base">↻</span>
+            <RefreshCw className="w-4 h-4" />
             Atualizar dados
           </>
         )}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Resultado {
   nome: string;
@@ -59,28 +61,17 @@ export default function AtualizarTodosButton() {
 
   return (
     <div className="relative">
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         onClick={handleClick}
         disabled={loading}
         title="Atualizar dados Meta Ads de todos os prestadores"
-        className="flex items-center gap-1.5 text-sm font-medium text-gray-600 border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition"
+        className="gap-1.5"
       >
-        <svg
-          className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <polyline points="23 4 23 10 17 10" strokeLinecap="round" strokeLinejoin="round" />
-          <path
-            d="M20.49 15a9 9 0 11-2.12-9.36L23 10"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         {loading ? "Atualizando…" : "Atualizar Meta Ads"}
-      </button>
+      </Button>
 
       {popup && (
         <div

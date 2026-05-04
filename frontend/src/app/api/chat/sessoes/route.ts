@@ -9,9 +9,13 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import type { ChatTipo } from "@/lib/types";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { chatSessaoPostSchema, chatSessaoPatchSchema } from "@/lib/schemas";
 
 export async function GET(req: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
+
   const prestadorId = req.nextUrl.searchParams.get("prestador_id");
   if (!prestadorId)
     return NextResponse.json({ error: "prestador_id obrigatório" }, { status: 400 });
@@ -30,22 +34,24 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as {
-    prestador_id: string;
-    titulo?: string;
-    tipo?: ChatTipo;
-  };
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
 
-  if (!body.prestador_id)
-    return NextResponse.json({ error: "prestador_id obrigatório" }, { status: 400 });
+  const parsed = chatSessaoPostSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+      { status: 400 }
+    );
+  const { prestador_id, titulo, tipo } = parsed.data;
 
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
     .from("chat_sessoes")
     .insert({
-      prestador_id: body.prestador_id,
-      titulo: body.titulo ?? "Nova conversa",
-      tipo: body.tipo ?? "geral",
+      prestador_id,
+      titulo: titulo ?? "Nova conversa",
+      tipo: tipo ?? "geral",
     })
     .select()
     .single();
@@ -55,27 +61,28 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = (await req.json()) as {
-    id: string;
-    titulo?: string;
-    status?: "ativa" | "finalizada" | "arquivada" | "aprovada";
-    roteiro_final?: Record<string, unknown>;
-    tokens_usados?: number;
-  };
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
 
-  if (!body.id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  const parsed = chatSessaoPatchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+      { status: 400 }
+    );
+  const { id, titulo, status, roteiro_final, tokens_usados } = parsed.data;
 
   const supabase = supabaseAdmin();
   const updates: Record<string, unknown> = {};
-  if (body.titulo !== undefined) updates.titulo = body.titulo;
-  if (body.status !== undefined) updates.status = body.status;
-  if (body.roteiro_final !== undefined) updates.roteiro_final = body.roteiro_final;
-  if (body.tokens_usados !== undefined) updates.tokens_usados = body.tokens_usados;
+  if (titulo !== undefined) updates.titulo = titulo;
+  if (status !== undefined) updates.status = status;
+  if (roteiro_final !== undefined) updates.roteiro_final = roteiro_final;
+  if (tokens_usados !== undefined) updates.tokens_usados = tokens_usados;
 
   const { data, error } = await supabase
     .from("chat_sessoes")
     .update(updates)
-    .eq("id", body.id)
+    .eq("id", id)
     .select()
     .single();
 

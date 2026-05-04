@@ -1,6 +1,7 @@
 "use client";
 
 import type { ChatTipo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 
 interface PromptBase {
   label: string;
@@ -72,13 +73,14 @@ export default function PromptsBase({ onSelect }: Props) {
 
       <div className="flex flex-wrap justify-center gap-2 max-w-lg">
         {PROMPTS_BASE.map((p) => (
-          <button
+          <Button
             key={p.tipo + p.label}
+            variant="outline"
             onClick={() => onSelect(p.prompt, p.tipo)}
-            className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-full hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 transition-all"
+            className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border-gray-200 rounded-full hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50 h-auto"
           >
             {p.label}
-          </button>
+          </Button>
         ))}
       </div>
     </div>

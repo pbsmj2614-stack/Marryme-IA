@@ -12,9 +12,13 @@ export const maxDuration = 300; // 5 min — Vercel Pro/Team
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireRole } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRole("cs_senior");
+    if (auth instanceof NextResponse) return auth;
+
     const supabase = supabaseAdmin();
 
     // Buscar todos os prestadores com conta Meta configurada

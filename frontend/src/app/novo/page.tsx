@@ -2,13 +2,27 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase";
 import { extractFunctionError } from "@/lib/error-utils";
 import { RESPONSAVEIS } from "@/lib/constants";
+import { validarEntrevista } from "@/lib/schemas";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
-import { formatarTelefone } from "@/lib/utils";
+import { formatarTelefone, cn } from "@/lib/utils";
 import Header from "@/components/Header";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,33 +68,22 @@ const INITIAL: DadosEntrevista = {
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
-const inputCls = (err?: boolean) =>
-  `w-full bg-white border ${
-    err ? "border-red-400" : "border-gray-200"
-  } rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 transition`;
-
-const selectCls =
-  "w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-brand-400 transition appearance-none cursor-pointer";
-
-const textareaCls =
-  "w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-400 transition resize-none";
-
-function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-      {children}
-      {required && <span className="text-red-500 ml-1">*</span>}
-    </label>
-  );
-}
-
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">{children}</p>
   );
 }
 
-function Select({
+function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <Label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+      {children}
+      {required && <span className="text-red-500 ml-1">*</span>}
+    </Label>
+  );
+}
+
+function SelectField({
   label,
   value,
   onChange,
@@ -97,25 +100,19 @@ function Select({
 }) {
   return (
     <div>
-      <Label required={required}>{label}</Label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={selectCls}
-          disabled={disabled}
-          required={required}
-        >
+      <FieldLabel required={required}>{label}</FieldLabel>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
           {options.map((o) => (
-            <option key={o.value} value={o.value}>
+            <SelectItem key={o.value} value={o.value}>
               {o.label}
-            </option>
+            </SelectItem>
           ))}
-        </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
-          ▼
-        </span>
-      </div>
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -130,6 +127,7 @@ function CharField({
   rows = 3,
   maxLength,
   disabled,
+  erro,
 }: {
   label: string;
   value: string;
@@ -140,34 +138,37 @@ function CharField({
   rows?: number;
   maxLength?: number;
   disabled?: boolean;
+  erro?: string;
 }) {
   const remaining = maxLength !== undefined ? maxLength - value.length : null;
   const warn = remaining !== null && remaining <= Math.ceil((maxLength ?? 0) * 0.15);
+  const errCls = erro ? "border-red-400 focus-visible:ring-red-400" : "";
   return (
     <div>
-      <Label required={required}>{label}</Label>
+      <FieldLabel required={required}>{label}</FieldLabel>
       {textarea ? (
-        <textarea
+        <Textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           rows={rows}
           maxLength={maxLength}
-          className={textareaCls}
+          className={cn("resize-none", errCls)}
           disabled={disabled}
         />
       ) : (
-        <input
+        <Input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           maxLength={maxLength}
-          className={inputCls()}
+          className={errCls}
           disabled={disabled}
         />
       )}
-      {remaining !== null && value.length > 0 && (
+      {erro && <p className="text-xs text-red-500 mt-1">{erro}</p>}
+      {!erro && remaining !== null && value.length > 0 && (
         <p
           className={`text-right text-xs mt-1 ${
             remaining === 0 ? "text-red-500 font-medium" : warn ? "text-amber-500" : "text-gray-600"
@@ -193,8 +194,7 @@ export default function NovoPage() {
   });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
-  const [erro, setErro] = useState("");
-  const [sheetsAviso, setSheetsAviso] = useState("");
+  const [erros, setErros] = useState<Record<string, string>>({});
   const acaoRef = useRef<"cadastrar" | "gerar">("cadastrar");
 
   useEffect(() => {
@@ -204,28 +204,24 @@ export default function NovoPage() {
   function set(name: keyof DadosEntrevista, value: string) {
     const val = name === "whatsapp" ? formatarTelefone(value) : value;
     setDados((prev) => ({ ...prev, [name]: val }));
-  }
-
-  function validate(): string | null {
-    if (!dados.nome_artistico.trim() || dados.nome_artistico.trim().length < 2)
-      return "Nome artístico é obrigatório (mínimo 2 caracteres).";
-    if (dados.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dados.email.trim()))
-      return "E-mail inválido.";
-    if (!dados.especialidade.trim()) return "Especialidade é obrigatória.";
-    if (!dados.diferenciais.trim()) return "Diferenciais são obrigatórios.";
-    if (!dados.estilo_trabalho.trim()) return "Estilo de trabalho é obrigatório.";
-    return null;
+    if (erros[name])
+      setErros((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const validErr = validate();
-    if (validErr) {
-      setErro(validErr);
+    const camposErro = validarEntrevista(dados);
+    if (camposErro) {
+      setErros(camposErro);
+      const primeiro = Object.keys(camposErro)[0];
+      document.querySelector<HTMLElement>(`[name="${primeiro}"]`)?.focus();
       return;
     }
-    setErro("");
-    setSheetsAviso("");
+    setErros({});
     setLoading(true);
 
     const supabase = createClient();
@@ -283,8 +279,8 @@ export default function NovoPage() {
           .from("entrevistas")
           .update({ dados_json: { ...dados, mm_id: clienteExistente.id_cliente } })
           .eq("id", entrevista.id);
-        setSheetsAviso(
-          `✓ Vinculado ao cliente existente: ${clienteExistente.nome_empresa} (${clienteExistente.id_cliente}). Nenhuma entrada duplicada criada.`
+        toast.success(
+          `Vinculado ao cliente existente: ${clienteExistente.nome_empresa} (${clienteExistente.id_cliente}). Nenhuma entrada duplicada criada.`
         );
       } else {
         // ── Novo cliente — criar pipeline completa (Sheets + mm_clientes) ──
@@ -319,23 +315,22 @@ export default function NovoPage() {
           }
 
           if (sheetData.ok) {
-            // Salva mm_id na entrevista para vincular prestador ↔ pipeline
             if (sheetData.id) {
               await supabase
                 .from("entrevistas")
                 .update({ dados_json: { ...dados, mm_id: sheetData.id } })
                 .eq("id", entrevista.id);
             }
-            setSheetsAviso(
-              `✓ Pipeline criada: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`
+            toast.success(
+              `Pipeline criada: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`
             );
           } else {
-            setSheetsAviso(`Aviso Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
+            toast.warning(`Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
           }
         } catch (sheetsErr) {
           if (abortarCadastro) throw sheetsErr;
-          setSheetsAviso(
-            `Aviso: planilha não atualizada (${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"})`
+          toast.warning(
+            `Planilha não atualizada: ${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"}`
           );
         }
       }
@@ -360,7 +355,7 @@ export default function NovoPage() {
 
       router.push(`/prestador/${prestador.id}`);
     } catch (err: unknown) {
-      setErro(err instanceof Error ? err.message : "Erro inesperado");
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
       setLoading(false);
       setStatus("");
     }
@@ -396,10 +391,11 @@ export default function NovoPage() {
                   required
                   maxLength={60}
                   disabled={loading}
+                  erro={erros.nome_artistico}
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select
+                  <SelectField
                     label="Categoria"
                     value={dados.categoria}
                     onChange={(v) => set("categoria", v as Categoria)}
@@ -407,7 +403,7 @@ export default function NovoPage() {
                     required
                     disabled={loading}
                   />
-                  <Select
+                  <SelectField
                     label="Plano"
                     value={dados.plano ?? "Essencial"}
                     onChange={(v) => set("plano", v)}
@@ -417,14 +413,14 @@ export default function NovoPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Select
+                  <SelectField
                     label="Fase do projeto"
                     value={dados.fase_projeto ?? "Onboarding"}
                     onChange={(v) => set("fase_projeto", v)}
                     options={FASES.map((f) => ({ value: f, label: f }))}
                     disabled={loading}
                   />
-                  <Select
+                  <SelectField
                     label="Responsável MM"
                     value={dados.responsavel_mm ?? ""}
                     onChange={(v) => set("responsavel_mm", v)}
@@ -444,26 +440,26 @@ export default function NovoPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <Label>WhatsApp</Label>
-                    <input
+                    <FieldLabel>WhatsApp</FieldLabel>
+                    <Input
                       type="tel"
                       value={dados.whatsapp}
                       onChange={(e) => set("whatsapp", e.target.value)}
                       placeholder="(11) 99999-9999"
-                      className={inputCls()}
                       disabled={loading}
                     />
                   </div>
                   <div>
-                    <Label>E-mail</Label>
-                    <input
+                    <FieldLabel>E-mail</FieldLabel>
+                    <Input
                       type="email"
                       value={dados.email}
                       onChange={(e) => set("email", e.target.value)}
                       placeholder="contato@exemplo.com"
-                      className={inputCls()}
+                      className={erros.email ? "border-red-400 focus-visible:ring-red-400" : ""}
                       disabled={loading}
                     />
+                    {erros.email && <p className="text-xs text-red-500 mt-1">{erros.email}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -519,6 +515,7 @@ export default function NovoPage() {
                   required
                   maxLength={800}
                   disabled={loading}
+                  erro={erros.especialidade}
                 />
                 <CharField
                   label="Ticket médio (R$)"
@@ -563,6 +560,7 @@ export default function NovoPage() {
                   required
                   maxLength={1000}
                   disabled={loading}
+                  erro={erros.diferenciais}
                 />
                 <CharField
                   label="Estilo / forma de trabalho"
@@ -574,6 +572,7 @@ export default function NovoPage() {
                   required
                   maxLength={1000}
                   disabled={loading}
+                  erro={erros.estilo_trabalho}
                 />
               </div>
             </div>
@@ -625,28 +624,9 @@ export default function NovoPage() {
             </div>
           </div>
 
-          {/* ── Alertas ── */}
-          {erro && (
-            <div className="px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm">
-              ✕ {erro}
-            </div>
-          )}
-
-          {sheetsAviso && !erro && (
-            <div
-              className={`px-4 py-3 rounded-xl border text-sm ${
-                sheetsAviso.startsWith("Aviso")
-                  ? "border-yellow-200 bg-yellow-50 text-yellow-700"
-                  : "border-green-200 bg-green-50 text-green-700"
-              }`}
-            >
-              {sheetsAviso}
-            </div>
-          )}
-
-          {status && !erro && (
+          {status && (
             <div className="px-4 py-3 rounded-xl border border-blue-100 bg-blue-50 text-blue-700 text-sm flex items-center gap-2">
-              <span className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
               {status}
             </div>
           )}
@@ -661,40 +641,41 @@ export default function NovoPage() {
 
           {/* ── Botões ── */}
           <div className="flex flex-col sm:flex-row gap-3 pb-8">
-            <button
+            <Button
               type="submit"
+              variant="outline"
               disabled={loading}
               onClick={() => {
                 acaoRef.current = "cadastrar";
               }}
-              className="flex-1 py-3.5 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              className="flex-1 py-3.5 rounded-xl h-auto"
             >
               {loading && acaoRef.current === "cadastrar" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Salvando…
-                </span>
+                </>
               ) : (
                 "Cadastrar prestador"
               )}
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={loading}
               onClick={() => {
                 acaoRef.current = "gerar";
               }}
-              className="flex-1 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-3.5 rounded-xl h-auto"
             >
               {loading && acaoRef.current === "gerar" ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Gerando roteiro…
-                </span>
+                </>
               ) : (
                 "Cadastrar e gerar roteiro ✦"
               )}
-            </button>
+            </Button>
           </div>
         </form>
       </main>

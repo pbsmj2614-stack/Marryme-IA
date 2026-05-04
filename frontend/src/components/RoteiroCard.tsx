@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronDown, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface RoteiroCardProps {
   titulo: string;
@@ -45,24 +47,30 @@ export default function RoteiroCard({
 
           {/* Botão copiar — só aparece quando há conteúdo */}
           {conteudoCopiar && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={copiar}
-              className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50 transition"
+              className="text-xs h-7 px-2.5 rounded-full text-gray-500 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50 gap-1"
             >
-              {copiado ? "Copiado ✓" : "Copiar"}
-            </button>
+              {copiado ? (
+                <>
+                  <Check className="w-3 h-3" />
+                  Copiado
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  Copiar
+                </>
+              )}
+            </Button>
           )}
 
-          <svg
+          <ChevronDown
             className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          />
         </div>
       </div>
 

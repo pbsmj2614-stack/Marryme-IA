@@ -15,6 +15,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { addTarefaSchema } from "@/lib/schemas";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -80,18 +82,16 @@ function toDateBR(iso: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
-    if (!body) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
 
-    const { id_cliente, etapa, o_que, tipo, quem, prazo, status, observacoes } = body as Record<
-      string,
-      string
-    >;
-
-    if (!id_cliente?.trim())
-      return NextResponse.json({ error: "id_cliente obrigatório" }, { status: 400 });
-    if (!o_que?.trim())
-      return NextResponse.json({ error: "O que? é obrigatório" }, { status: 400 });
+    const parsed = addTarefaSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+        { status: 400 }
+      );
+    const { id_cliente, etapa, o_que, tipo, quem, prazo, status, observacoes } = parsed.data;
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";

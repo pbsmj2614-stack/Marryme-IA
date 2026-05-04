@@ -7,6 +7,7 @@ import PrestadorCard from "@/components/PrestadorCard";
 import AtualizarTodosButton from "@/components/AtualizarTodosButton";
 import SearchInput from "@/components/SearchInput";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { Button } from "@/components/ui/button";
 
 const TABS = [
   { value: "todos", label: "Todos" },
@@ -104,12 +105,9 @@ export default async function DashboardPage({
               <SearchInput placeholder="Buscar prestador..." className="w-52" />
             </Suspense>
             <AtualizarTodosButton />
-            <Link
-              href="/novo"
-              className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-            >
-              + Novo prestador
-            </Link>
+            <Button asChild>
+              <Link href="/novo">+ Novo prestador</Link>
+            </Button>
           </div>
         </div>
 

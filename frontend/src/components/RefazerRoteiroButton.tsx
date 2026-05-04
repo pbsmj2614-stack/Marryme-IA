@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Loader2, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { extractFunctionError } from "@/lib/error-utils";
+import { Button } from "@/components/ui/button";
 
 export default function RefazerRoteiroButton({ entrevistaId }: { entrevistaId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState("");
 
   async function handleRefazer() {
-    setErro("");
     setLoading(true);
     try {
       const supabase = createClient();
@@ -19,20 +20,17 @@ export default function RefazerRoteiroButton({ entrevistaId }: { entrevistaId: s
       const { data: fnData, error: fnError } = await supabase.functions.invoke("gerar-roteiro", {
         body: { entrevista_id: entrevistaId },
       });
-
       if (fnError) {
-        setErro(await extractFunctionError(fnError, "Erro ao gerar roteiro"));
+        toast.error(await extractFunctionError(fnError, "Erro ao gerar roteiro"));
         return;
       }
-
       if (!fnData?.roteiro) {
-        setErro(fnData?.error ?? "Roteiro não retornado. Tente novamente.");
+        toast.error(fnData?.error ?? "Roteiro não retornado. Tente novamente.");
         return;
       }
-
       router.refresh();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro inesperado");
+      toast.error(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setLoading(false);
     }
@@ -40,15 +38,20 @@ export default function RefazerRoteiroButton({ entrevistaId }: { entrevistaId: s
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleRefazer}
-        disabled={loading}
-        className="text-sm font-medium px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-brand-100 hover:text-brand-700 transition disabled:opacity-60"
-      >
-        {loading ? "Gerando..." : "↺ Refazer roteiro"}
-      </button>
-      {loading && <p className="text-xs text-gray-400">Aguarde ~30 segundos...</p>}
-      {erro && <p className="text-xs text-red-600">{erro}</p>}
+      <Button variant="ghost" size="sm" onClick={handleRefazer} disabled={loading}>
+        {loading ? (
+          <>
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+            Gerando...
+          </>
+        ) : (
+          <>
+            <RefreshCw className="mr-1 h-3 w-3" />
+            Refazer roteiro
+          </>
+        )}
+      </Button>
+      {loading && <p className="text-xs text-muted-foreground">Aguarde ~30 segundos...</p>}
     </div>
   );
 }

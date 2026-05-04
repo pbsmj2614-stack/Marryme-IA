@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ChatSessao, ChatTipo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 
 const TIPO_LABEL: Record<ChatTipo, string> = {
   geral: "Geral",
@@ -72,22 +73,23 @@ function SessaoCard({ sessao, prestadorId, loadingId, onAprovar, onReabrir }: Ca
           Ver chat
         </Link>
         {!isAprovado && onAprovar && (
-          <button
+          <Button
             onClick={onAprovar}
             disabled={carregando}
-            className="text-xs px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50"
+            className="text-xs px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50 h-auto"
           >
             {carregando ? "..." : "Aprovar"}
-          </button>
+          </Button>
         )}
-        <button
+        <Button
+          variant="outline"
           onClick={onReabrir}
           disabled={carregando}
-          className="text-xs px-2.5 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+          className="text-xs px-2.5 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 h-auto"
           title={isAprovado ? "Reabrir para edição" : "Reabrir no chat"}
         >
           {carregando ? "..." : "Reabrir"}
-        </button>
+        </Button>
       </div>
     </div>
   );

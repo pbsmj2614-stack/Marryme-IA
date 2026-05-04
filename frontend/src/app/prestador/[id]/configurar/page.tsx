@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
 
 type DiagResult = {
   ok: boolean;
@@ -34,14 +37,11 @@ export default function ConfigurarMetaPage() {
   const [accountId, setAccountId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState(false);
   const [verificando, setVerificando] = useState(false);
   const [diag, setDiag] = useState<DiagResult | null>(null);
 
   const [novoToken, setNovoToken] = useState("");
   const [salvandoToken, setSalvandoToken] = useState(false);
-  const [tokenMsg, setTokenMsg] = useState<{ ok: boolean; texto: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -64,7 +64,6 @@ export default function ConfigurarMetaPage() {
   async function handleSalvarToken() {
     if (!novoToken.trim()) return;
     setSalvandoToken(true);
-    setTokenMsg(null);
     try {
       const res = await fetch("/api/meta/token", {
         method: "POST",
@@ -73,17 +72,14 @@ export default function ConfigurarMetaPage() {
       });
       const data = (await res.json()) as { ok: boolean; expira_em?: string; erro?: string };
       if (data.ok) {
-        setTokenMsg({
-          ok: true,
-          texto: `Token salvo! Expira em: ${data.expira_em ?? "desconhecido"}`,
-        });
+        toast.success(`Token salvo! Expira em: ${data.expira_em ?? "desconhecido"}`);
         setNovoToken("");
         setDiag(null);
       } else {
-        setTokenMsg({ ok: false, texto: data.erro ?? "Erro ao salvar token" });
+        toast.error(data.erro ?? "Erro ao salvar token");
       }
     } catch {
-      setTokenMsg({ ok: false, texto: "Erro de rede ao salvar token" });
+      toast.error("Erro de rede ao salvar token");
     } finally {
       setSalvandoToken(false);
     }
@@ -106,16 +102,14 @@ export default function ConfigurarMetaPage() {
 
   async function handleSalvar(e: React.FormEvent) {
     e.preventDefault();
-    setErro(null);
-    setSucesso(false);
 
     const cleaned = accountId.trim().replace(/^act_/i, "");
     if (!cleaned) {
-      setErro("Informe o ID da conta de anúncios.");
+      toast.error("Informe o ID da conta de anúncios.");
       return;
     }
     if (!/^\d+$/.test(cleaned)) {
-      setErro("O ID da conta deve conter apenas números (ex: 1234567890).");
+      toast.error("O ID da conta deve conter apenas números (ex: 1234567890).");
       return;
     }
 
@@ -130,27 +124,17 @@ export default function ConfigurarMetaPage() {
 
     setSaving(false);
     if (error) {
-      setErro(error.message);
+      toast.error(error.message);
       return;
     }
-    setSucesso(true);
-    setTimeout(() => router.push(`/prestador/${id}?tab=campanha`), 1200);
+    toast.success("Salvo! Redirecionando…");
+    setTimeout(() => router.push(`/prestador/${id}?tab=campanha#campanha`), 1200);
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <svg className="animate-spin h-6 w-6 text-brand-500" viewBox="0 0 24 24" fill="none">
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
+        <Loader2 className="animate-spin h-6 w-6 text-brand-500" />
       </div>
     );
   }
@@ -226,18 +210,28 @@ export default function ConfigurarMetaPage() {
                   required
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">Apenas dígitos — sem o prefixo &quot;act_&quot;</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Apenas dígitos — sem o prefixo &quot;act_&quot;
+              </p>
             </div>
 
             {/* Botão verificar */}
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={handleVerificar}
               disabled={verificando || !accountId.trim()}
-              className="w-full py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition disabled:opacity-50"
+              className="w-full text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100 hover:text-blue-700"
             >
-              {verificando ? "Verificando..." : "🔍 Verificar conexão com Meta"}
-            </button>
+              {verificando ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Verificando...
+                </>
+              ) : (
+                "🔍 Verificar conexão com Meta"
+              )}
+            </Button>
 
             {/* Resultado diagnóstico */}
             {diag && (
@@ -305,7 +299,8 @@ export default function ConfigurarMetaPage() {
                         <strong>business.facebook.com → Configurações → Contas de Anúncios</strong>
                       </p>
                       <p>
-                        2. Selecione a conta e clique em <strong>&quot;Adicionar Pessoas&quot;</strong>
+                        2. Selecione a conta e clique em{" "}
+                        <strong>&quot;Adicionar Pessoas&quot;</strong>
                       </p>
                       <p>
                         3. Adicione o usuário <strong>{diag.token_usuario ?? "do token"}</strong>{" "}
@@ -340,13 +335,14 @@ export default function ConfigurarMetaPage() {
                             <span className="ml-1 text-gray-400">({c.status})</span>
                           </span>
                           {c.id !== accountId && (
-                            <button
+                            <Button
                               type="button"
+                              size="sm"
                               onClick={() => setAccountId(c.id)}
-                              className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition shrink-0"
+                              className="text-xs h-6 px-2 bg-blue-600 hover:bg-blue-700 text-white shrink-0"
                             >
                               Usar este ID
-                            </button>
+                            </Button>
                           )}
                           {c.id === accountId && (
                             <span className="text-green-700 font-medium shrink-0">
@@ -373,58 +369,20 @@ export default function ConfigurarMetaPage() {
               </div>
             )}
 
-            {erro && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                {erro}
-              </div>
-            )}
-
-            {sucesso && (
-              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 flex items-center gap-2">
-                <svg
-                  className="w-4 h-4 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Salvo! Redirecionando…
-              </div>
-            )}
-
             <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={saving || sucesso}
-                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
-              >
+              <Button type="submit" disabled={saving} className="flex-1 gap-2">
                 {saving ? (
                   <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Salvando…
                   </>
                 ) : (
                   "Salvar configuração"
                 )}
-              </button>
-              <Link
-                href={`/prestador/${id}`}
-                className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancelar
-              </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/prestador/${id}`}>Cancelar</Link>
+              </Button>
             </div>
           </form>
         </div>
@@ -444,20 +402,23 @@ export default function ConfigurarMetaPage() {
               onChange={(e) => setNovoToken(e.target.value)}
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
             />
-            <button
+            <Button
               type="button"
+              size="sm"
               onClick={handleSalvarToken}
               disabled={salvandoToken || !novoToken.trim()}
-              className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition shrink-0"
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white shrink-0 gap-1.5"
             >
-              {salvandoToken ? "Salvando..." : "Salvar token"}
-            </button>
+              {salvandoToken ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar token"
+              )}
+            </Button>
           </div>
-          {tokenMsg && (
-            <p className={`mt-2 text-xs ${tokenMsg.ok ? "text-green-700" : "text-red-700"}`}>
-              {tokenMsg.ok ? "✓" : "✕"} {tokenMsg.texto}
-            </p>
-          )}
           <p className="text-xs text-gray-400 mt-2">
             Para nunca mais ter esse problema, crie um <strong>Usuário do Sistema</strong> no Meta
             Business Manager e gere um token permanente (não expira).

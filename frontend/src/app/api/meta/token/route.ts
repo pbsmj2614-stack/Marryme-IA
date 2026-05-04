@@ -11,16 +11,23 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { requireRole } from "@/lib/api-auth";
+import { metaTokenSchema } from "@/lib/schemas";
 
 const META_APP_ID = process.env.META_APP_ID ?? "";
 const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
 
 export async function POST(req: NextRequest) {
-  const { token } = (await req.json().catch(() => ({}))) as { token?: string };
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
 
-  if (!token?.trim()) {
-    return NextResponse.json({ ok: false, erro: "Token não informado." }, { status: 400 });
-  }
+  const parsed = metaTokenSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      { ok: false, erro: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+      { status: 400 }
+    );
+  const { token } = parsed.data;
 
   // 1. Valida que o token funciona via /me
   let nomeUsuario = "";
@@ -70,16 +77,14 @@ export async function POST(req: NextRequest) {
 
   // 3. Salva no Supabase diretamente
   try {
-    await supabaseAdmin()
-      .from("configuracoes")
-      .upsert(
-        {
-          chave: "meta_access_token",
-          valor: token.trim(),
-          atualizado_em: new Date().toISOString(),
-        },
-        { onConflict: "chave" }
-      );
+    await supabaseAdmin().from("configuracoes").upsert(
+      {
+        chave: "meta_access_token",
+        valor: token.trim(),
+        atualizado_em: new Date().toISOString(),
+      },
+      { onConflict: "chave" }
+    );
   } catch (e) {
     return NextResponse.json(
       { ok: false, erro: `Falha ao salvar no banco: ${String(e)}` },

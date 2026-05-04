@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Lora } from "next/font/google";
 import Image from "next/image";
+import { Toaster } from "sonner";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { QueryProvider } from "@/components/QueryProvider";
 import "./globals.css";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <PostHogProvider>{children}</PostHogProvider>
           </QueryProvider>
         </div>
+        <Toaster position="top-right" richColors closeButton duration={4000} />
       </body>
     </html>
   );

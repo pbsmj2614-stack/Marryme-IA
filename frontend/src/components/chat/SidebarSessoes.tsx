@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { ChatSessao, ChatTipo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Plus, MoreVertical } from "lucide-react";
 
 const TIPO_LABEL: Record<ChatTipo, string> = {
   geral: "Geral",
@@ -78,21 +80,13 @@ export default function SidebarSessoes({
     <div className="flex flex-col h-full bg-slate-800">
       {/* Botão nova conversa */}
       <div className="px-3 pt-3 pb-2">
-        <button
+        <Button
           onClick={onNova}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition"
+          className="w-full flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition h-auto"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
+          <Plus className="w-4 h-4" />
           Nova conversa
-        </button>
+        </Button>
       </div>
 
       {/* Busca */}
@@ -183,38 +177,40 @@ export default function SidebarSessoes({
             </div>
 
             {/* Menu ⋯ */}
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={(e) => {
                 e.stopPropagation();
                 setMenuAberto(menuAberto === s.id ? null : s.id);
               }}
-              className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-600 text-slate-400 hover:text-slate-200 transition-opacity"
+              className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-600 text-slate-400 hover:text-slate-200 transition-opacity h-6 w-6"
             >
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-              </svg>
-            </button>
+              <MoreVertical className="w-3.5 h-3.5" />
+            </Button>
 
             {menuAberto === s.id && (
               <div
                 className="absolute right-1 top-6 z-10 bg-slate-700 border border-slate-600 rounded-lg shadow-lg py-1 min-w-[120px]"
                 onClick={(e) => e.stopPropagation()}
               >
-                <button
+                <Button
+                  variant="ghost"
                   onClick={() => iniciarRenomear(s)}
-                  className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-600"
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-600 h-auto rounded-none justify-start font-normal"
                 >
                   Renomear
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
                   onClick={() => {
                     onArquivar(s.id);
                     setMenuAberto(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-slate-600"
+                  className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-slate-600 h-auto rounded-none justify-start font-normal"
                 >
                   Arquivar
-                </button>
+                </Button>
               </div>
             )}
           </div>

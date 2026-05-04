@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Loader2, RefreshCw, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { extractFunctionError } from "@/lib/error-utils";
+import { Button } from "@/components/ui/button";
 
 type Secao = "analise_estrategica" | "roteiro_sugerido" | "copy_anuncios" | "direcao_criativa";
 
@@ -11,7 +14,6 @@ interface Props {
   entrevistaId: string;
   roteiroId?: string;
   secao: Secao;
-  /** "gerar" = seção vazia, "refazer" = seção já existe */
   modo: "gerar" | "refazer";
 }
 
@@ -25,35 +27,24 @@ const LABEL: Record<Secao, string> = {
 export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState("");
 
   async function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
-    setErro("");
     setLoading(true);
-
     try {
       const supabase = createClient();
-      // Garante que o token está válido antes de chamar a Edge Function
       await supabase.auth.refreshSession();
       const { data, error } = await supabase.functions.invoke("gerar-roteiro", {
-        body: {
-          entrevista_id: entrevistaId,
-          secao,
-          roteiro_id: roteiroId,
-        },
+        body: { entrevista_id: entrevistaId, secao, roteiro_id: roteiroId },
       });
-
       if (error) {
-        setErro(await extractFunctionError(error, "Erro ao gerar seção"));
-        setLoading(false);
+        toast.error(await extractFunctionError(error, "Erro ao gerar seção"));
         return;
       }
-
       void data;
       router.refresh();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Erro inesperado ao chamar Edge Function");
+      toast.error(err instanceof Error ? err.message : "Erro inesperado ao chamar Edge Function");
     } finally {
       setLoading(false);
     }
@@ -61,59 +52,46 @@ export default function GerarSecaoButton({ entrevistaId, roteiroId, secao, modo 
 
   if (modo === "refazer") {
     return (
-      <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-end gap-1">
-        <button
+      <div onClick={(e) => e.stopPropagation()}>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleClick}
           disabled={loading}
-          className="text-xs font-medium px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:text-brand-600 hover:border-brand-200 hover:bg-brand-50 transition disabled:opacity-50"
+          className="rounded-full h-7 text-xs"
         >
-          {loading ? "Gerando..." : "↺ Refazer"}
-        </button>
-        {erro && <p className="text-xs text-red-500">{erro}</p>}
+          {loading ? (
+            <>
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              Gerando...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="mr-1 h-3 w-3" />
+              Refazer
+            </>
+          )}
+        </Button>
       </div>
     );
   }
 
-  // modo === "gerar" — estado vazio, botão primário
   return (
     <div className="flex flex-col items-center gap-3 py-6">
-      <p className="text-sm text-gray-400">Esta seção ainda não foi gerada.</p>
-      <button
-        onClick={handleClick}
-        disabled={loading}
-        className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition disabled:opacity-60"
-      >
+      <p className="text-sm text-muted-foreground">Esta seção ainda não foi gerada.</p>
+      <Button onClick={handleClick} disabled={loading}>
         {loading ? (
           <>
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Gerando (~30s)...
           </>
         ) : (
           <>
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <Plus className="mr-2 h-4 w-4" />
             Gerar {LABEL[secao]}
           </>
         )}
-      </button>
-      {erro && <p className="text-sm text-red-500">{erro}</p>}
+      </Button>
     </div>
   );
 }

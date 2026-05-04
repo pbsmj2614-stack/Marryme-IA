@@ -49,7 +49,7 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
       <div className="print:hidden fixed top-4 right-4 z-50 flex gap-2">
         <PrintButton />
         <a
-          href={`/prestador/${id}?tab=campanha`}
+          href={`/prestador/${id}?tab=campanha#campanha`}
           className="px-4 py-2 text-sm font-medium bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50"
         >
           ← Voltar
@@ -92,7 +92,9 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
         {!rel && (
           <div className="text-center py-16 text-gray-400">
             <p className="text-lg">Nenhum relatório gerado ainda.</p>
-            <p className="text-sm mt-2">Acesse a aba Campanha e clique em &quot;Atualizar dados&quot;.</p>
+            <p className="text-sm mt-2">
+              Acesse a aba Campanha e clique em &quot;Atualizar dados&quot;.
+            </p>
           </div>
         )}
 

@@ -4,9 +4,9 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig = {
   experimental: {
     instrumentationHook: true,
+    // Impede o Next.js de empacotar esses módulos CommonJS — devem ser resolvidos do node_modules
+    serverComponentsExternalPackages: ["pdfjs-dist", "mammoth", "pdf-parse"],
   },
-  // Impede o Next.js de empacotar esses módulos CommonJS — devem ser resolvidos do node_modules
-  serverExternalPackages: ["pdfjs-dist", "mammoth", "pdf-parse"],
 };
 
 export default withSentryConfig(nextConfig, {

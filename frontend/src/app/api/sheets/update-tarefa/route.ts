@@ -29,6 +29,8 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { updateTarefaSchema } from "@/lib/schemas";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -102,15 +104,18 @@ function toDateBR(iso: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!body) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
 
-    const id = String(body.id ?? "");
-    const id_cliente = String(body.id_cliente ?? "");
-    const o_que_original = body.o_que_original != null ? String(body.o_que_original).trim() : "";
-
-    if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
-    if (!id_cliente) return NextResponse.json({ error: "id_cliente obrigatório" }, { status: 400 });
+    const parsed = updateTarefaSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success)
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+        { status: 400 }
+      );
+    const { id, id_cliente, o_que_original, prazo_original, etapa_original, ...campos } =
+      parsed.data;
+    const oQueOrigStr = o_que_original?.trim() ?? "";
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -125,30 +130,28 @@ export async function POST(req: NextRequest) {
 
     // ── 2. Atualiza Supabase ─────────────────────────────────────────────────────
     const patch: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
-    if (body.check_feito !== undefined) patch.check_feito = body.check_feito;
-    if (body.status !== undefined) patch.status = String(body.status).trim();
-    if (body.quem !== undefined) patch.quem = String(body.quem).trim() || null;
-    if (body.prazo !== undefined) patch.prazo = String(body.prazo).trim() || null;
-    if (body.etapa !== undefined) patch.etapa = String(body.etapa).trim() || null;
-    if (body.tipo !== undefined) patch.tipo = String(body.tipo).trim() || null;
-    if (body.observacoes !== undefined) patch.observacoes = String(body.observacoes).trim() || null;
+    if (campos.check_feito !== undefined) patch.check_feito = campos.check_feito;
+    if (campos.status !== undefined) patch.status = campos.status?.trim();
+    if (campos.quem !== undefined) patch.quem = campos.quem?.trim() || null;
+    if (campos.prazo !== undefined) patch.prazo = campos.prazo?.trim() || null;
+    if (campos.etapa !== undefined) patch.etapa = campos.etapa?.trim() || null;
+    if (campos.tipo !== undefined) patch.tipo = campos.tipo?.trim() || null;
+    if (campos.observacoes !== undefined) patch.observacoes = campos.observacoes?.trim() || null;
 
     const { error: errUpdate } = await supabase.from("mm_tarefas").update(patch).eq("id", id);
 
     if (errUpdate) throw new Error(`Supabase update falhou: ${errUpdate.message}`);
 
     // ── 3. Atualiza linha no Sheets ──────────────────────────────────────────────
-    if (cliente?.sheets_aba && o_que_original) {
+    if (cliente?.sheets_aba && oQueOrigStr) {
       const token = await googleToken();
       const rows = await sRead(token, `${cliente.sheets_aba}!A:H`);
 
       // Identifica a linha pela correspondência: col C (o_que) é obrigatória,
       // col B (etapa) e col F (prazo DD/MM/YYYY) são restrições adicionais se fornecidas.
-      const oQueNorm = o_que_original.toLowerCase();
-      const prazoOrigBR = body.prazo_original ? toDateBR(String(body.prazo_original)) : null;
-      const etapaOrigNorm = body.etapa_original
-        ? String(body.etapa_original).trim().toLowerCase()
-        : null;
+      const oQueNorm = oQueOrigStr.toLowerCase();
+      const prazoOrigBR = prazo_original ? toDateBR(prazo_original) : null;
+      const etapaOrigNorm = etapa_original ? etapa_original.trim().toLowerCase() : null;
 
       let rowIndex = -1;
       for (let i = 0; i < rows.length; i++) {
@@ -174,18 +177,20 @@ export async function POST(req: NextRequest) {
 
         // Mescla: usa novo valor se fornecido, senão mantém o existente
         const newRow = [
-          body.check_feito !== undefined
-            ? body.check_feito
+          campos.check_feito !== undefined
+            ? campos.check_feito
               ? "TRUE"
               : "FALSE"
             : (existing[0] ?? "FALSE"),
-          body.etapa !== undefined ? String(body.etapa).trim() : (existing[1] ?? ""),
+          campos.etapa !== undefined ? String(campos.etapa).trim() : (existing[1] ?? ""),
           existing[2] ?? "", // o_que — não alterar (é a chave de busca)
-          body.tipo !== undefined ? String(body.tipo).trim() : (existing[3] ?? "Marry Me"),
-          body.quem !== undefined ? String(body.quem).trim() : (existing[4] ?? ""),
-          body.prazo !== undefined ? toDateBR(String(body.prazo)) : (existing[5] ?? ""),
-          body.status !== undefined ? String(body.status).trim() : (existing[6] ?? ""),
-          body.observacoes !== undefined ? String(body.observacoes).trim() : (existing[7] ?? ""),
+          campos.tipo !== undefined ? String(campos.tipo).trim() : (existing[3] ?? "Marry Me"),
+          campos.quem !== undefined ? String(campos.quem).trim() : (existing[4] ?? ""),
+          campos.prazo !== undefined ? toDateBR(String(campos.prazo)) : (existing[5] ?? ""),
+          campos.status !== undefined ? String(campos.status).trim() : (existing[6] ?? ""),
+          campos.observacoes !== undefined
+            ? String(campos.observacoes).trim()
+            : (existing[7] ?? ""),
         ];
 
         const sheetRow = rowIndex + 1; // 1-indexed

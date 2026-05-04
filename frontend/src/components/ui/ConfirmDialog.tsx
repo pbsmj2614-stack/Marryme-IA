@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 
 interface BaseProps {
   open: boolean;
@@ -36,7 +47,6 @@ export function ConfirmDialog(props: Props) {
     variant = "default",
     onCancel,
   } = props;
-
   const [inputValue, setInputValue] = useState(
     props.kind === "prompt" ? (props.defaultValue ?? "") : ""
   );
@@ -50,27 +60,31 @@ export function ConfirmDialog(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (!open) return null;
-
   function handleConfirm() {
-    if (props.kind === "prompt") {
-      props.onConfirm(inputValue);
-    } else {
-      (props as ConfirmProps).onConfirm();
-    }
+    if (props.kind === "prompt") props.onConfirm(inputValue);
+    else (props as ConfirmProps).onConfirm();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        {message && <p className="mt-2 text-sm text-gray-500 whitespace-pre-line">{message}</p>}
+    <AlertDialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onCancel();
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          {message && (
+            <AlertDialogDescription className="whitespace-pre-line">
+              {message}
+            </AlertDialogDescription>
+          )}
+        </AlertDialogHeader>
 
         {props.kind === "prompt" && (
-          <input
+          <Input
             ref={inputRef}
-            type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
@@ -78,31 +92,25 @@ export function ConfirmDialog(props: Props) {
               if (e.key === "Escape") onCancel();
             }}
             placeholder={props.placeholder}
-            className="mt-4 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-400 transition"
             autoFocus
           />
         )}
 
-        <div className="mt-5 flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
-          >
-            {cancelLabel}
-          </button>
-          <button
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onCancel}>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction
             onClick={handleConfirm}
             disabled={props.kind === "prompt" && !inputValue.trim()}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={
               variant === "danger"
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-brand-600 hover:bg-brand-700 text-white"
-            }`}
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : ""
+            }
           >
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

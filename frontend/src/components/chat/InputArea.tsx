@@ -8,7 +8,10 @@ import {
   type KeyboardEvent,
   type DragEvent,
 } from "react";
+import imageCompression from "browser-image-compression";
 import type { ChatArquivo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Loader2, Paperclip, Send, X } from "lucide-react";
 
 const TIPOS_ACEITOS = [
   "image/jpeg",
@@ -72,9 +75,23 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
   }, []);
 
   async function uploadArquivo(file: File, idx: number) {
-    // Upload via API route server-side (usa supabaseAdmin — sem dependência de políticas de bucket)
+    // Comprime imagens >1 MB antes de enviar (mantém GIF sem compressão)
+    let fileParaUpload = file;
+    if (file.type.startsWith("image/") && file.type !== "image/gif" && file.size > 1024 * 1024) {
+      try {
+        fileParaUpload = await imageCompression(file, {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+          fileType: file.type as "image/jpeg" | "image/png" | "image/webp",
+        });
+      } catch {
+        // Falha silenciosa — sobe o arquivo original
+      }
+    }
+
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", fileParaUpload);
     form.append("prestadorId", prestadorId);
     form.append("dir", uploadDirRef.current);
 
@@ -215,15 +232,15 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
                   </span>
                 )}
               </div>
-              {a.uploading && (
-                <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin shrink-0" />
-              )}
-              <button
+              {a.uploading && <Loader2 className="w-3 h-3 animate-spin shrink-0 text-gray-400" />}
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => removerArquivo(i)}
-                className={`ml-1 shrink-0 hover:opacity-80 ${a.erro ? "text-red-400" : "text-gray-400 hover:text-gray-700"}`}
+                className={`ml-1 shrink-0 h-4 w-4 p-0 hover:opacity-80 hover:bg-transparent ${a.erro ? "text-red-400" : "text-gray-400 hover:text-gray-700"}`}
               >
-                ×
-              </button>
+                <X className="w-3 h-3" />
+              </Button>
             </div>
           ))}
         </div>
@@ -231,27 +248,17 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
 
       <div className="flex items-end gap-2">
         {/* Botão de upload */}
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => inputFileRef.current?.click()}
           disabled={disabled}
           title="Anexar arquivo"
-          className="shrink-0 p-2 text-gray-400 hover:text-brand-500 hover:bg-brand-50 rounded-lg transition disabled:opacity-40"
+          className="shrink-0 p-2 text-gray-400 hover:text-brand-500 hover:bg-brand-50 rounded-lg transition disabled:opacity-40 h-auto w-auto"
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13"
-            />
-          </svg>
-        </button>
+          <Paperclip className="w-5 h-5" />
+        </Button>
         <input
           ref={inputFileRef}
           type="file"
@@ -280,30 +287,14 @@ export default function InputArea({ prestadorId, sessaoId, disabled, onEnviar }:
         />
 
         {/* Botão enviar */}
-        <button
+        <Button
           type="button"
           onClick={enviar}
           disabled={!podaEnviar}
-          className="shrink-0 w-10 h-10 flex items-center justify-center bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition"
+          className="shrink-0 w-10 h-10 flex items-center justify-center bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition p-0"
         >
-          {disabled ? (
-            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-              />
-            </svg>
-          )}
-        </button>
+          {disabled ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </Button>
       </div>
 
       {arrastando && <p className="text-center text-xs text-brand-500 mt-2">Solte para anexar</p>}

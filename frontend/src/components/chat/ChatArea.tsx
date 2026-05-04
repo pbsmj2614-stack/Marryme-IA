@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import type { ChatMensagem, ChatArquivo } from "@/lib/types";
 import PromptsBase from "./PromptsBase";
 import type { ChatTipo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Loader2, ChevronDown } from "lucide-react";
 
 interface MensagemTemporaria {
   id: string;
@@ -99,12 +101,13 @@ function Bolha({
         </div>
 
         {isIA && (
-          <button
+          <Button
+            variant="ghost"
             onClick={copiar}
-            className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-400 hover:text-gray-600 transition-opacity self-start ml-1"
+            className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-400 hover:text-gray-600 transition-opacity self-start ml-1 h-auto p-0 font-normal"
           >
             {copiado ? "✓ Copiado" : "Copiar"}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -206,20 +209,21 @@ export default function ChatArea({
         >
           {hasMoreMsgs && (
             <div className="flex justify-center pb-2">
-              <button
+              <Button
+                variant="outline"
                 onClick={handleCarregarMais}
                 disabled={carregandoMais}
-                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg bg-white transition disabled:opacity-50 flex items-center gap-1.5"
+                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded-lg bg-white transition disabled:opacity-50 flex items-center gap-1.5 h-auto"
               >
                 {carregandoMais ? (
                   <>
-                    <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    <Loader2 className="w-3 h-3 animate-spin" />
                     Carregando...
                   </>
                 ) : (
                   "↑ Carregar mensagens anteriores"
                 )}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -248,12 +252,14 @@ export default function ChatArea({
       )}
 
       {!isEmpty && mostrarScrollBtn && (
-        <button
+        <Button
+          variant="outline"
+          size="icon"
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
-          className="absolute bottom-4 right-4 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-50 transition z-10"
+          className="absolute bottom-4 right-4 w-8 h-8 bg-white border border-gray-200 rounded-full shadow-md flex items-center justify-center text-gray-500 hover:bg-gray-50 transition z-10 p-0"
         >
-          ↓
-        </button>
+          <ChevronDown className="w-4 h-4" />
+        </Button>
       )}
     </div>
   );
