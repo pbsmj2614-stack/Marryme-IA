@@ -12,7 +12,8 @@ export type ChatTipo =
   | "video_apresentacao"
   | "cta_anuncio"
   | "direcao_criativa"
-  | "analise";
+  | "analise"
+  | "proposta_comercial";
 export type ChatStatus = "ativa" | "finalizada" | "arquivada" | "aprovada";
 
 export interface ChatArquivo {

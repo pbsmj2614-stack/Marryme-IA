@@ -115,6 +115,7 @@ const CHAT_TIPOS = [
   "cta_anuncio",
   "direcao_criativa",
   "analise",
+  "proposta_comercial",
 ] as const;
 const CHAT_STATUS = ["ativa", "finalizada", "arquivada", "aprovada"] as const;
 

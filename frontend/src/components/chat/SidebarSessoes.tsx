@@ -11,6 +11,7 @@ const TIPO_LABEL: Record<ChatTipo, string> = {
   cta_anuncio: "CTA",
   direcao_criativa: "Direção",
   analise: "Análise",
+  proposta_comercial: "Proposta",
 };
 
 const TIPO_COR: Record<ChatTipo, string> = {
@@ -19,6 +20,7 @@ const TIPO_COR: Record<ChatTipo, string> = {
   cta_anuncio: "bg-blue-800/60 text-blue-200",
   direcao_criativa: "bg-amber-800/60 text-amber-200",
   analise: "bg-green-800/60 text-green-200",
+  proposta_comercial: "bg-rose-800/60 text-rose-200",
 };
 
 interface Props {

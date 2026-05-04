@@ -35,6 +35,12 @@ const PROMPTS_BASE: PromptBase[] = [
       "Faça uma análise estratégica completa do prestador com base nos dados da entrevista e me apresente o posicionamento sugerido.",
   },
   {
+    label: "📄 Criar proposta comercial",
+    tipo: "proposta_comercial",
+    prompt:
+      "Vamos criar uma proposta comercial completa em PDF de 7 páginas. Antes de começar: esta proposta é para um casal específico (com nome e data) ou um modelo genérico para enviar a vários casais?",
+  },
+  {
     label: "✏️ Refinar roteiro existente",
     tipo: "geral",
     prompt:

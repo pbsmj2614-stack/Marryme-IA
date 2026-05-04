@@ -12,6 +12,7 @@ const TIPO_LABEL: Record<ChatTipo, string> = {
   cta_anuncio: "CTA",
   direcao_criativa: "Direção",
   analise: "Análise",
+  proposta_comercial: "Proposta",
 };
 
 function fmtData(iso: string) {

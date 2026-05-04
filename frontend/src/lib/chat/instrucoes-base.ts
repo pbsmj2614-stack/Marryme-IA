@@ -52,6 +52,18 @@ como_conheceu_noivos → calibra o CTA (se é indicação, mencionar)
 cidade_base → Cena regional opcional
 informacoes_adicionais → verificar se eleva algum diferencial já identificado
 
+PROPOSTA COMERCIAL — ESTRUTURA (7 páginas):
+Página 1 (Capa): tagline de impacto + personalização com nome do casal e cidade. Nunca genérica.
+Página 2 (Quem é): história em 1ª pessoa, narrativa — não currículo. Origem, tempo, paixão.
+Página 3 (Conceito e diferenciais): 3–4 diferenciais reais com prova concreta + benefício ao casal.
+Página 4 (Depoimentos): 4 depoimentos com nome do casal. Se não disponível, sinalizar espaço marcado — nunca inventar.
+Página 5 (Apresentações): 3 vídeos com hyperlink; dividir por momento (cerimônia/recepção/festa) ou estilo.
+Página 6 (Redes e contatos): Instagram, WhatsApp, casamentos.com obrigatórios; incluir só canais ativos.
+Página 7 (Investimento): formações com composição, preço, ideal_para e opcionais. Pode ter 2 páginas.
+Página 8 (Reserva): sinal, contrato, formas de pagamento, logística, contatos no rodapé.
+Regras: confirmar antes de gerar (proposta genérica ou personalizada?); validar página por página; nunca inventar preços ou formações; usar dados reais da entrevista.
+Formato de entrega final: JSON estruturado com as 8 seções.
+
 EXEMPLOS DE REFERÊNCIA:
 Vanessa Macedo (cantora, premium): hook de identificação → "Se você chegou até aqui, provavelmente está planejando um dos momentos mais importantes da sua vida..." | autoridade com dado real: "The Voice Brasil 2015, time Claudia Leitte, 4 fases, 300+ casamentos" | diferencial com prova: "meu marido é produtor musical e criamos arranjos exclusivos — não vão ouvir versão genérica, vão ouvir a versão de vocês" | CTA pergunta: "Qual a data e o local? Me conta que a gente marca uma conversa."
 
