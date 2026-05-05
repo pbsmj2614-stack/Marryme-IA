@@ -16,21 +16,19 @@ export async function montarSystemPrompt(prestadorId: string): Promise<string> {
       .single(),
     supabase
       .from("roteiros")
-      .select("analise_estrategica, roteiro_sugerido, copy_anuncios, aprovado, criado_em")
+      .select("analise_estrategica, aprovado, criado_em")
       .eq("prestador_id", prestadorId)
+      .eq("aprovado", true)
+      .not("analise_estrategica", "is", null)
       .order("criado_em", { ascending: false })
-      .limit(10),
+      .limit(1),
   ]);
 
   if (!prestador) throw new Error("Prestador não encontrado");
 
   const entrevista = (entrevistaRow?.dados_json ?? {}) as Record<string, unknown>;
 
-  const analiseAprovada =
-    ((roteiros ?? []) as Roteiro[])
-      .filter((r) => r.aprovado && r.analise_estrategica)
-      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())[0]
-      ?.analise_estrategica ?? null;
+  const analiseAprovada = (roteiros?.[0] as Roteiro | undefined)?.analise_estrategica ?? null;
 
   const entrevistaTexto =
     Object.keys(entrevista).length > 0

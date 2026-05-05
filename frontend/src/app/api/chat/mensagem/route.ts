@@ -183,6 +183,22 @@ async function buildContent(
   return [...blocos, { type: "text", text: content }];
 }
 
+// Para mensagens do histórico antigo: substitui arquivos por descrição textual
+// evita re-download de imagens/PDFs a cada nova mensagem enviada
+function buildContentHistorico(content: string, arquivos: ChatArquivo[]): string {
+  if (!arquivos.length) return content;
+  const desc = arquivos
+    .map((a) => {
+      const base = baseMime(a.tipo);
+      if ((IMAGE_TYPES as readonly string[]).includes(base)) return `[Imagem: ${a.nome}]`;
+      if (base === "application/pdf") return `[PDF: ${a.nome}]`;
+      if (DOCX_TYPES.includes(base)) return `[Documento: ${a.nome}]`;
+      return `[Arquivo: ${a.nome}]`;
+    })
+    .join(" ");
+  return `${desc}\n${content}`;
+}
+
 export async function POST(req: NextRequest) {
   const user = await getAuthUser();
   if (!user) return UNAUTHORIZED();
@@ -230,10 +246,15 @@ export async function POST(req: NextRequest) {
           .order("criado_em", { ascending: true })
           .limit(40);
 
+        const lista = historico ?? [];
         const mensagens: Anthropic.MessageParam[] = await Promise.all(
-          (historico ?? []).map(async (m: MsgRow) => ({
+          lista.map(async (m: MsgRow, idx: number) => ({
             role: m.role,
-            content: await buildContent(m.content, m.arquivos ?? []),
+            // Só baixa arquivos da última mensagem — histórico antigo usa descrição textual
+            content:
+              idx === lista.length - 1
+                ? await buildContent(m.content, m.arquivos ?? [])
+                : buildContentHistorico(m.content, m.arquivos ?? []),
           }))
         );
 
@@ -263,7 +284,7 @@ export async function POST(req: NextRequest) {
 
         const claudeStream = anthropic.messages.stream({
           model: "claude-sonnet-4-6",
-          max_tokens: 2048,
+          max_tokens: 8192,
           system: systemPrompt,
           messages: mensagens,
         });
