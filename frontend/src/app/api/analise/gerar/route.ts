@@ -225,16 +225,32 @@ export async function POST(req: NextRequest) {
           }
 
           // Tenta parsear — remove markdown code fences se existirem
+          console.log(
+            `[analise/gerar] fullText length: ${fullText.length}, preview: ${fullText.slice(0, 120)}`
+          );
           let analiseJson: Record<string, unknown> = {};
+          let parseError: string | null = null;
           try {
             const stripped = fullText
               .replace(/^```(?:json)?\s*/i, "")
               .replace(/\s*```\s*$/, "")
               .trim();
             const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-            if (jsonMatch) analiseJson = JSON.parse(jsonMatch[0]);
-          } catch {
-            /* ignora parse error */
+            if (jsonMatch) {
+              analiseJson = JSON.parse(jsonMatch[0]);
+            } else {
+              parseError = `Nenhum JSON encontrado na resposta (${fullText.length} chars). Início: ${fullText.slice(0, 80)}`;
+            }
+          } catch (e) {
+            parseError = `Erro ao parsear JSON: ${e instanceof Error ? e.message : String(e)}`;
+          }
+
+          if (parseError) {
+            console.error("[analise/gerar] parse error:", parseError);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ error: parseError })}\n\n`)
+            );
+            return;
           }
 
           if (Object.keys(analiseJson).length > 0) {
