@@ -24,9 +24,14 @@ export async function middleware(request: NextRequest) {
   );
 
   // Renova o token de sessão — obrigatório para @supabase/ssr funcionar
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // try/catch: cookie corrompido/inválido lança exceção em vez de retornar null
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Cookie inválido — trata como não autenticado e redireciona pro login
+  }
 
   // Redireciona para /login se não autenticado (exceto a própria /login)
   if (!user && !request.nextUrl.pathname.startsWith("/login")) {
