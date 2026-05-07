@@ -451,7 +451,7 @@ export default function PipelinePage() {
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(false);
+  const [mostrarFinalizadasIds, setMostrarFinalizadasIds] = useState<Set<string>>(new Set());
   const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
   const [addTarefaForm, setAddTarefaForm] = useState({
     etapa: "",
@@ -945,10 +945,17 @@ export default function PipelinePage() {
                                 </span>
                                 {c.finalizadas > 0 && (
                                   <Button
-                                    onClick={() => setMostrarFinalizadas((v) => !v)}
+                                    onClick={() =>
+                                      setMostrarFinalizadasIds((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(c.id)) next.delete(c.id);
+                                        else next.add(c.id);
+                                        return next;
+                                      })
+                                    }
                                     className="text-xs px-2 py-0.5 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition"
                                   >
-                                    {mostrarFinalizadas
+                                    {mostrarFinalizadasIds.has(c.id)
                                       ? "Ocultar concluídas"
                                       : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
                                   </Button>
@@ -967,7 +974,7 @@ export default function PipelinePage() {
                             </div>
                             <TabelaTarefas
                               tarefas={
-                                mostrarFinalizadas
+                                mostrarFinalizadasIds.has(c.id)
                                   ? c.tarefas
                                   : c.tarefas.filter(
                                       (t) => !t.check_feito && t.status !== "Finalizado"

@@ -52,13 +52,11 @@ function parseDateBR(str: string): string | null {
   return null;
 }
 
-const TODAY = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-
 function isAtrasado(prazoStr: string, status: string): boolean {
   if (/finaliz|cancelad/i.test(status)) return false; // já finalizado ou cancelado
   const prazo = parseDateBR(prazoStr);
   if (!prazo) return false;
-  return prazo < TODAY;
+  return prazo < new Date().toISOString().split("T")[0];
 }
 
 // Normaliza status do cliente para "Ativo", "Pausado" ou "Encerrado"
