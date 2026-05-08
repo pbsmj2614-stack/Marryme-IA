@@ -24,13 +24,17 @@ export async function middleware(request: NextRequest) {
   );
 
   // Renova o token de sessão — obrigatório para @supabase/ssr funcionar
-  // try/catch: cookie corrompido/inválido lança exceção em vez de retornar null
+  // Promise.race: cookie corrompido lança exceção; timeout de 5s evita que o
+  // Vercel Edge mate a requisição com 504 se o Supabase travar sem jogar erro.
   let user = null;
   try {
-    const { data } = await supabase.auth.getUser();
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("auth timeout")), 5000)
+    );
+    const { data } = await Promise.race([supabase.auth.getUser(), timeout]);
     user = data.user;
   } catch {
-    // Cookie inválido — trata como não autenticado e redireciona pro login
+    // Cookie inválido ou Supabase lento — trata como não autenticado
   }
 
   // Redireciona para /login se não autenticado (exceto a própria /login)
