@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * POST /api/chat/mensagem
  * Body: { sessao_id, prestador_id, content, arquivos? }

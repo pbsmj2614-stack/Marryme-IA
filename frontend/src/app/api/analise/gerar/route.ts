@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * POST /api/analise/gerar
  * Body: { prestador_id: string }
@@ -209,7 +210,7 @@ export async function POST(req: NextRequest) {
         }, 20_000);
 
         try {
-          const claudeStream = await anthropic.messages.stream({
+          const claudeStream = anthropic.messages.stream({
             model: "claude-sonnet-4-6",
             max_tokens: 8192,
             messages: [{ role: "user", content: prompt }],
