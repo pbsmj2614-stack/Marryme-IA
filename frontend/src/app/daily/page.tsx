@@ -8,7 +8,6 @@ import Header from "@/components/Header";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
 import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "@/lib/client-utils";
-import { RESPONSAVEIS } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
@@ -398,6 +397,9 @@ export default function DailyPage() {
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
   const isAtrasado = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 
+  // Normaliza string para comparação (remove acentos, lowercase)
+  const normStr = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
   // Ordem de prioridade: Atrasado(0) > Em andamento(1) > Não iniciado(2) > outros(3)
   const getPrioridade = (t: Tarefa): number => {
     if (isAtrasado(t)) return 0;
@@ -425,6 +427,17 @@ export default function DailyPage() {
     return result;
   }, [tarefas, clienteMap]);
 
+  // ── Nome do usuário logado (para priorizar suas tarefas nos cards) ──
+  const currentUserName = useMemo(() => {
+    if (!user?.email) return null;
+    const prefix = normStr(user.email.split("@")[0]);
+    const nomes = Array.from(
+      new Set(tarefasComCliente.map((t) => t.quem?.trim()).filter(Boolean) as string[])
+    );
+    return nomes.find((nome) => prefix.startsWith(normStr(nome))) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, tarefasComCliente]);
+
   // ── Opções de responsável (derivadas dos dados reais) ──
   const respOptions = useMemo(() => {
     const nomes = new Set<string>();
@@ -446,18 +459,22 @@ export default function DailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp]);
 
-  // ── Prioridades de hoje — ordenadas por prioridade ──
+  // ── Prioridades de hoje — usuário logado primeiro, depois por prioridade ──
   const prioHoje = useMemo(
     () =>
       tarefasComCliente
         .filter((t) => t.prazo === TODAY && !isFinalizado(t) && matchesResp(t))
         .sort((a, b) => {
+          const myNorm = currentUserName ? normStr(currentUserName) : null;
+          const aIsMe = myNorm ? normStr(a.quem ?? "") === myNorm : false;
+          const bIsMe = myNorm ? normStr(b.quem ?? "") === myNorm : false;
+          if (aIsMe !== bIsMe) return aIsMe ? -1 : 1;
           const diff = getPrioridade(a) - getPrioridade(b);
           if (diff !== 0) return diff;
           return a.cliente.nome_empresa.localeCompare(b.cliente.nome_empresa, "pt-BR");
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tarefasComCliente, filtroResp]
+    [tarefasComCliente, filtroResp, currentUserName]
   );
 
   // ── Esta semana (hoje → +7 dias) agrupada por data, ordenada por prioridade ──
@@ -472,11 +489,19 @@ export default function DailyPage() {
       if (!grupos[k]) grupos[k] = [];
       grupos[k].push(t);
     });
-    // Ordena tarefas dentro de cada dia por prioridade
-    Object.values(grupos).forEach((arr) => arr.sort((a, b) => getPrioridade(a) - getPrioridade(b)));
+    // Ordena tarefas dentro de cada dia: usuário logado primeiro, depois por prioridade
+    const myNorm = currentUserName ? normStr(currentUserName) : null;
+    Object.values(grupos).forEach((arr) =>
+      arr.sort((a, b) => {
+        const aIsMe = myNorm ? normStr(a.quem ?? "") === myNorm : false;
+        const bIsMe = myNorm ? normStr(b.quem ?? "") === myNorm : false;
+        if (aIsMe !== bIsMe) return aIsMe ? -1 : 1;
+        return getPrioridade(a) - getPrioridade(b);
+      })
+    );
     return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tarefasComCliente, filtroResp]);
+  }, [tarefasComCliente, filtroResp, currentUserName]);
 
   // ── Clientes com métricas (usa tarefasComCliente — já deduplicadas) ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(
@@ -508,10 +533,16 @@ export default function DailyPage() {
     [clientesComMetricas]
   );
 
-  // ── Resumo por responsável ──
-  const resumoResponsavel = useMemo(
-    () =>
-      RESPONSAVEIS.map((resp) => {
+  // ── Resumo por responsável (derivado dos dados reais — novos membros aparecem automaticamente) ──
+  const resumoResponsavel = useMemo(() => {
+    const nomes = new Set<string>();
+    tarefasComCliente.forEach((t) => {
+      if (t.quem?.trim()) nomes.add(t.quem.trim());
+      if (t.cliente.responsavel_mm?.trim()) nomes.add(t.cliente.responsavel_mm.trim());
+    });
+    return Array.from(nomes)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((resp) => {
         const meus = tarefasComCliente.filter(
           (t) =>
             t.quem?.toLowerCase().includes(resp.toLowerCase()) ||
@@ -523,11 +554,9 @@ export default function DailyPage() {
         const totalAtivo = meus.filter((t) => t.status !== "Cancelado").length;
         const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
         return { resp, total, finalizadas, atrasadas, score };
-      }),
-    // isAtrasado e isFinalizado são funções estáveis de módulo, não dependências de hook
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tarefasComCliente]
-  );
+  }, [tarefasComCliente]);
 
   // ─────────────────────────────────────────────────────────────────────────────
 
