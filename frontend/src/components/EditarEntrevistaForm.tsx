@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { validarEntrevista } from "@/lib/schemas";
 import type { Categoria, DadosEntrevista } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
+import { RESPONSAVEIS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,7 +39,7 @@ const FASES = [
   "Pausado",
   "Churn",
 ];
-const RESPS = ["Paulo", "Murilo", "Kauê", "Giovanni"];
+const RESPS = RESPONSAVEIS;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ function SelectField({
   required,
   disabled,
   erro,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -75,13 +77,20 @@ function SelectField({
   required?: boolean;
   disabled?: boolean;
   erro?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
-      <Select value={value} onValueChange={onChange} disabled={disabled} required={required}>
+      {/* Radix UI Select não aceita value="" em SelectItem — string vazia → undefined (mostra placeholder) */}
+      <Select
+        value={value || undefined}
+        onValueChange={onChange}
+        disabled={disabled}
+        required={required}
+      >
         <SelectTrigger className={erro ? "border-red-400 focus:ring-red-400" : ""}>
-          <SelectValue />
+          <SelectValue placeholder={placeholder ?? "Selecione..."} />
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (
@@ -296,10 +305,8 @@ export default function EditarEntrevistaForm({
                 label="Responsável MM"
                 value={dados.responsavel_mm ?? ""}
                 onChange={(v) => set("responsavel_mm", v)}
-                options={[
-                  { value: "", label: "— selecione —" },
-                  ...RESPS.map((r) => ({ value: r, label: r })),
-                ]}
+                options={RESPS.map((r) => ({ value: r, label: r }))}
+                placeholder="— selecione —"
                 disabled={saving}
               />
             </div>

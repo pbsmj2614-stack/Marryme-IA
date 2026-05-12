@@ -90,6 +90,7 @@ function SelectField({
   options,
   required,
   disabled,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -97,13 +98,15 @@ function SelectField({
   options: { value: string; label: string }[];
   required?: boolean;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
     <div>
       <FieldLabel required={required}>{label}</FieldLabel>
-      <Select value={value} onValueChange={onChange} disabled={disabled}>
+      {/* Radix UI Select não aceita value="" em SelectItem — string vazia → undefined (mostra placeholder) */}
+      <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger className="w-full">
-          <SelectValue />
+          <SelectValue placeholder={placeholder ?? "Selecione..."} />
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (
@@ -424,10 +427,8 @@ export default function NovoPage() {
                     label="Responsável MM"
                     value={dados.responsavel_mm ?? ""}
                     onChange={(v) => set("responsavel_mm", v)}
-                    options={[
-                      { value: "", label: "— selecione —" },
-                      ...RESPS.map((r) => ({ value: r, label: r })),
-                    ]}
+                    options={RESPS.map((r) => ({ value: r, label: r }))}
+                    placeholder="— selecione —"
                     disabled={loading}
                   />
                 </div>
