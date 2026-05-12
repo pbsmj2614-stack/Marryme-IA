@@ -177,11 +177,13 @@ function TabelaTarefas({
   clienteId: _clienteId,
   onCheckChange,
   onUpdate,
+  locked = false,
 }: {
   tarefas: Tarefa[];
   clienteId: string;
   onCheckChange: (tarefa: Tarefa, checked: boolean) => void;
   onUpdate: (tarefa: Tarefa, updates: EditForm) => Promise<void>;
+  locked?: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
@@ -251,10 +253,11 @@ function TabelaTarefas({
                       type="checkbox"
                       checked={t.check_feito}
                       onChange={(e) => {
-                        if (!isEdit) onCheckChange(t, e.target.checked);
+                        if (!isEdit && !locked) onCheckChange(t, e.target.checked);
                       }}
-                      className="w-3.5 h-3.5 accent-green-500 cursor-pointer"
-                      title="Marcar como concluído"
+                      disabled={locked}
+                      className="w-3.5 h-3.5 accent-green-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      title={locked ? "Cliente pausado/encerrado" : "Marcar como concluído"}
                     />
                   </td>
                   {/* Etapa */}
@@ -278,23 +281,24 @@ function TabelaTarefas({
                   </td>
                   {/* Ações */}
                   <td className="px-2 py-2 text-right whitespace-nowrap">
-                    {isEdit ? (
-                      <Button
-                        onClick={() => setEditingId(null)}
-                        className="text-gray-500 hover:text-gray-300 px-1"
-                        title="Cancelar"
-                      >
-                        ✕
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => startEdit(t)}
-                        className="text-gray-600 hover:text-gray-300 px-1 transition"
-                        title="Editar tarefa"
-                      >
-                        ✎
-                      </Button>
-                    )}
+                    {!locked &&
+                      (isEdit ? (
+                        <Button
+                          onClick={() => setEditingId(null)}
+                          className="text-gray-500 hover:text-gray-300 px-1"
+                          title="Cancelar"
+                        >
+                          ✕
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => startEdit(t)}
+                          className="text-gray-600 hover:text-gray-300 px-1 transition"
+                          title="Editar tarefa"
+                        >
+                          ✎
+                        </Button>
+                      ))}
                   </td>
                 </tr>
 
@@ -960,18 +964,29 @@ export default function PipelinePage() {
                                       : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
                                   </Button>
                                 )}
-                                <Button
-                                  onClick={() =>
-                                    setAddTarefaFor(
-                                      addTarefaFor === c.id_cliente ? null : c.id_cliente
-                                    )
-                                  }
-                                  className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
-                                >
-                                  <Plus className="w-3 h-3" /> Tarefa
-                                </Button>
+                                {c.status === "Ativo" && (
+                                  <Button
+                                    onClick={() =>
+                                      setAddTarefaFor(
+                                        addTarefaFor === c.id_cliente ? null : c.id_cliente
+                                      )
+                                    }
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
+                                  >
+                                    <Plus className="w-3 h-3" /> Tarefa
+                                  </Button>
+                                )}
                               </div>
                             </div>
+                            {c.status !== "Ativo" && (
+                              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+                                <span>🔒</span>
+                                <span>
+                                  Cliente {c.status.toLowerCase()} — tarefas somente leitura.
+                                  Reative para editar.
+                                </span>
+                              </p>
+                            )}
                             <TabelaTarefas
                               tarefas={
                                 mostrarFinalizadasIds.has(c.id)
@@ -983,10 +998,11 @@ export default function PipelinePage() {
                               clienteId={c.id_cliente}
                               onCheckChange={handleCheckChange}
                               onUpdate={handleUpdateTarefa}
+                              locked={c.status !== "Ativo"}
                             />
 
-                            {/* ── Formulário de nova tarefa ── */}
-                            {addTarefaFor === c.id_cliente && (
+                            {/* ── Formulário de nova tarefa (apenas Ativos) ── */}
+                            {addTarefaFor === c.id_cliente && c.status === "Ativo" && (
                               <div
                                 className="mt-3 p-4 rounded-xl bg-[#1a1a2e] border border-[#333] space-y-3"
                                 onClick={(e) => e.stopPropagation()}

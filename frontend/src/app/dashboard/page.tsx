@@ -26,7 +26,14 @@ import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type StatusMeta = "Saudável" | "Em atenção" | "Em risco" | "Sem dados";
-type FiltroStatus = "Todos" | "Em risco" | "Em atenção" | "Saudáveis" | "Sem dados";
+type FiltroStatus =
+  | "Todos"
+  | "Em risco"
+  | "Em atenção"
+  | "Saudáveis"
+  | "Sem dados"
+  | "Pausados"
+  | "Encerrados";
 type SortKey = "nome" | "plano" | "health_score" | "ctr" | "cpm" | "frequency" | "spend";
 
 interface RelatorioRow {
@@ -473,7 +480,15 @@ function AtualizarTodosBtn({ onDone }: { onDone: () => void }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const FILTROS: FiltroStatus[] = ["Todos", "Em risco", "Em atenção", "Saudáveis", "Sem dados"];
+const FILTROS: FiltroStatus[] = [
+  "Todos",
+  "Em risco",
+  "Em atenção",
+  "Saudáveis",
+  "Sem dados",
+  "Pausados",
+  "Encerrados",
+];
 
 const TABLE_COLS: { key: SortKey | null; label: string }[] = [
   { key: "nome", label: "Cliente" },
@@ -605,14 +620,11 @@ export default function DashboardBIPage() {
     }
   }
 
-  // ── Métricas agregadas ──
+  // ── Métricas agregadas (apenas clientes Ativos) ──
   const metrics = useMemo(() => {
-    const comDados = prestadores.filter(
-      (p) => p.relatorio != null && p.relatorio.health_score != null
-    );
-    const semDados = prestadores.filter(
-      (p) => p.relatorio == null || p.relatorio.health_score == null
-    );
+    const ativos = prestadores.filter((p) => !/paus|encerr/i.test(p.status_cliente));
+    const comDados = ativos.filter((p) => p.relatorio != null && p.relatorio.health_score != null);
+    const semDados = ativos.filter((p) => p.relatorio == null || p.relatorio.health_score == null);
     const emRisco = comDados.filter((p) => (p.relatorio?.health_score ?? 0) < 40);
     const emAtencao = comDados.filter((p) => {
       const s = p.relatorio?.health_score ?? 0;
@@ -625,7 +637,9 @@ export default function DashboardBIPage() {
             comDados.reduce((s, p) => s + (p.relatorio?.health_score ?? 0), 0) / comDados.length
           )
         : 0;
-    const configurados = prestadores.filter((p) => p.meta_ad_account_id).length;
+    const configurados = ativos.filter((p) => p.meta_ad_account_id).length;
+    const pausados = prestadores.filter((p) => /paus/i.test(p.status_cliente)).length;
+    const encerrados = prestadores.filter((p) => /encerr/i.test(p.status_cliente)).length;
     return {
       avgScore,
       emRisco: emRisco.length,
@@ -633,7 +647,9 @@ export default function DashboardBIPage() {
       saudaveis: saudaveis.length,
       semDados: semDados.length,
       configurados,
-      total: prestadores.length,
+      total: ativos.length,
+      pausados,
+      encerrados,
     };
   }, [prestadores]);
 
@@ -641,6 +657,10 @@ export default function DashboardBIPage() {
   const filtrados = useMemo(() => {
     let lista = prestadores.filter((p) => {
       const score = p.relatorio?.health_score ?? null;
+      if (filtro === "Pausados") return /paus/i.test(p.status_cliente);
+      if (filtro === "Encerrados") return /encerr/i.test(p.status_cliente);
+      // Para todos os outros filtros, Pausados/Encerrados ficam ocultos
+      if (/paus|encerr/i.test(p.status_cliente)) return false;
       if (filtro === "Em risco") return score !== null && score < 40;
       if (filtro === "Em atenção") return score !== null && score >= 40 && score < 70;
       if (filtro === "Saudáveis") return score !== null && score >= 70;
@@ -686,11 +706,16 @@ export default function DashboardBIPage() {
     return lista;
   }, [prestadores, filtro, sortKey, sortDir]);
 
-  // ── Chart ──
+  // ── Chart (apenas Ativos) ──
   const chartData = useMemo(
     () =>
       prestadores
-        .filter((p) => p.relatorio != null && p.relatorio.health_score != null)
+        .filter(
+          (p) =>
+            !/paus|encerr/i.test(p.status_cliente) &&
+            p.relatorio != null &&
+            p.relatorio.health_score != null
+        )
         .sort((a, b) => (a.relatorio?.health_score ?? 0) - (b.relatorio?.health_score ?? 0))
         .map((p) => ({
           nome: p.nome.length > 18 ? p.nome.slice(0, 18) + "…" : p.nome,
@@ -757,10 +782,38 @@ export default function DashboardBIPage() {
           <MetricCard
             title="Sem Dados"
             value={String(metrics.semDados)}
-            subtitle={`de ${metrics.total} prestadores`}
+            subtitle={`de ${metrics.total} ativos`}
             valueColor={metrics.semDados > 0 ? "text-gray-400" : "text-white"}
           />
         </div>
+
+        {/* ── Pausados / Encerrados (info discreta) ── */}
+        {(metrics.pausados > 0 || metrics.encerrados > 0) && (
+          <div className="flex gap-3 mb-4">
+            {metrics.pausados > 0 && (
+              <button
+                onClick={() => {
+                  setFiltro("Pausados");
+                  setTableExpanded(false);
+                }}
+                className="text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-500 hover:text-gray-200 transition"
+              >
+                {metrics.pausados} pausado{metrics.pausados > 1 ? "s" : ""}
+              </button>
+            )}
+            {metrics.encerrados > 0 && (
+              <button
+                onClick={() => {
+                  setFiltro("Encerrados");
+                  setTableExpanded(false);
+                }}
+                className="text-xs px-3 py-1 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-700 hover:border-zinc-500 hover:text-zinc-300 transition"
+              >
+                {metrics.encerrados} encerrado{metrics.encerrados > 1 ? "s" : ""}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* ── Filtros ── */}
         <div className="flex gap-2 mb-4 flex-wrap">
