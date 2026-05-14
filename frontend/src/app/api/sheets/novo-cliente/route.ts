@@ -105,6 +105,18 @@ async function sBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
+// OVERWRITE: escreve na 1ª linha vazia após os dados sem inserir linhas novas.
+// Evita o gap do INSERT_ROWS e não depende de calcular a linha correta manualmente.
+async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function dateBR(d: Date): string {
@@ -347,20 +359,10 @@ export async function POST(req: NextRequest) {
       observacoes?.trim() ?? "",
     ];
 
-    // Encontra a última linha com dados reais para evitar gap em abas com linhas vazias pré-formatadas
-    let lastFilledRow = 0;
-    for (let i = 0; i < cadastroRows.length; i++) {
-      if (cadastroRows[i]?.some((c) => (c ?? "").trim() !== "")) {
-        lastFilledRow = i;
-      }
-    }
-    const insertRow = Math.max(2, lastFilledRow + 2); // mínimo 2 para não sobrescrever cabeçalho
-
-    // Nome da aba entre aspas simples — obrigatório no JSON body para nomes com espaços/especiais
-    const cadastroTabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
-    await sBatchUpdate(token, [
-      { range: `${cadastroTabQuoted}!A${insertRow}`, values: [novaLinha] },
-    ]);
+    // OVERWRITE: append na 1ª linha vazia após os dados existentes.
+    // Não insere linhas novas (evita gap) e resolve a posição corretamente
+    // independente de linhas vazias no topo da aba.
+    await sAppend(token, `${cadastroSheet.properties.title}!A:L`, [novaLinha]);
 
     // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
