@@ -484,12 +484,18 @@ export default function PipelinePage() {
     setSyncing(true);
     try {
       const result = await importarPlanilha();
-      if (result.erros.length === 0) {
-        toast.success(`${result.clientes} clientes e ${result.tarefas} tarefas importados`);
+
+      const parts: string[] = [`${result.clientes} clientes · ${result.tarefas} tarefas`];
+      if (result.semAbas.length > 0) parts.push(`sem aba: ${result.semAbas.join(", ")}`);
+      if (result.semTarefas.length > 0) parts.push(`sem tarefas: ${result.semTarefas.join(", ")}`);
+      if (result.erros.length > 0) parts.push(`erros: ${result.erros.join(" | ")}`);
+
+      const msg = parts.join(" · ");
+      const temProblema = result.erros.length > 0 || result.semAbas.length > 0;
+      if (temProblema) {
+        toast.warning(msg, { duration: 10000 });
       } else {
-        toast.error(
-          `${result.clientes} clientes · ${result.tarefas} tarefas · ${result.erros.length} erro(s): ${result.erros[0]}`
-        );
+        toast.success(msg);
       }
       await invalidatePipeline();
     } catch (err) {
