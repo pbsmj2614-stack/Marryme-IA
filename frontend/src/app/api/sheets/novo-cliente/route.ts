@@ -354,9 +354,12 @@ export async function POST(req: NextRequest) {
         lastFilledRow = i;
       }
     }
-    const insertRow = lastFilledRow + 2; // 1-indexed → próxima linha após a última preenchida
+    const insertRow = Math.max(2, lastFilledRow + 2); // mínimo 2 para não sobrescrever cabeçalho
+
+    // Nome da aba entre aspas simples — obrigatório no JSON body para nomes com espaços/especiais
+    const cadastroTabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
     await sBatchUpdate(token, [
-      { range: `${cadastroSheet.properties.title}!A${insertRow}`, values: [novaLinha] },
+      { range: `${cadastroTabQuoted}!A${insertRow}`, values: [novaLinha] },
     ]);
 
     // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
