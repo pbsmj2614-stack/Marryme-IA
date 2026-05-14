@@ -18,13 +18,13 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { requireRole } from "@/lib/api-auth";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 
 const SHEET_ID =
   process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
-const FASES_INATIVAS = ["Pausado", "Churn"];
+const FASES_INATIVAS = new Set(["Pausado", "Churn"]);
 
 const CATEGORIA_LABELS: Record<string, string> = {
   musico: "Músico / Banda",
@@ -75,16 +75,16 @@ async function googleToken(): Promise<string> {
 
 // ─── Sheets helpers ───────────────────────────────────────────────────────────
 
-async function sGet(token: string, path: string): Promise<unknown> {
-  const res = await fetch(`${BASE}/${SHEET_ID}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+async function sheetsGet(token: string, path: string): Promise<unknown> {
+  const url = `${BASE}/${SHEET_ID}${path}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Sheets GET ${path}: ${res.status} — ${await res.text()}`);
   return res.json();
 }
 
-async function sPost(token: string, path: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${BASE}/${SHEET_ID}${path}`, {
+async function sheetsPost(token: string, path: string, body: unknown): Promise<unknown> {
+  const url = `${BASE}/${SHEET_ID}${path}`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -93,7 +93,17 @@ async function sPost(token: string, path: string, body: unknown): Promise<unknow
   return res.json();
 }
 
-async function sBatchUpdate(
+async function sheetsAppend(token: string, range: string, values: string[][]): Promise<void> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
+}
+
+async function sheetsBatchUpdate(
   token: string,
   data: Array<{ range: string; values: string[][] }>
 ): Promise<void> {
@@ -107,20 +117,12 @@ async function sBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
-async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values }),
-  });
-  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function dateBR(d: Date): string {
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
 function slugify(name: string): string {
@@ -144,90 +146,111 @@ function colLetter(col: number): string {
   return s;
 }
 
-function normalizePhone(phone: string): string {
-  return (phone ?? "").replace(/\D/g, "");
+function cleanPhone(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface EntrevistaRow {
-  id: string;
-  dados_json: Record<string, string> | null;
-  criado_em: string;
-}
-
-interface PrestadorRow {
-  id: string;
-  nome_artistico: string;
-  categoria: string;
-  cidade_base: string | null;
-  whatsapp: string | null;
-  email: string | null;
-  entrevistas: EntrevistaRow[];
+function extractMMNum(id: string): number {
+  const m = String(id ?? "").match(/^MM(\d+)$/i);
+  return m ? parseInt(m[1], 10) : 0;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST() {
   try {
-    const auth = await requireRole("cs_senior");
-    if (auth instanceof NextResponse) return auth;
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: "Variáveis Supabase não configuradas." }, { status: 500 });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // ── 1. Lê todos os prestadores com entrevistas ────────────────────────────
+    // ── 1. Lê prestadores ─────────────────────────────────────────────────────
     const { data: prestadoresRaw, error: errP } = await supabase
       .from("prestadores")
-      .select(
-        "id, nome_artistico, categoria, cidade_base, whatsapp, email, entrevistas(id, dados_json, criado_em)"
-      )
+      .select("id, nome_artistico, categoria, cidade_base, whatsapp, email")
       .order("nome_artistico");
-    if (errP) throw new Error(`Supabase prestadores: ${errP.message}`);
 
-    const prestadores = (prestadoresRaw ?? []) as PrestadorRow[];
+    if (errP) throw new Error(`Erro ao buscar prestadores: ${errP.message}`);
+    const prestadores = prestadoresRaw ?? [];
 
-    // ── 2. Lê todos os mm_clientes ────────────────────────────────────────────
-    const { data: mmClientesRaw, error: errM } = await supabase
+    // ── 2. Lê entrevistas (separado para evitar nested select no service role) ─
+    const { data: entrevistasRaw, error: errE } = await supabase
+      .from("entrevistas")
+      .select("id, prestador_id, dados_json, criado_em")
+      .order("criado_em", { ascending: false });
+
+    if (errE) throw new Error(`Erro ao buscar entrevistas: ${errE.message}`);
+
+    // Agrupa entrevistas por prestador_id — mantém apenas a mais recente
+    const latestEntrevista = new Map<
+      string,
+      { id: string; prestador_id: string; dados_json: Record<string, string>; criado_em: string }
+    >();
+    for (const e of entrevistasRaw ?? []) {
+      if (!latestEntrevista.has(e.prestador_id)) {
+        latestEntrevista.set(e.prestador_id, {
+          id: String(e.id),
+          prestador_id: String(e.prestador_id),
+          dados_json: (e.dados_json ?? {}) as Record<string, string>,
+          criado_em: String(e.criado_em),
+        });
+      }
+    }
+
+    // ── 3. Lê mm_clientes ─────────────────────────────────────────────────────
+    const { data: mmRaw, error: errM } = await supabase
       .from("mm_clientes")
       .select("id_cliente, nome_empresa");
-    if (errM) throw new Error(`Supabase mm_clientes: ${errM.message}`);
 
-    const mmById = new Set(
-      (mmClientesRaw ?? []).map((c: { id_cliente: string }) => c.id_cliente.toUpperCase())
-    );
-    const mmByNome = new Map(
-      (mmClientesRaw ?? []).map((c: { id_cliente: string; nome_empresa: string }) => [
-        c.nome_empresa.toLowerCase().trim(),
-        c.id_cliente,
-      ])
+    if (errM) throw new Error(`Erro ao buscar mm_clientes: ${errM.message}`);
+
+    const mmByIdSet = new Set((mmRaw ?? []).map((c) => String(c.id_cliente).toUpperCase()));
+    const mmByNomeMap = new Map(
+      (mmRaw ?? []).map((c) => [String(c.nome_empresa).toLowerCase().trim(), String(c.id_cliente)])
     );
 
-    // ── 3. Identifica prestadores sem mm_cliente ──────────────────────────────
+    // ── 4. Identifica prestadores sem mm_cliente ──────────────────────────────
     const missing: Array<{
-      prestador: PrestadorRow;
+      prestadorId: string;
+      nome: string;
+      categoria: string;
+      cidade: string;
+      whatsapp: string;
+      email: string;
       dados: Record<string, string>;
       entrevistaId: string;
     }> = [];
 
     for (const p of prestadores) {
-      const ultimaEntrevista = [...(p.entrevistas ?? [])].sort(
-        (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-      )[0];
-      const dados = (ultimaEntrevista?.dados_json ?? {}) as Record<string, string>;
-      const faseProjeto = dados.fase_projeto ?? "";
-      if (FASES_INATIVAS.includes(faseProjeto)) continue;
+      const entrevista = latestEntrevista.get(String(p.id));
+      const dados = entrevista?.dados_json ?? {};
+      const faseProjeto = String(dados.fase_projeto ?? "");
 
-      const mmId = (dados.mm_id ?? "").toUpperCase();
-      const nomeLower = p.nome_artistico.toLowerCase().trim();
+      if (FASES_INATIVAS.has(faseProjeto)) continue;
 
-      const jaExiste = (mmId && mmById.has(mmId)) || mmByNome.has(nomeLower);
+      const mmId = String(dados.mm_id ?? "").toUpperCase();
+      const nomeLower = String(p.nome_artistico ?? "")
+        .toLowerCase()
+        .trim();
+
+      const jaExiste = (mmId.length > 0 && mmByIdSet.has(mmId)) || mmByNomeMap.has(nomeLower);
       if (!jaExiste) {
         missing.push({
-          prestador: p,
+          prestadorId: String(p.id),
+          nome: String(p.nome_artistico ?? "").trim(),
+          categoria: String(p.categoria ?? "outro"),
+          cidade: String(p.cidade_base ?? "").trim(),
+          whatsapp: cleanPhone(String(p.whatsapp ?? "")),
+          email: String(p.email ?? "").trim(),
           dados,
-          entrevistaId: ultimaEntrevista?.id ?? "",
+          entrevistaId: entrevista?.id ?? "",
         });
       }
     }
@@ -238,83 +261,77 @@ export async function POST() {
         created: [],
         skipped: prestadores.length,
         erros: [],
-        msg: "Todos os prestadores ativos já têm entrada na pipeline.",
       });
     }
 
-    // ── 4. Google Sheets: token e metadados ───────────────────────────────────
+    // ── 5. Google Sheets: token e metadados ───────────────────────────────────
     const token = await googleToken();
 
-    type SheetMeta = { properties: { sheetId: number; title: string; index: number } };
-    const meta = (await sGet(token, "?fields=sheets.properties")) as { sheets: SheetMeta[] };
-    const abas = meta.sheets ?? [];
+    type SheetProps = { properties: { sheetId: number; title: string; index: number } };
+    const meta = (await sheetsGet(token, "?fields=sheets.properties")) as { sheets: SheetProps[] };
+    const abas: SheetProps[] = Array.isArray(meta.sheets) ? meta.sheets : [];
 
     const nomeAbaCadastro = abas
       .map((s) => s.properties.title)
-      .find((t) => /cadastro.?clientes|^clientes$|^cadastro$/i.test(t.trim()));
-    if (!nomeAbaCadastro) throw new Error("Aba Cadastro_Clientes não encontrada.");
+      .find((t) => /cadastro.?clientes|^clientes$|^cadastro$/i.test(String(t).trim()));
+
+    if (!nomeAbaCadastro) throw new Error("Aba Cadastro_Clientes não encontrada na planilha.");
 
     const modeloSheet = abas.find((s) =>
-      /planilha.?modelo|^modelo$/i.test(s.properties.title.trim())
+      /planilha.?modelo|^modelo$/i.test(String(s.properties.title).trim())
     );
 
-    // ── 5. Lê Cadastro_Clientes para calcular próximo ID ──────────────────────
-    const cadastroData = (await sGet(token, `/values/${encodeURIComponent(nomeAbaCadastro)}`)) as {
-      values?: string[][];
-    };
-    const cadastroRows = cadastroData.values ?? [];
+    // ── 6. Calcula próximo ID ─────────────────────────────────────────────────
+    const cadastroData = (await sheetsGet(
+      token,
+      `/values/${encodeURIComponent(nomeAbaCadastro)}`
+    )) as { values?: string[][] };
 
-    const sheetNums = cadastroRows
-      .flat()
-      .map((c) => {
-        const m = String(c ?? "").match(/^MM(\d+)$/i);
-        return m ? parseInt(m[1], 10) : NaN;
-      })
-      .filter((n) => !isNaN(n));
+    const cadastroRows: string[][] = Array.isArray(cadastroData.values) ? cadastroData.values : [];
 
-    const supabaseNums = Array.from(mmById)
-      .map((id) => {
-        const m = id.match(/^MM(\d+)$/i);
-        return m ? parseInt(m[1], 10) : NaN;
-      })
-      .filter((n) => !isNaN(n));
+    const allNums = [
+      ...cadastroRows
+        .flat()
+        .map(extractMMNum)
+        .filter((x) => x > 0),
+      ...Array.from(mmByIdSet)
+        .map(extractMMNum)
+        .filter((x) => x > 0),
+      0,
+    ];
 
-    let nextNum = Math.max(...[...sheetNums, ...supabaseNums, 0]) + 1;
+    let nextNum = Math.max(...allNums) + 1;
 
-    // ── 6. Cria entradas para cada prestador faltando ─────────────────────────
+    // ── 7. Cria entradas ──────────────────────────────────────────────────────
     const created: Array<{ id: string; nome: string; aba: string | null }> = [];
     const erros: Array<{ nome: string; erro: string }> = [];
 
     const hoje = new Date();
     const hojeStr = dateBR(hoje);
-    const d7 = new Date(hoje);
-    d7.setDate(d7.getDate() + 7);
+    const d7 = new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    for (const { prestador, dados, entrevistaId } of missing) {
+    for (const item of missing) {
+      const stepName = item.nome;
       try {
         const newId = `MM${String(nextNum).padStart(3, "0")}`;
         nextNum++;
 
-        const nome = prestador.nome_artistico.trim();
-        const segmento = CATEGORIA_LABELS[prestador.categoria] ?? prestador.categoria;
-        const cidade = prestador.cidade_base?.trim() ?? "";
-        const whatsapp = normalizePhone(prestador.whatsapp ?? "");
-        const email = prestador.email?.trim() ?? "";
-        const plano = dados.plano ?? "Essencial";
-        const faseProjeto = dados.fase_projeto ?? "Onboarding";
-        const responsavelMm = dados.responsavel_mm ?? "";
-        const observacoes = dados.informacoes_adicionais ?? "";
-        const novaAba = `${newId}_${slugify(nome)}`;
+        const segmento = CATEGORIA_LABELS[item.categoria] ?? item.categoria;
+        const plano = String(item.dados.plano ?? "Essencial");
+        const faseProjeto = String(item.dados.fase_projeto ?? "Onboarding");
+        const responsavelMm = String(item.dados.responsavel_mm ?? "");
+        const observacoes = String(item.dados.informacoes_adicionais ?? "");
+        const novaAba = `${newId}_${slugify(item.nome)}`;
 
-        // ─ 6a. Append no Cadastro_Clientes ────────────────────────────────────
-        await sAppend(token, `${nomeAbaCadastro}!A:L`, [
+        // 7a. Append no Cadastro_Clientes
+        await sheetsAppend(token, `${nomeAbaCadastro}!A:L`, [
           [
             newId,
-            nome,
+            item.nome,
             segmento,
-            cidade,
-            whatsapp,
-            email,
+            item.cidade,
+            item.whatsapp,
+            item.email,
             hojeStr,
             plano,
             faseProjeto,
@@ -324,11 +341,11 @@ export async function POST() {
           ],
         ]);
 
-        // ─ 6b. Tenta criar aba individual (PlanilhaModelo) ────────────────────
+        // 7b. Tenta criar aba individual (PlanilhaModelo) — falha silenciosa
         let abaFinal: string | null = novaAba;
         if (modeloSheet) {
           try {
-            await sPost(token, ":batchUpdate", {
+            await sheetsPost(token, ":batchUpdate", {
               requests: [
                 {
                   duplicateSheet: {
@@ -340,46 +357,47 @@ export async function POST() {
               ],
             });
 
-            // Substitui "contratante" pelo nome do cliente nas primeiras 3 linhas
-            const novaData = (await sGet(token, `/values/${encodeURIComponent(novaAba)}`)) as {
+            const novaData = (await sheetsGet(token, `/values/${encodeURIComponent(novaAba)}`)) as {
               values?: string[][];
             };
-            const novaRows = novaData.values ?? [];
+            const novaRows: string[][] = Array.isArray(novaData.values) ? novaData.values : [];
+
             const updates: Array<{ range: string; values: string[][] }> = [];
 
             for (let r = 0; r < Math.min(novaRows.length, 3); r++) {
-              for (let c = 0; c < (novaRows[r]?.length ?? 0); c++) {
-                const cell = novaRows[r][c] ?? "";
+              const row = novaRows[r] ?? [];
+              for (let c = 0; c < row.length; c++) {
+                const cell = String(row[c] ?? "");
                 if (/contratante/i.test(cell)) {
                   updates.push({
                     range: `${novaAba}!${colLetter(c)}${r + 1}`,
-                    values: [[cell.replace(/contratante/gi, nome)]],
+                    values: [[cell.replace(/contratante/gi, item.nome)]],
                   });
                 }
               }
             }
 
-            // Preenche prazo = hoje+7d em linhas com tarefa mas sem prazo
+            // Preenche prazo em linhas com tarefa mas sem prazo
             let hRowIdx = -1,
               prazoCol = -1,
               oQueCol = -1;
             for (let i = 0; i < Math.min(novaRows.length, 6); i++) {
               const row = novaRows[i] ?? [];
-              const pIdx = row.findIndex((h) => /prazo|data/i.test(h ?? ""));
-              const oIdx = row.findIndex((h) =>
-                /o[\s._]?que|tarefa|atividade|descri/i.test(h ?? "")
+              const pi = row.findIndex((h) => /prazo|data/i.test(String(h ?? "")));
+              const oi = row.findIndex((h) =>
+                /o[\s._]?que|tarefa|atividade|descri/i.test(String(h ?? ""))
               );
-              if (pIdx >= 0 && oIdx >= 0) {
+              if (pi >= 0 && oi >= 0) {
                 hRowIdx = i;
-                prazoCol = pIdx;
-                oQueCol = oIdx;
+                prazoCol = pi;
+                oQueCol = oi;
                 break;
               }
             }
             if (hRowIdx >= 0) {
               for (let i = hRowIdx + 1; i < novaRows.length; i++) {
                 const row = novaRows[i] ?? [];
-                if ((row[oQueCol] ?? "").trim() && !(row[prazoCol] ?? "").trim()) {
+                if (String(row[oQueCol] ?? "").trim() && !String(row[prazoCol] ?? "").trim()) {
                   updates.push({
                     range: `${novaAba}!${colLetter(prazoCol)}${i + 1}`,
                     values: [[dateBR(d7)]],
@@ -388,24 +406,23 @@ export async function POST() {
               }
             }
 
-            if (updates.length > 0) await sBatchUpdate(token, updates);
-          } catch (tabErr) {
-            // Aba já existe ou criação falhou — registra o nome mas não bloqueia
-            console.warn(`[sync-pipeline] aba ${novaAba}:`, tabErr);
-            abaFinal = novaAba; // nome esperado, mesmo sem criação
+            if (updates.length > 0) await sheetsBatchUpdate(token, updates);
+          } catch {
+            // Aba pode já existir ou PlanilhaModelo sem permissão — não bloqueia
+            abaFinal = novaAba;
           }
         } else {
-          abaFinal = null; // sem PlanilhaModelo disponível
+          abaFinal = null;
         }
 
-        // ─ 6c. Insere no Supabase ──────────────────────────────────────────────
+        // 7c. Insere no mm_clientes
         const { error: dbErr } = await supabase.from("mm_clientes").insert({
           id_cliente: newId,
-          nome_empresa: nome,
+          nome_empresa: item.nome,
           segmento: segmento || null,
-          cidade: cidade || null,
-          whatsapp: whatsapp || null,
-          email: email || null,
+          cidade: item.cidade || null,
+          whatsapp: item.whatsapp || null,
+          email: item.email || null,
           plano: plano || null,
           status: "Ativo",
           fase_projeto: faseProjeto || "Onboarding",
@@ -418,17 +435,17 @@ export async function POST() {
         });
         if (dbErr) throw new Error(`Supabase insert: ${dbErr.message}`);
 
-        // ─ 6d. Atualiza mm_id na entrevista ───────────────────────────────────
-        if (entrevistaId) {
+        // 7d. Atualiza mm_id na entrevista
+        if (item.entrevistaId) {
           await supabase
             .from("entrevistas")
-            .update({ dados_json: { ...dados, mm_id: newId } })
-            .eq("id", entrevistaId);
+            .update({ dados_json: { ...item.dados, mm_id: newId } })
+            .eq("id", item.entrevistaId);
         }
 
-        created.push({ id: newId, nome, aba: abaFinal });
+        created.push({ id: newId, nome: item.nome, aba: abaFinal });
       } catch (err) {
-        erros.push({ nome: prestador.nome_artistico, erro: String(err) });
+        erros.push({ nome: stepName, erro: err instanceof Error ? err.message : String(err) });
       }
     }
 
