@@ -105,16 +105,6 @@ async function sBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
-async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values }),
-  });
-  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
-}
-
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function dateBR(d: Date): string {
@@ -356,32 +346,46 @@ export async function POST(req: NextRequest) {
       responsavel_mm?.trim() ?? "",
       observacoes?.trim() ?? "",
     ];
-    await sAppend(token, `${cadastroSheet.properties.title}!A:L`, [novaLinha]);
 
-    // ── 11. Inserir no Supabase ──
+    // Encontra a última linha com dados reais para evitar gap em abas com linhas vazias pré-formatadas
+    let lastFilledRow = 0;
+    for (let i = 0; i < cadastroRows.length; i++) {
+      if (cadastroRows[i]?.some((c) => (c ?? "").trim() !== "")) {
+        lastFilledRow = i;
+      }
+    }
+    const insertRow = lastFilledRow + 2; // 1-indexed → próxima linha após a última preenchida
+    await sBatchUpdate(token, [
+      { range: `${cadastroSheet.properties.title}!A${insertRow}`, values: [novaLinha] },
+    ]);
+
+    // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    if (supabaseUrl && supabaseKey) {
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      const { error: dbErr } = await supabase.from("mm_clientes").insert({
-        id_cliente: newId,
-        nome_empresa: nomeTrimmed,
-        segmento: segmento?.trim() || null,
-        cidade: cidade?.trim() || null,
-        whatsapp: normalizePhone(whatsapp ?? "") || null,
-        email: email?.trim() || null,
-        plano: plano?.trim() || null,
-        status: "Ativo",
-        fase_projeto: fase_projeto?.trim() || "Onboarding",
-        responsavel_mm: responsavel_mm?.trim() || null,
-        observacoes: observacoes?.trim() || null,
-        inicio_contrato: hojeStr.split("/").reverse().join("-"), // DD/MM/YYYY → YYYY-MM-DD
-        valor_contrato: 0,
-        sheets_aba: novaAba,
-        atualizado_em: new Date().toISOString(),
-      });
-      if (dbErr) console.error("Supabase insert:", dbErr.message);
-    }
+    if (!supabaseUrl || !supabaseKey) throw new Error("Variáveis Supabase não configuradas.");
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { error: dbErr } = await supabase.from("mm_clientes").insert({
+      id_cliente: newId,
+      nome_empresa: nomeTrimmed,
+      segmento: segmento?.trim() || null,
+      cidade: cidade?.trim() || null,
+      whatsapp: normalizePhone(whatsapp ?? "") || null,
+      email: email?.trim() || null,
+      plano: plano?.trim() || null,
+      status: "Ativo",
+      fase_projeto: fase_projeto?.trim() || "Onboarding",
+      responsavel_mm: responsavel_mm?.trim() || null,
+      observacoes: observacoes?.trim() || null,
+      inicio_contrato: hojeStr.split("/").reverse().join("-"),
+      valor_contrato: 0,
+      sheets_aba: novaAba,
+      atualizado_em: new Date().toISOString(),
+    });
+    if (dbErr)
+      throw new Error(
+        `Aba e cadastro criados na planilha (${newId} / "${novaAba}"), mas falha ao registrar na pipeline do app: ${dbErr.message}`
+      );
 
     return NextResponse.json({
       ok: true,
