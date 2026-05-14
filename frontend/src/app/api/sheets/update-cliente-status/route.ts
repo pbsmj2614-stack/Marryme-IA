@@ -137,29 +137,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sheets: false });
     }
 
-    // Lê colunas A até N para cobrir qualquer layout de cabeçalho
-    const rows = await sRead(token, `${nomeAba}!A:N`);
+    // Lê colunas A até P para cobrir qualquer layout de cabeçalho
+    const rows = await sRead(token, `${nomeAba}!A:P`);
     if (rows.length < 2) return NextResponse.json({ ok: true, sheets: false });
 
-    // Detecta coluna de status pelo cabeçalho (fallback: col J = índice 9)
-    const headerRow = rows[0] ?? [];
-    let statusColIdx = 9;
-    for (let i = 0; i < headerRow.length; i++) {
-      const h = (headerRow[i] ?? "")
+    // Mesma lógica do fetchCadastroClientes: acha a primeira linha de dados (MM\d+)
+    // e usa a linha anterior como cabeçalho
+    let dataStartRow = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i]?.some((c) => /^MM\d+/i.test(c?.trim() ?? ""))) {
+        dataStartRow = i;
+        break;
+      }
+    }
+    if (dataStartRow === -1) return NextResponse.json({ ok: true, sheets: false });
+
+    const headerRow = dataStartRow > 0 ? (rows[dataStartRow - 1] ?? []) : [];
+
+    const normalizeHeader = (s: string) =>
+      (s ?? "")
         .toLowerCase()
         .normalize("NFD")
         .replace(/[̀-ͯ]/g, "")
         .replace(/[^a-z0-9]/g, "_")
         .replace(/^_+|_+$/g, "");
-      if (h === "status") {
+
+    // Detecta coluna de status pelo cabeçalho (fallback: col L = índice 11)
+    let statusColIdx = 11; // fallback col L
+    for (let i = 0; i < headerRow.length; i++) {
+      if (normalizeHeader(headerRow[i] ?? "") === "status") {
         statusColIdx = i;
         break;
       }
     }
 
-    // Encontra a linha do cliente (col A = id_cliente, começa na linha 2)
+    // Encontra a linha do cliente (col A = id_cliente)
     let rowFound = false;
-    for (let i = 1; i < rows.length; i++) {
+    for (let i = dataStartRow; i < rows.length; i++) {
       const rowId = (rows[i]?.[0] ?? "").trim().toUpperCase();
       if (rowId !== idCliente) continue;
 
