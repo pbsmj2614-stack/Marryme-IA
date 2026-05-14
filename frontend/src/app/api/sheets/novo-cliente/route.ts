@@ -105,18 +105,6 @@ async function sBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
-// OVERWRITE: escreve na 1ª linha vazia após os dados sem inserir linhas novas.
-// Evita o gap do INSERT_ROWS e não depende de calcular a linha correta manualmente.
-async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values }),
-  });
-  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
-}
-
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function dateBR(d: Date): string {
@@ -280,12 +268,14 @@ export async function POST(req: NextRequest) {
     const novaAba = `${newId}_${slugify(nomeTrimmed)}`;
 
     // ── 6. Duplicar PlanilhaModelo ──
+    // Usa max(index) + 1 para inserir no final — mais robusto que abas.length
+    const maxTabIndex = abas.reduce((m, s) => Math.max(m, s.properties.index), 0);
     await sPost(token, ":batchUpdate", {
       requests: [
         {
           duplicateSheet: {
             sourceSheetId: modeloSheet.properties.sheetId,
-            insertSheetIndex: abas.length,
+            insertSheetIndex: maxTabIndex + 1,
             newSheetName: novaAba,
           },
         },
@@ -368,10 +358,22 @@ export async function POST(req: NextRequest) {
       observacoes?.trim() ?? "",
     ];
 
-    // OVERWRITE: append na 1ª linha vazia após os dados existentes.
-    // Não insere linhas novas (evita gap) e resolve a posição corretamente
-    // independente de linhas vazias no topo da aba.
-    await sAppend(token, `${cadastroSheet.properties.title}!A:L`, [novaLinha]);
+    // Lê só a coluna A com range fixo (A1:A500) para garantir que aRows[i] = linha i+1
+    // ignora colunas com valores pré-formatados (dropdowns) que enganariam o sAppend
+    const aColData = (await sGet(
+      token,
+      `/values/${encodeURIComponent(cadastroSheet.properties.title + "!A1:A500")}`
+    )) as { values?: string[][] };
+    const aRows: string[][] = aColData.values ?? [];
+
+    let lastMMRowIdx = -1;
+    for (let i = 0; i < aRows.length; i++) {
+      if (/^MM\d+/i.test((aRows[i]?.[0] ?? "").trim())) lastMMRowIdx = i;
+    }
+    const insertRow = Math.max(2, lastMMRowIdx + 2); // i+1 = linha real, +1 = próxima
+
+    const tabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
+    await sBatchUpdate(token, [{ range: `${tabQuoted}!A${insertRow}`, values: [novaLinha] }]);
 
     // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
