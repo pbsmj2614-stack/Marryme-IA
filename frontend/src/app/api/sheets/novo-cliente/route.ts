@@ -262,7 +262,16 @@ export async function POST(req: NextRequest) {
         .filter((n: number) => !isNaN(n));
     }
 
-    const allNums = [...sheetNums, ...supabaseNums];
+    // Inclui IDs das abas existentes — previne colisão quando cadastro parcial
+    // criou a aba mas não registrou no Supabase/Cadastro_Clientes
+    const tabaNums = abas
+      .map((s) => {
+        const m = s.properties.title.match(/^MM(\d+)/i);
+        return m ? parseInt(m[1], 10) : NaN;
+      })
+      .filter((n) => !isNaN(n));
+
+    const allNums = [...sheetNums, ...supabaseNums, ...tabaNums];
     const nextNum = allNums.length > 0 ? Math.max(...allNums) + 1 : 1;
     const newId = `MM${String(nextNum).padStart(3, "0")}`;
 
