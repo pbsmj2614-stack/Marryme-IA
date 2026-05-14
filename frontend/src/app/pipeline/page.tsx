@@ -4,7 +4,6 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Header from "@/components/Header";
-import { createClient } from "@/lib/supabase";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getStatusFromScore, getScoreColor } from "@/lib/healthScore";
 import {
@@ -608,14 +607,14 @@ export default function PipelinePage() {
   }
 
   async function handleStatusChange(idCliente: string, novoStatus: StatusCliente) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("mm_clientes")
-      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
-      .eq("id_cliente", idCliente);
-    if (error) {
-      toast.error(`Erro: ${error.message}`);
-    } else {
+    try {
+      const res = await fetch("/api/sheets/update-cliente-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_cliente: idCliente, status: novoStatus }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
       const labels: Record<StatusCliente, string> = {
         Ativo: "reativado",
         Pausado: "pausado",
@@ -624,6 +623,8 @@ export default function PipelinePage() {
       toast.success(`Cliente ${labels[novoStatus]}`);
       setExpandedId(null);
       await invalidatePipeline();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao alterar status");
     }
   }
 
