@@ -16,6 +16,7 @@ import {
 } from "@/lib/client-utils";
 import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
@@ -434,6 +435,7 @@ function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteCom
 export default function PipelinePage() {
   const router = useRouter();
   const { user, loading: userLoading } = useCurrentUser();
+  const { role } = useRole();
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
   const invalidatePipeline = useInvalidatePipeline();
 
@@ -872,42 +874,46 @@ export default function PipelinePage() {
             )}
           </Button>
 
-          <Button
-            onClick={handleSyncGaps}
-            disabled={syncingGaps || syncing || cleaningGaps}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e2a1e] border border-[#3a5a3a] text-sm text-green-300 hover:border-[#5a8a5a] hover:text-green-200 transition disabled:opacity-50 whitespace-nowrap"
-          >
-            {syncingGaps ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Criando gaps...
-              </>
-            ) : (
-              <>
-                <Plus className="w-4 h-4" /> Corrigir Gaps
-              </>
-            )}
-          </Button>
+          {role === "admin" && (
+            <>
+              <Button
+                onClick={handleSyncGaps}
+                disabled={syncingGaps || syncing || cleaningGaps}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e2a1e] border border-[#3a5a3a] text-sm text-green-300 hover:border-[#5a8a5a] hover:text-green-200 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {syncingGaps ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Criando gaps...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" /> Corrigir Gaps
+                  </>
+                )}
+              </Button>
 
-          <Button
-            onClick={() => {
-              const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
-              if (id) handleCleanGaps(id.trim().toUpperCase());
-            }}
-            disabled={cleaningGaps || syncing || syncingGaps}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2a1e1e] border border-[#5a3a3a] text-sm text-red-300 hover:border-[#8a5a5a] hover:text-red-200 transition disabled:opacity-50 whitespace-nowrap"
-          >
-            {cleaningGaps ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Limpando...
-              </>
-            ) : (
-              <>
-                <X className="w-4 h-4" /> Limpar Gaps
-              </>
-            )}
-          </Button>
+              <Button
+                onClick={() => {
+                  const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
+                  if (id) handleCleanGaps(id.trim().toUpperCase());
+                }}
+                disabled={cleaningGaps || syncing || syncingGaps}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2a1e1e] border border-[#5a3a3a] text-sm text-red-300 hover:border-[#8a5a5a] hover:text-red-200 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {cleaningGaps ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Limpando...
+                  </>
+                ) : (
+                  <>
+                    <X className="w-4 h-4" /> Limpar Gaps
+                  </>
+                )}
+              </Button>
+            </>
+          )}
         </div>
 
         {/* ── Filtros ── */}
