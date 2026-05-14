@@ -11,15 +11,15 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { requireRole } from "@/lib/api-auth";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { metaTokenSchema } from "@/lib/schemas";
 
 const META_APP_ID = process.env.META_APP_ID ?? "";
 const META_APP_SECRET = process.env.META_APP_SECRET ?? "";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRole("admin");
-  if (auth instanceof NextResponse) return auth;
+  const user = await getAuthUser();
+  if (!user) return UNAUTHORIZED();
 
   const parsed = metaTokenSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success)

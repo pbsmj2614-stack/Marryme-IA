@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { requireRole } from "@/lib/api-auth";
+import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { novoClienteSchema } from "@/lib/schemas";
 
 const SHEET_ID =
@@ -155,8 +155,8 @@ function normalizePhone(phone: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireRole("cs_senior");
-    if (auth instanceof NextResponse) return auth;
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
 
     const parsed = novoClienteSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success)

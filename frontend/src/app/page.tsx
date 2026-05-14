@@ -29,12 +29,20 @@ export default async function DashboardPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: prestadores } = await supabase
-    .from("prestadores")
-    .select(
-      "*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em), relatorios_campanha(health_score, gerado_em)"
-    )
-    .order("nome_artistico", { ascending: true });
+  const [{ data: prestadores }, { data: mmInativos }] = await Promise.all([
+    supabase
+      .from("prestadores")
+      .select(
+        "*, roteiros(id, aprovado, criado_em, analise_estrategica), entrevistas(dados_json, criado_em), relatorios_campanha(health_score, gerado_em)"
+      )
+      .order("nome_artistico", { ascending: true }),
+    supabase.from("mm_clientes").select("nome_empresa").in("status", ["Pausado", "Encerrado"]),
+  ]);
+
+  // Nomes de clientes inativos na pipeline (para ocultar seus cards)
+  const mmInativosNomes = new Set(
+    (mmInativos ?? []).map((c) => (c.nome_empresa as string).toLowerCase().trim())
+  );
 
   type PrestadorRow = Prestador & {
     roteiros: (Pick<Roteiro, "id" | "aprovado" | "criado_em"> & {
@@ -58,7 +66,11 @@ export default async function DashboardPage({
   }
 
   function isAtivo(p: PrestadorRow) {
-    return !FASES_INATIVAS.includes(getFaseProjeto(p) ?? "");
+    // Exclui se a entrevista já marca como inativo
+    if (FASES_INATIVAS.includes(getFaseProjeto(p) ?? "")) return false;
+    // Exclui se mm_clientes.status é Pausado ou Encerrado (fonte de verdade da pipeline)
+    if (mmInativosNomes.has(p.nome_artistico.toLowerCase().trim())) return false;
+    return true;
   }
 
   function getStatus(p: PrestadorRow) {
