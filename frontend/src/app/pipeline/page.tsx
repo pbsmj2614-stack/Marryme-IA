@@ -453,6 +453,7 @@ export default function PipelinePage() {
   const [clientes, setClientes] = useState<ClienteComMetricas[]>([]);
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
+  const [syncingGaps, setSyncingGaps] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mostrarFinalizadasIds, setMostrarFinalizadasIds] = useState<Set<string>>(new Set());
   const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
@@ -528,6 +529,42 @@ export default function PipelinePage() {
       toast.error(String(err));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // ── Corrigir Gaps: cria pipeline para prestadores sem mm_clientes ──
+  async function handleSyncGaps() {
+    setSyncingGaps(true);
+    try {
+      const res = await fetch("/api/admin/sync-pipeline", { method: "POST" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        created?: Array<{ id: string; nome: string; aba: string | null }>;
+        skipped?: number;
+        erros?: Array<{ nome: string; erro: string }>;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
+
+      const { created = [], erros = [] } = data;
+      if (created.length === 0 && erros.length === 0) {
+        toast.success("Nenhum gap encontrado — todos os prestadores já têm pipeline.");
+      } else {
+        const parts: string[] = [];
+        if (created.length > 0)
+          parts.push(
+            `${created.length} criado(s): ${created.map((c) => `${c.id} ${c.nome}`).join(", ")}`
+          );
+        if (erros.length > 0)
+          parts.push(`${erros.length} erro(s): ${erros.map((e) => e.nome).join(", ")}`);
+        if (erros.length > 0) toast.warning(parts.join(" · "), { duration: 15000 });
+        else toast.success(parts.join(" · "), { duration: 10000 });
+      }
+      await invalidatePipeline();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao corrigir gaps");
+    } finally {
+      setSyncingGaps(false);
     }
   }
 
@@ -794,6 +831,23 @@ export default function PipelinePage() {
             ) : (
               <>
                 <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleSyncGaps}
+            disabled={syncingGaps || syncing}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e2a1e] border border-[#3a5a3a] text-sm text-green-300 hover:border-[#5a8a5a] hover:text-green-200 transition disabled:opacity-50 whitespace-nowrap"
+          >
+            {syncingGaps ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Criando gaps...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4" /> Corrigir Gaps
               </>
             )}
           </Button>

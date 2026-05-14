@@ -25,7 +25,8 @@ import { createClient } from "@supabase/supabase-js";
 import { requireRole } from "@/lib/api-auth";
 import { novoClienteSchema } from "@/lib/schemas";
 
-const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
+const SHEET_ID =
+  process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 // ─── Google Service Account Auth ──────────────────────────────────────────────
@@ -263,27 +264,11 @@ export async function POST(req: NextRequest) {
     const nextNum = allNums.length > 0 ? Math.max(...allNums) + 1 : 1;
     const newId = `MM${String(nextNum).padStart(3, "0")}`;
 
-    // ── 5. Verificar duplicata pelo nome da aba (bloqueia se já existir) ──
+    // ── 5. Nome da nova aba ──
     const nomeTrimmed = nome_empresa.trim();
-    const nomeSlug = nomeTrimmed.toLowerCase().replace(/\s+/g, "");
-    const jaExiste = abas.some((s) => {
-      const al = s.properties.title.toLowerCase().replace(/[^a-z0-9]/g, "");
-      return al.includes(nomeSlug) || nomeSlug.includes(al);
-    });
-    if (jaExiste) {
-      return NextResponse.json(
-        {
-          error: `Já existe uma aba com nome similar a "${nomeTrimmed}". Verifique se o cliente já foi cadastrado.`,
-          duplicado: true,
-        },
-        { status: 409 }
-      );
-    }
-
-    // ── 6. Nome da nova aba ──
     const novaAba = `${newId}_${slugify(nomeTrimmed)}`;
 
-    // ── 7. Duplicar PlanilhaModelo ──
+    // ── 6. Duplicar PlanilhaModelo ──
     await sPost(token, ":batchUpdate", {
       requests: [
         {
@@ -296,13 +281,13 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // ── 8. Ler conteúdo da nova aba ──
+    // ── 7. Ler conteúdo da nova aba ──
     const novaData = (await sGet(token, `/values/${encodeURIComponent(novaAba)}`)) as {
       values?: string[][];
     };
     const novaRows: string[][] = novaData.values ?? [];
 
-    // ── 9. Substituir "contratante" no título ──
+    // ── 8. Substituir "contratante" no título ──
     const tituloUpdates: Array<{ range: string; values: string[][] }> = [];
     for (let r = 0; r < Math.min(novaRows.length, 3); r++) {
       for (let c = 0; c < novaRows[r].length; c++) {
@@ -317,7 +302,7 @@ export async function POST(req: NextRequest) {
     }
     if (tituloUpdates.length > 0) await sBatchUpdate(token, tituloUpdates);
 
-    // ── 10. Preencher prazo = hoje + 7 dias em linhas com tarefa sem prazo ──
+    // ── 9. Preencher prazo = hoje + 7 dias em linhas com tarefa sem prazo ──
     const hoje = new Date();
     const d7 = new Date(hoje);
     d7.setDate(d7.getDate() + 7);
@@ -355,7 +340,7 @@ export async function POST(req: NextRequest) {
     }
     if (prazoUpdates.length > 0) await sBatchUpdate(token, prazoUpdates);
 
-    // ── 11. Adicionar linha no Cadastro_Clientes ──
+    // ── 10. Adicionar linha no Cadastro_Clientes ──
     const hojeStr = dateBR(hoje);
     const novaLinha = [
       newId,
@@ -373,7 +358,7 @@ export async function POST(req: NextRequest) {
     ];
     await sAppend(token, `${cadastroSheet.properties.title}!A:L`, [novaLinha]);
 
-    // ── 12. Inserir no Supabase ──
+    // ── 11. Inserir no Supabase ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
     if (supabaseUrl && supabaseKey) {

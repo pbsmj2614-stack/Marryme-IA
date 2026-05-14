@@ -266,7 +266,7 @@ export default function NovoPage() {
       const { data: candidatos } = await supabase
         .from("mm_clientes")
         .select("id_cliente, nome_empresa")
-        .ilike("nome_empresa", nomeBusca);
+        .ilike("nome_empresa", `%${nomeBusca}%`);
 
       // Pega o de menor ID MM caso haja duplicatas residuais
       const clienteExistente =
