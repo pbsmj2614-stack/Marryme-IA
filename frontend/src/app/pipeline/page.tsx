@@ -492,53 +492,35 @@ export default function PipelinePage() {
       if (result.semTarefas.length > 0) parts.push(`sem tarefas: ${result.semTarefas.join(", ")}`);
       if (result.erros.length > 0) parts.push(`erros: ${result.erros.join(" | ")}`);
 
-      // ── monta sufixo do write-back ──
-      let wbSuffix = "";
+      // ── sufixo do write-back (só mostra se corrigiu algo ou deu erro) ──
       let wbErro = "";
       if (!wb) {
-        wbErro = "status: erro de rede";
+        wbErro = "planilha: erro de rede";
       } else {
         try {
           const wbData = (await wb.json()) as {
             ok?: boolean;
             atualizados?: number;
-            verificados?: number;
-            naoNoSupabase?: number;
-            nomeAba?: string;
-            colLetter?: string;
             error?: string;
           };
           if (!wb.ok || !wbData.ok) {
-            wbErro = `status: ${wbData.error ?? `Erro ${wb.status}`}`;
-          } else {
-            const at = wbData.atualizados ?? 0;
-            const ver = wbData.verificados ?? 0;
-            const fora = wbData.naoNoSupabase ?? 0;
-            const col = wbData.colLetter ?? "?";
-            const aba = wbData.nomeAba ?? "?";
-            if (at > 0) {
-              wbSuffix = `${at} status corrigido(s) [col ${col}, "${aba}"]`;
-            } else {
-              wbSuffix =
-                `status OK (${ver} verif., col ${col}` +
-                (fora > 0 ? `, ${fora} sem match` : "") +
-                ")";
-            }
+            wbErro = `planilha: ${wbData.error ?? `Erro ${wb.status}`}`;
+          } else if ((wbData.atualizados ?? 0) > 0) {
+            parts.push(`${wbData.atualizados} status atualizado(s) na planilha`);
           }
         } catch {
-          wbErro = "status: resposta inválida";
+          wbErro = "planilha: resposta inválida";
         }
       }
 
-      if (wbSuffix) parts.push(wbSuffix);
+      if (wbErro) parts.push(wbErro);
 
       const msg = parts.join(" · ");
       const temProblema = result.erros.length > 0 || result.semAbas.length > 0 || !!wbErro;
       if (temProblema) {
-        const msgFinal = wbErro ? msg + ` · ${wbErro}` : msg;
-        toast.warning(msgFinal, { duration: 12000 });
+        toast.warning(msg, { duration: 12000 });
       } else {
-        toast.success(msg, { duration: 8000 });
+        toast.success(msg);
       }
 
       await invalidatePipeline();

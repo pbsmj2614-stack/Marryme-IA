@@ -160,19 +160,13 @@ export async function POST() {
 
     // ── 4. Monta batch de atualizações para linhas que divergem ──────────────
     const updates: Array<{ range: string; values: string[][] }> = [];
-    let verificados = 0;
-    let naoNoSupabase = 0;
 
     for (let i = dataStartRow; i < rows.length; i++) {
       const rowId = (rows[i]?.[idCol] ?? "").trim().toUpperCase();
       if (!/^MM\d+$/i.test(rowId)) continue;
-      verificados++;
 
       const supabaseStatus = statusMap.get(rowId);
-      if (!supabaseStatus) {
-        naoNoSupabase++;
-        continue;
-      }
+      if (!supabaseStatus) continue;
 
       const sheetStatus = (rows[i]?.[statusColIdx] ?? "").trim();
       if (sheetStatus === supabaseStatus) continue; // já está correto
@@ -188,16 +182,7 @@ export async function POST() {
       await sBatchUpdate(token, updates);
     }
 
-    return NextResponse.json({
-      ok: true,
-      atualizados: updates.length,
-      total: clientes.length,
-      verificados,
-      naoNoSupabase,
-      nomeAba,
-      statusColIdx,
-      colLetter,
-    });
+    return NextResponse.json({ ok: true, atualizados: updates.length, total: clientes.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[write-back-status]", msg);
