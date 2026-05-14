@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase";
 import {
@@ -18,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   async function handleExcluir() {
@@ -28,7 +26,7 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
     await supabase.from("entrevistas").delete().eq("prestador_id", prestadorId);
     const r3 = await supabase.from("prestadores").delete().eq("id", prestadorId);
     if (!r3.error) {
-      router.push("/");
+      window.location.href = "/";
     } else {
       toast.error("Erro ao excluir: " + r3.error.message);
       setLoading(false);
