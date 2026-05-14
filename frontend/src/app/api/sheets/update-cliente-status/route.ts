@@ -117,6 +117,65 @@ export async function POST(req: NextRequest) {
 
     if (errDb) throw new Error(`Supabase: ${errDb.message}`);
 
+    // ── 1b. Sync entrevista.dados_json.fase_projeto ───────────────────────────
+    // Garante que "Corrigir Gaps" não re-crie clientes Pausados/Encerrados
+    if (novoStatus === "Pausado" || novoStatus === "Encerrado") {
+      const novaFase = novoStatus === "Pausado" ? "Pausado" : "Churn";
+      try {
+        // Tenta encontrar entrevista pelo mm_id
+        const { data: ents } = await supabase
+          .from("entrevistas")
+          .select("id, dados_json")
+          .contains("dados_json", { mm_id: idCliente });
+
+        if (ents && ents.length > 0) {
+          for (const e of ents) {
+            const dados = {
+              ...(e.dados_json as Record<string, string>),
+              fase_projeto: novaFase,
+            };
+            await supabase.from("entrevistas").update({ dados_json: dados }).eq("id", e.id);
+          }
+        } else {
+          // Fallback: busca prestador pelo nome_empresa
+          const { data: mmC } = await supabase
+            .from("mm_clientes")
+            .select("nome_empresa")
+            .eq("id_cliente", idCliente)
+            .maybeSingle();
+          if (mmC) {
+            const { data: prests } = await supabase
+              .from("prestadores")
+              .select("id")
+              .ilike("nome_artistico", `%${mmC.nome_empresa}%`);
+            if (prests && prests.length > 0) {
+              for (const p of prests) {
+                const { data: pEnts } = await supabase
+                  .from("entrevistas")
+                  .select("id, dados_json")
+                  .eq("prestador_id", p.id)
+                  .order("criado_em", { ascending: false })
+                  .limit(1);
+                if (pEnts && pEnts.length > 0) {
+                  const dados = {
+                    ...(pEnts[0].dados_json as Record<string, string>),
+                    fase_projeto: novaFase,
+                  };
+                  await supabase
+                    .from("entrevistas")
+                    .update({ dados_json: dados })
+                    .eq("id", pEnts[0].id);
+                }
+              }
+            }
+          }
+        }
+      } catch (syncErr) {
+        // Não bloqueia a resposta — o status do mm_clientes já foi atualizado
+        console.warn("[update-cliente-status] sync entrevista fase_projeto:", syncErr);
+      }
+    }
+
     // ── 2. Atualiza Cadastro_Clientes no Sheets ───────────────────────────────
     if (!SHEET_ID) return NextResponse.json({ ok: true, sheets: false });
 
