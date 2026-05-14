@@ -29,7 +29,6 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
     const r3 = await supabase.from("prestadores").delete().eq("id", prestadorId);
     if (!r3.error) {
       router.push("/");
-      router.refresh();
     } else {
       toast.error("Erro ao excluir: " + r3.error.message);
       setLoading(false);
