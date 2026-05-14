@@ -454,6 +454,7 @@ export default function PipelinePage() {
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [syncingGaps, setSyncingGaps] = useState(false);
+  const [cleaningGaps, setCleaningGaps] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mostrarFinalizadasIds, setMostrarFinalizadasIds] = useState<Set<string>>(new Set());
   const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
@@ -565,6 +566,42 @@ export default function PipelinePage() {
       toast.error(err instanceof Error ? err.message : "Erro ao corrigir gaps");
     } finally {
       setSyncingGaps(false);
+    }
+  }
+
+  // ── Limpar Gaps: remove mm_clientes a partir de um ID ──
+  async function handleCleanGaps(fromId: string) {
+    const confirm = window.confirm(
+      `Isso vai APAGAR permanentemente todos os registros de pipeline a partir de ${fromId} (Supabase + Sheets). Continuar?`
+    );
+    if (!confirm) return;
+    setCleaningGaps(true);
+    try {
+      const res = await fetch(`/api/admin/sync-pipeline?from=${encodeURIComponent(fromId)}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        deleted?: string[];
+        sheetsRequests?: number;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
+
+      if ((data.deleted ?? []).length === 0) {
+        toast.info(data.message ?? "Nenhum registro encontrado.");
+      } else {
+        toast.success(
+          `${data.deleted!.length} registro(s) removido(s): ${data.deleted!.join(", ")}`,
+          { duration: 12000 }
+        );
+      }
+      await invalidatePipeline();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao limpar gaps");
+    } finally {
+      setCleaningGaps(false);
     }
   }
 
@@ -837,7 +874,7 @@ export default function PipelinePage() {
 
           <Button
             onClick={handleSyncGaps}
-            disabled={syncingGaps || syncing}
+            disabled={syncingGaps || syncing || cleaningGaps}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1e2a1e] border border-[#3a5a3a] text-sm text-green-300 hover:border-[#5a8a5a] hover:text-green-200 transition disabled:opacity-50 whitespace-nowrap"
           >
             {syncingGaps ? (
@@ -848,6 +885,26 @@ export default function PipelinePage() {
             ) : (
               <>
                 <Plus className="w-4 h-4" /> Corrigir Gaps
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={() => {
+              const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
+              if (id) handleCleanGaps(id.trim().toUpperCase());
+            }}
+            disabled={cleaningGaps || syncing || syncingGaps}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2a1e1e] border border-[#5a3a3a] text-sm text-red-300 hover:border-[#8a5a5a] hover:text-red-200 transition disabled:opacity-50 whitespace-nowrap"
+          >
+            {cleaningGaps ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Limpando...
+              </>
+            ) : (
+              <>
+                <X className="w-4 h-4" /> Limpar Gaps
               </>
             )}
           </Button>

@@ -15,7 +15,7 @@
 
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
@@ -458,6 +458,142 @@ export async function POST() {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[sync-pipeline]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// ─── DELETE /api/admin/sync-pipeline?from=MM046 ───────────────────────────────
+// Remove entradas de mm_clientes, linhas no Sheets e abas individuais
+// para todos os IDs com número >= fromNum. Limpa mm_id nas entrevistas.
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getAuthUser();
+    if (!user) return UNAUTHORIZED();
+
+    const fromParam = new URL(req.url).searchParams.get("from") ?? "";
+    const fromNum = extractMMNum(fromParam);
+    if (fromNum <= 0) {
+      return NextResponse.json(
+        { error: 'Parâmetro "from" inválido. Use ex: ?from=MM046' },
+        { status: 400 }
+      );
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // 1. Busca todos os mm_clientes e filtra >= fromNum em JS
+    const { data: allMM, error: errF } = await supabase
+      .from("mm_clientes")
+      .select("id_cliente, nome_empresa, sheets_aba");
+
+    if (errF) throw new Error(`Erro ao buscar mm_clientes: ${errF.message}`);
+
+    const targets = (allMM ?? []).filter((c) => extractMMNum(String(c.id_cliente)) >= fromNum);
+
+    if (targets.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        deleted: [],
+        message: `Nenhum registro encontrado a partir de ${fromParam}`,
+      });
+    }
+
+    const targetIds = new Set(targets.map((c) => String(c.id_cliente).toUpperCase()));
+    const targetAbas = new Set(targets.map((c) => String(c.sheets_aba ?? "")).filter(Boolean));
+
+    // 2. Google Sheets: remove linhas e abas
+    const token = await googleToken();
+
+    type SheetProps = { properties: { sheetId: number; title: string } };
+    const meta = (await sheetsGet(token, "?fields=sheets.properties")) as {
+      sheets: SheetProps[];
+    };
+    const abas: SheetProps[] = Array.isArray(meta.sheets) ? meta.sheets : [];
+
+    const nomeAbaCadastro = abas
+      .map((s) => s.properties.title)
+      .find((t) => /cadastro.?clientes|^clientes$|^cadastro$/i.test(String(t).trim()));
+
+    const sheetRequests: unknown[] = [];
+
+    // 2a. Deleta linhas do Cadastro_Clientes (de baixo pra cima para índices estáveis)
+    if (nomeAbaCadastro) {
+      const cadastroSheetId = abas.find((s) => s.properties.title === nomeAbaCadastro)?.properties
+        .sheetId;
+
+      const cadastroData = (await sheetsGet(
+        token,
+        `/values/${encodeURIComponent(nomeAbaCadastro)}`
+      )) as { values?: string[][] };
+      const rows: string[][] = Array.isArray(cadastroData.values) ? cadastroData.values : [];
+
+      // Índices das linhas de dados que correspondem a um dos IDs alvo (pula cabeçalho i=0)
+      const rowsToDelete: number[] = [];
+      for (let i = 1; i < rows.length; i++) {
+        const cellId = String(rows[i]?.[0] ?? "").toUpperCase();
+        if (targetIds.has(cellId)) rowsToDelete.push(i);
+      }
+
+      // Ordem decrescente para índices não se deslocarem
+      rowsToDelete.sort((a, b) => b - a);
+
+      for (const idx of rowsToDelete) {
+        sheetRequests.push({
+          deleteDimension: {
+            range: {
+              sheetId: cadastroSheetId,
+              dimension: "ROWS",
+              startIndex: idx,
+              endIndex: idx + 1,
+            },
+          },
+        });
+      }
+    }
+
+    // 2b. Deleta abas individuais
+    for (const aba of abas) {
+      if (targetAbas.has(aba.properties.title)) {
+        sheetRequests.push({ deleteSheet: { sheetId: aba.properties.sheetId } });
+      }
+    }
+
+    if (sheetRequests.length > 0) {
+      await sheetsPost(token, ":batchUpdate", { requests: sheetRequests });
+    }
+
+    // 3. Deleta do mm_clientes
+    const { error: errD } = await supabase
+      .from("mm_clientes")
+      .delete()
+      .in("id_cliente", Array.from(targetIds));
+
+    if (errD) throw new Error(`Erro ao deletar mm_clientes: ${errD.message}`);
+
+    // 4. Limpa mm_id nas entrevistas afetadas
+    const { data: entrevistas } = await supabase.from("entrevistas").select("id, dados_json");
+
+    for (const e of entrevistas ?? []) {
+      const dados = (e.dados_json ?? {}) as Record<string, string>;
+      const mmId = String(dados.mm_id ?? "").toUpperCase();
+      if (targetIds.has(mmId)) {
+        const { mm_id: _removed, ...rest } = dados;
+        void _removed;
+        await supabase.from("entrevistas").update({ dados_json: rest }).eq("id", e.id);
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      deleted: Array.from(targetIds).sort(),
+      sheetsRequests: sheetRequests.length,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[sync-pipeline DELETE]", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
