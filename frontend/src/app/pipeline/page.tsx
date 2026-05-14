@@ -496,6 +496,18 @@ export default function PipelinePage() {
       } else {
         toast.success(msg);
       }
+
+      // Propaga status (Pausado/Encerrado/Ativo) do Supabase → planilha
+      try {
+        const wb = await fetch("/api/sheets/write-back-status", { method: "POST" });
+        const wbData = (await wb.json()) as { atualizados?: number };
+        if ((wbData.atualizados ?? 0) > 0) {
+          toast.info(`${wbData.atualizados} status corrigido(s) na planilha`);
+        }
+      } catch {
+        // write-back é melhor-esforço, não bloqueia o sync
+      }
+
       await invalidatePipeline();
     } catch (err) {
       toast.error(String(err));
