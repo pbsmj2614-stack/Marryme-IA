@@ -15,7 +15,8 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 
-const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
+const SHEET_ID =
+  process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 function makeJWT(email: string, key: string): string {
@@ -142,7 +143,12 @@ export async function POST() {
         .replace(/[^a-z0-9]/g, "_")
         .replace(/^_+|_+$/g, "");
 
-    let statusColIdx = 11; // fallback col L
+    // Detecta a coluna do ID a partir da primeira linha de dados
+    const idColIdx = (rows[dataStartRow] ?? []).findIndex((c) => /^MM\d+/i.test(c?.trim() ?? ""));
+    const idCol = idColIdx >= 0 ? idColIdx : 0;
+
+    // Detecta coluna Status pelo cabeçalho; fallback = col L (11) ou col após ID
+    let statusColIdx = idCol + 9; // fallback relativo ao ID
     for (let i = 0; i < headerRow.length; i++) {
       if (normalizeHeader(headerRow[i] ?? "") === "status") {
         statusColIdx = i;
@@ -154,13 +160,19 @@ export async function POST() {
 
     // ── 4. Monta batch de atualizações para linhas que divergem ──────────────
     const updates: Array<{ range: string; values: string[][] }> = [];
+    let verificados = 0;
+    let naoNoSupabase = 0;
 
     for (let i = dataStartRow; i < rows.length; i++) {
-      const rowId = (rows[i]?.[0] ?? "").trim().toUpperCase();
+      const rowId = (rows[i]?.[idCol] ?? "").trim().toUpperCase();
       if (!/^MM\d+$/i.test(rowId)) continue;
+      verificados++;
 
       const supabaseStatus = statusMap.get(rowId);
-      if (!supabaseStatus) continue; // cliente não existe mais no Supabase
+      if (!supabaseStatus) {
+        naoNoSupabase++;
+        continue;
+      }
 
       const sheetStatus = (rows[i]?.[statusColIdx] ?? "").trim();
       if (sheetStatus === supabaseStatus) continue; // já está correto
@@ -176,7 +188,16 @@ export async function POST() {
       await sBatchUpdate(token, updates);
     }
 
-    return NextResponse.json({ ok: true, atualizados: updates.length, total: clientes.length });
+    return NextResponse.json({
+      ok: true,
+      atualizados: updates.length,
+      total: clientes.length,
+      verificados,
+      naoNoSupabase,
+      nomeAba,
+      statusColIdx,
+      colLetter,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[write-back-status]", msg);

@@ -482,30 +482,63 @@ export default function PipelinePage() {
   async function handleSync() {
     setSyncing(true);
     try {
+      // Sync primeiro (apaga e reinsere mm_clientes); write-back lê depois
       const result = await importarPlanilha();
+      const wb = await fetch("/api/sheets/write-back-status", { method: "POST" }).catch(() => null);
 
+      // ── monta mensagem de sync ──
       const parts: string[] = [`${result.clientes} clientes · ${result.tarefas} tarefas`];
       if (result.semAbas.length > 0) parts.push(`sem aba: ${result.semAbas.join(", ")}`);
       if (result.semTarefas.length > 0) parts.push(`sem tarefas: ${result.semTarefas.join(", ")}`);
       if (result.erros.length > 0) parts.push(`erros: ${result.erros.join(" | ")}`);
 
-      const msg = parts.join(" · ");
-      const temProblema = result.erros.length > 0 || result.semAbas.length > 0;
-      if (temProblema) {
-        toast.warning(msg, { duration: 10000 });
+      // ── monta sufixo do write-back ──
+      let wbSuffix = "";
+      let wbErro = "";
+      if (!wb) {
+        wbErro = "status: erro de rede";
       } else {
-        toast.success(msg);
+        try {
+          const wbData = (await wb.json()) as {
+            ok?: boolean;
+            atualizados?: number;
+            verificados?: number;
+            naoNoSupabase?: number;
+            nomeAba?: string;
+            colLetter?: string;
+            error?: string;
+          };
+          if (!wb.ok || !wbData.ok) {
+            wbErro = `status: ${wbData.error ?? `Erro ${wb.status}`}`;
+          } else {
+            const at = wbData.atualizados ?? 0;
+            const ver = wbData.verificados ?? 0;
+            const fora = wbData.naoNoSupabase ?? 0;
+            const col = wbData.colLetter ?? "?";
+            const aba = wbData.nomeAba ?? "?";
+            if (at > 0) {
+              wbSuffix = `${at} status corrigido(s) [col ${col}, "${aba}"]`;
+            } else {
+              wbSuffix =
+                `status OK (${ver} verif., col ${col}` +
+                (fora > 0 ? `, ${fora} sem match` : "") +
+                ")";
+            }
+          }
+        } catch {
+          wbErro = "status: resposta inválida";
+        }
       }
 
-      // Propaga status (Pausado/Encerrado/Ativo) do Supabase → planilha
-      try {
-        const wb = await fetch("/api/sheets/write-back-status", { method: "POST" });
-        const wbData = (await wb.json()) as { atualizados?: number };
-        if ((wbData.atualizados ?? 0) > 0) {
-          toast.info(`${wbData.atualizados} status corrigido(s) na planilha`);
-        }
-      } catch {
-        // write-back é melhor-esforço, não bloqueia o sync
+      if (wbSuffix) parts.push(wbSuffix);
+
+      const msg = parts.join(" · ");
+      const temProblema = result.erros.length > 0 || result.semAbas.length > 0 || !!wbErro;
+      if (temProblema) {
+        const msgFinal = wbErro ? msg + ` · ${wbErro}` : msg;
+        toast.warning(msgFinal, { duration: 12000 });
+      } else {
+        toast.success(msg, { duration: 8000 });
       }
 
       await invalidatePipeline();
@@ -625,14 +658,18 @@ export default function PipelinePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_cliente: idCliente, status: novoStatus }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; rowFound?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
       const labels: Record<StatusCliente, string> = {
         Ativo: "reativado",
         Pausado: "pausado",
         Encerrado: "encerrado",
       };
-      toast.success(`Cliente ${labels[novoStatus]}`);
+      if (data.rowFound === false) {
+        toast.warning(`Cliente ${labels[novoStatus]} (Supabase OK, planilha: ID não encontrado)`);
+      } else {
+        toast.success(`Cliente ${labels[novoStatus]}`);
+      }
       setExpandedId(null);
       await invalidatePipeline();
     } catch (err) {

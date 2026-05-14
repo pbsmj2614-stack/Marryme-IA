@@ -18,7 +18,8 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 
-const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
+const SHEET_ID =
+  process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 const VALID_STATUS = ["Ativo", "Pausado", "Encerrado"] as const;
@@ -162,8 +163,12 @@ export async function POST(req: NextRequest) {
         .replace(/[^a-z0-9]/g, "_")
         .replace(/^_+|_+$/g, "");
 
-    // Detecta coluna de status pelo cabeçalho (fallback: col L = índice 11)
-    let statusColIdx = 11; // fallback col L
+    // Detecta a coluna do ID a partir da primeira linha de dados
+    const idColIdx = (rows[dataStartRow] ?? []).findIndex((c) => /^MM\d+/i.test(c?.trim() ?? ""));
+    const idCol = idColIdx >= 0 ? idColIdx : 0;
+
+    // Detecta coluna Status pelo cabeçalho; fallback relativo ao ID
+    let statusColIdx = idCol + 9;
     for (let i = 0; i < headerRow.length; i++) {
       if (normalizeHeader(headerRow[i] ?? "") === "status") {
         statusColIdx = i;
@@ -171,10 +176,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Encontra a linha do cliente (col A = id_cliente)
+    // Encontra a linha do cliente pela coluna do ID
     let rowFound = false;
     for (let i = dataStartRow; i < rows.length; i++) {
-      const rowId = (rows[i]?.[0] ?? "").trim().toUpperCase();
+      const rowId = (rows[i]?.[idCol] ?? "").trim().toUpperCase();
       if (rowId !== idCliente) continue;
 
       // Coluna A=65, B=66… para colunas simples (A-Z basta até 26 colunas)
