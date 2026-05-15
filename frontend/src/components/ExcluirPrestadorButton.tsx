@@ -24,7 +24,7 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
       const res = await fetch(`/api/prestadores/${prestadorId}`, { method: "DELETE" });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (res.ok && data.ok) {
-        window.location.href = "/";
+        window.location.replace("/");
       } else {
         toast.error("Erro ao excluir: " + (data.error ?? res.statusText));
         setLoading(false);
