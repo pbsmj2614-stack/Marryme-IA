@@ -263,10 +263,11 @@ export default function NovoPage() {
       setStatus("Verificando pipeline...");
       const nomeBusca = dados.nome_artistico.trim();
 
+      // Busca exata (sem wildcards) para evitar falso positivo de entradas parciais
       const { data: candidatos } = await supabase
         .from("mm_clientes")
-        .select("id_cliente, nome_empresa")
-        .ilike("nome_empresa", `%${nomeBusca}%`);
+        .select("id_cliente, nome_empresa, sheets_aba")
+        .ilike("nome_empresa", nomeBusca);
 
       // Pega o de menor ID MM caso haja duplicatas residuais
       const clienteExistente =
@@ -276,9 +277,13 @@ export default function NovoPage() {
           return na - nb;
         })[0] ?? null;
 
-      if (clienteExistente) {
-        // ── Já existe na pipeline — só vincula o mm_id, sem criar duplicata ──
-        console.log("[novo] clienteExistente encontrado:", clienteExistente.id_cliente);
+      // Só vincula se o cliente existente JÁ tem aba criada na planilha.
+      // Se sheets_aba for null, o pipeline estava incompleto — recria.
+      const pipelineCompleta = clienteExistente && clienteExistente.sheets_aba;
+
+      if (pipelineCompleta) {
+        // ── Pipeline completa — só vincula o mm_id, sem criar duplicata ──
+        console.log("[novo] clienteExistente com pipeline completa:", clienteExistente.id_cliente);
         await supabase
           .from("entrevistas")
           .update({ dados_json: { ...dados, mm_id: clienteExistente.id_cliente } })
@@ -288,8 +293,13 @@ export default function NovoPage() {
           { duration: 8000 }
         );
       } else {
-        // ── Novo cliente — criar pipeline completa (Sheets + mm_clientes) ──
-        console.log("[novo] cliente novo, chamando /api/sheets/novo-cliente para:", nomeBusca);
+        // ── Novo cliente ou pipeline incompleta — criar pipeline (Sheets + mm_clientes) ──
+        console.log(
+          "[novo] pipeline a criar, chamando /api/sheets/novo-cliente para:",
+          nomeBusca,
+          "| existente sem aba:",
+          clienteExistente?.id_cliente ?? "nenhum"
+        );
         setStatus("Criando pipeline completa (planilha + tarefas)...");
         let abortarCadastro = false;
         try {

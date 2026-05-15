@@ -168,26 +168,38 @@ export async function POST(req: NextRequest) {
     } = parsed.data;
 
     // ── 0. Verificar duplicata no banco ANTES de fazer qualquer coisa ──
+    // Busca exata (sem wildcards) para evitar falso positivo de entradas parciais.
+    // Se a entrada existente não tem sheets_aba, o pipeline estava incompleto — prossegue.
     const supabaseUrlCheck = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKeyCheck = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    let idClienteExistente: string | null = null; // preenchido quando será UPDATE em vez de INSERT
     if (supabaseUrlCheck && supabaseKeyCheck) {
       const sbCheck = createClient(supabaseUrlCheck, supabaseKeyCheck);
-      const nomeNorm = nome_empresa.trim().toLowerCase();
+      const nomeNorm = nome_empresa.trim();
       const { data: existente } = await sbCheck
         .from("mm_clientes")
-        .select("id_cliente, nome_empresa")
-        .ilike("nome_empresa", `%${nomeNorm}%`)
+        .select("id_cliente, nome_empresa, sheets_aba")
+        .ilike("nome_empresa", nomeNorm)
         .limit(1)
         .maybeSingle();
 
       if (existente) {
-        return NextResponse.json(
-          {
-            error: `Cliente "${existente.nome_empresa}" (${existente.id_cliente}) já está cadastrado. Use a sincronização para atualizar ou edite diretamente no app.`,
-            duplicado: true,
-            id_existente: existente.id_cliente,
-          },
-          { status: 409 }
+        if (existente.sheets_aba) {
+          // Pipeline completa — duplicata real, bloqueia
+          return NextResponse.json(
+            {
+              error: `Cliente "${existente.nome_empresa}" (${existente.id_cliente}) já está cadastrado. Use a sincronização para atualizar ou edite diretamente no app.`,
+              duplicado: true,
+              id_existente: existente.id_cliente,
+            },
+            { status: 409 }
+          );
+        }
+        // Pipeline incompleta (sem sheets_aba) — prossegue para completar
+        idClienteExistente = existente.id_cliente;
+        console.log(
+          "[novo-cliente] entrada existente sem aba, completando pipeline:",
+          existente.id_cliente
         );
       }
     }
@@ -390,14 +402,13 @@ export async function POST(req: NextRequest) {
       { range: `${tabQuoted}!${startCol}${insertRow}`, values: [novaLinha] },
     ]);
 
-    // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
+    // ── 11. Inserir/atualizar no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
     if (!supabaseUrl || !supabaseKey) throw new Error("Variáveis Supabase não configuradas.");
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const { error: dbErr } = await supabase.from("mm_clientes").insert({
-      id_cliente: newId,
+    const clientePayload = {
       nome_empresa: nomeTrimmed,
       segmento: segmento?.trim() || null,
       cidade: cidade?.trim() || null,
@@ -409,10 +420,24 @@ export async function POST(req: NextRequest) {
       responsavel_mm: responsavel_mm?.trim() || null,
       observacoes: observacoes?.trim() || null,
       inicio_contrato: hojeStr.split("/").reverse().join("-"),
-      valor_contrato: 0,
       sheets_aba: novaAba,
       atualizado_em: new Date().toISOString(),
-    });
+    };
+
+    let dbErr;
+    if (idClienteExistente) {
+      // Entrada já existia sem aba — atualiza para completar o pipeline
+      ({ error: dbErr } = await supabase
+        .from("mm_clientes")
+        .update({ ...clientePayload, sheets_aba: novaAba })
+        .eq("id_cliente", idClienteExistente));
+    } else {
+      ({ error: dbErr } = await supabase.from("mm_clientes").insert({
+        id_cliente: newId,
+        valor_contrato: 0,
+        ...clientePayload,
+      }));
+    }
     if (dbErr)
       throw new Error(
         `Aba e cadastro criados na planilha (${newId} / "${novaAba}"), mas falha ao registrar na pipeline do app: ${dbErr.message}`
