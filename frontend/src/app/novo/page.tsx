@@ -26,15 +26,7 @@ import { Loader2 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CATEGORIAS: { value: Categoria; label: string }[] = [
-  { value: "musico", label: "Músico / Banda" },
-  { value: "fotografo", label: "Fotógrafo / Cinegrafista" },
-  { value: "celebrante", label: "Celebrante / Cerimonialista" },
-  { value: "dj", label: "DJ" },
-  { value: "outro", label: "Outro" },
-];
-
-// Opções de segmento exatas da planilha Cadastro_Clientes
+// Opções de categoria/segmento exatas da planilha Cadastro_Clientes
 const SEGMENTOS = [
   "Fotógrafo",
   "Filmmaker",
@@ -49,13 +41,19 @@ const SEGMENTOS = [
   "Outro",
 ];
 
-// Sugestão automática de segmento ao selecionar categoria
-const CATEGORIA_TO_SEGMENTO: Record<string, string> = {
-  musico: "Músico/Banda",
-  fotografo: "Fotógrafo",
-  celebrante: "Celebrante",
-  dj: "DJ",
-  outro: "Outro",
+// Mapeamento de segmento (planilha) → categoria interna (enum DB)
+const SEGMENTO_TO_CATEGORIA: Record<string, Categoria> = {
+  Fotógrafo: "fotografo",
+  Filmmaker: "fotografo",
+  "Músico/Banda": "musico",
+  DJ: "dj",
+  Cerimonialista: "celebrante",
+  Celebrante: "celebrante",
+  Decorador: "outro",
+  Buffet: "outro",
+  Floricultura: "outro",
+  Assessoria: "outro",
+  Outro: "outro",
 };
 
 const PLANOS = ["Essencial", "Growth", "Enterprise"];
@@ -328,9 +326,7 @@ export default function NovoPage() {
         setStatus("Criando pipeline completa (planilha + tarefas)...");
         let abortarCadastro = false;
         try {
-          // Usa o segmento selecionado no dropdown; fallback: mapeamento da categoria
-          const segmentoEnvio =
-            dados.segmento?.trim() || CATEGORIA_TO_SEGMENTO[dados.categoria] || dados.categoria;
+          const segmentoEnvio = dados.segmento?.trim() || dados.categoria;
           const res = await fetch("/api/sheets/novo-cliente", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -453,23 +449,14 @@ export default function NovoPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SelectField
                     label="Categoria"
-                    value={dados.categoria}
-                    onChange={(v) => {
-                      set("categoria", v as Categoria);
-                      // Sugere segmento automaticamente se ainda não foi alterado manualmente
-                      const sugestao = CATEGORIA_TO_SEGMENTO[v] ?? "";
-                      if (sugestao) set("segmento", sugestao);
-                    }}
-                    options={CATEGORIAS}
-                    required
-                    disabled={loading}
-                  />
-                  <SelectField
-                    label="Segmento (planilha)"
                     value={dados.segmento ?? ""}
-                    onChange={(v) => set("segmento", v)}
+                    onChange={(v) => {
+                      set("segmento", v);
+                      set("categoria", SEGMENTO_TO_CATEGORIA[v] ?? "outro");
+                    }}
                     options={SEGMENTOS.map((s) => ({ value: s, label: s }))}
                     placeholder="— selecione —"
+                    required
                     disabled={loading}
                   />
                 </div>
