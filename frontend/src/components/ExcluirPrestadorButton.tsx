@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { excluirPrestadorAction } from "@/app/prestador/[id]/actions";
 import {
@@ -18,7 +17,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: string }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function handleExcluir() {
@@ -26,7 +24,10 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
       const result = await excluirPrestadorAction(prestadorId);
       if (result.ok) {
         toast.success("Prestador excluído com sucesso!");
-        router.push("/");
+        // window.location bypassa o React Router e evita que o Next.js
+        // re-renderize a página atual (que chamaria notFound() pois o
+        // prestador já foi deletado)
+        window.location.replace("/");
       } else {
         toast.error("Erro ao excluir: " + (result.error ?? "erro desconhecido"));
       }

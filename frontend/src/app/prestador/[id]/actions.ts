@@ -25,9 +25,9 @@ export async function excluirPrestadorAction(
     const { error } = await admin.from("prestadores").delete().eq("id", prestadorId);
     if (error) return { ok: false, error: error.message };
 
-    // Invalida ambos os caches (server Full Route Cache + client Router Cache)
+    // Invalida cache da home — NÃO invalida a página atual pois isso dispara
+    // um re-render imediato que chama notFound() antes da navegação completar
     revalidatePath("/");
-    revalidatePath(`/prestador/${prestadorId}`);
 
     return { ok: true };
   } catch (err) {
