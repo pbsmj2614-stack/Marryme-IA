@@ -4,26 +4,25 @@
 
 @layer base {
   :root {
-    /* Fundo rosinha da logomarca MarryMe (~#fdf2f8 / pink-50 do Tailwind) */
+    /* Fundo rosinha da logomarca MarryMe (~#fdf2f8) */
     --background: 332 72% 97%;
-    --foreground: 267 35% 14%; /* quase preto, leve tom roxo - legivel em rosa */
-    --card: 0 0% 100%; /* cards brancos flutuam sobre o fundo rosa */
+    --foreground: 267 35% 14%;
+    --card: 0 0% 100%;
     --card-foreground: 267 35% 14%;
     --popover: 0 0% 100%;
     --popover-foreground: 267 35% 14%;
 
-    /* primary = #1A0A2E roxo noite - botoes principais, CTAs escuros */
+    /* primary = #1A0A2E roxo noite */
     --primary: 267 64% 11%;
     --primary-foreground: 0 0% 100%;
 
-    /* secondary = rosa-lilas suave - badges, tags, botoes secundarios */
+    /* secondary = rosa-lilas suave */
     --secondary: 310 35% 93%;
     --secondary-foreground: 267 50% 20%;
 
     --muted: 332 25% 95%;
-    --muted-foreground: 267 15% 44%; /* cinza-roxo legivel sobre rosa claro */
+    --muted-foreground: 267 15% 44%;
 
-    /* accent = hover leve em listas e itens ativos */
     --accent: 310 30% 94%;
     --accent-foreground: 267 64% 11%;
 
@@ -31,48 +30,61 @@
     --destructive-foreground: 0 0% 98%;
 
     --border: 310 20% 87%;
-    --input: 0 0% 100%; /* input branco - contraste com fundo rosa */
+    --input: 0 0% 100%;
 
-    /* ring = #C084FC lilas vibrante - focus rings */
+    /* ring = #C084FC lilas vibrante */
     --ring: 270 95% 75%;
     --radius: 0.5rem;
 
-    /* charts - paleta completa */
-    --chart-1: 270 95% 75%; /* #C084FC lilas vibrante */
-    --chart-2: 292 91% 73%; /* #E879F9 fucsia */
-    --chart-3: 329 86% 70%; /* #F472B6 rosa quente */
-    --chart-4: 46 65% 52%; /* #D4AF37 dourado */
-    --chart-5: 262 58% 21%; /* #2D1654 roxo medio */
-  }
-
-  .dark {
-    --background: 267 64% 5%;
-    --foreground: 332 50% 94%;
-    --card: 267 55% 8%;
-    --card-foreground: 332 50% 94%;
-    --popover: 267 55% 8%;
-    --popover-foreground: 332 50% 94%;
-
-    /* no dark, primary vira o lilas vibrante */
-    --primary: 270 95% 75%;
-    --primary-foreground: 267 64% 8%;
-
-    --secondary: 310 35% 15%;
-    --secondary-foreground: 332 50% 88%;
-    --muted: 267 45% 12%;
-    --muted-foreground: 310 25% 55%;
-    --accent: 310 35% 18%;
-    --accent-foreground: 332 50% 94%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 310 25% 20%;
-    --input: 267 40% 12%;
-    --ring: 270 95% 75%;
+    /* charts */
     --chart-1: 270 95% 75%;
     --chart-2: 292 91% 73%;
     --chart-3: 329 86% 70%;
     --chart-4: 46 65% 52%;
-    --chart-5: 270 70% 55%;
+    --chart-5: 262 58% 21%;
+  }
+
+  .dark {
+    /* Roxo-noite profundo (#0B0518) */
+    --background: 267 62% 6%;
+    /* Cards levemente mais claros para criar profundidade */
+    --card: 267 52% 11%;
+    --card-foreground: 332 38% 91%;
+    --popover: 267 52% 11%;
+    --popover-foreground: 332 38% 91%;
+    /* Texto principal: branco quente com leve tint rosado */
+    --foreground: 332 38% 91%;
+
+    /* primary dark = #C084FC lilas vibrante como CTA */
+    --primary: 270 95% 75%;
+    --primary-foreground: 267 64% 8%;
+
+    /* secondary dark = roxo medio com tint rosa */
+    --secondary: 310 28% 17%;
+    --secondary-foreground: 332 35% 85%;
+
+    --muted: 267 42% 13%;
+    --muted-foreground: 310 18% 58%;
+
+    /* accent dark = hover de item */
+    --accent: 310 32% 17%;
+    --accent-foreground: 332 38% 91%;
+
+    --destructive: 0 72% 40%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Bordas sutis roxo-escuro */
+    --border: 267 38% 20%;
+    --input: 267 45% 10%;
+
+    --ring: 270 95% 75%;
+
+    /* charts dark - mesma paleta, mais vibrante */
+    --chart-1: 270 95% 75%;
+    --chart-2: 292 91% 73%;
+    --chart-3: 329 86% 70%;
+    --chart-4: 46 65% 52%;
+    --chart-5: 270 65% 58%;
   }
 }
 
