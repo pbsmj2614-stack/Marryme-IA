@@ -4,33 +4,34 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 267 25% 12%; /* quase preto, leve tom roxo - legivel em branco */
-    --card: 0 0% 100%;
-    --card-foreground: 267 25% 12%;
+    /* Fundo rosinha da logomarca MarryMe (~#fdf2f8 / pink-50 do Tailwind) */
+    --background: 332 72% 97%;
+    --foreground: 267 35% 14%; /* quase preto, leve tom roxo - legivel em rosa */
+    --card: 0 0% 100%; /* cards brancos flutuam sobre o fundo rosa */
+    --card-foreground: 267 35% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 267 25% 12%;
+    --popover-foreground: 267 35% 14%;
 
     /* primary = #1A0A2E roxo noite - botoes principais, CTAs escuros */
     --primary: 267 64% 11%;
     --primary-foreground: 0 0% 100%;
 
-    /* secondary = lavanda muito suave - fundo de badges e tags */
-    --secondary: 270 30% 94%;
+    /* secondary = rosa-lilas suave - badges, tags, botoes secundarios */
+    --secondary: 310 35% 93%;
     --secondary-foreground: 267 50% 20%;
 
-    --muted: 270 15% 96%;
-    --muted-foreground: 267 15% 44%; /* cinza-roxo, contraste >= 5:1 em branco */
+    --muted: 332 25% 95%;
+    --muted-foreground: 267 15% 44%; /* cinza-roxo legivel sobre rosa claro */
 
     /* accent = hover leve em listas e itens ativos */
-    --accent: 270 30% 95%;
+    --accent: 310 30% 94%;
     --accent-foreground: 267 64% 11%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 270 15% 88%;
-    --input: 270 15% 88%;
+    --border: 310 20% 87%;
+    --input: 0 0% 100%; /* input branco - contraste com fundo rosa */
 
     /* ring = #C084FC lilas vibrante - focus rings */
     --ring: 270 95% 75%;
@@ -46,26 +47,26 @@
 
   .dark {
     --background: 267 64% 5%;
-    --foreground: 270 50% 93%;
+    --foreground: 332 50% 94%;
     --card: 267 55% 8%;
-    --card-foreground: 270 50% 93%;
+    --card-foreground: 332 50% 94%;
     --popover: 267 55% 8%;
-    --popover-foreground: 270 50% 93%;
+    --popover-foreground: 332 50% 94%;
 
     /* no dark, primary vira o lilas vibrante */
     --primary: 270 95% 75%;
     --primary-foreground: 267 64% 8%;
 
-    --secondary: 262 50% 15%;
-    --secondary-foreground: 270 50% 88%;
-    --muted: 262 45% 12%;
-    --muted-foreground: 270 30% 55%;
-    --accent: 262 50% 18%;
-    --accent-foreground: 270 50% 93%;
+    --secondary: 310 35% 15%;
+    --secondary-foreground: 332 50% 88%;
+    --muted: 267 45% 12%;
+    --muted-foreground: 310 25% 55%;
+    --accent: 310 35% 18%;
+    --accent-foreground: 332 50% 94%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 262 35% 20%;
-    --input: 262 35% 20%;
+    --border: 310 25% 20%;
+    --input: 267 40% 12%;
     --ring: 270 95% 75%;
     --chart-1: 270 95% 75%;
     --chart-2: 292 91% 73%;
