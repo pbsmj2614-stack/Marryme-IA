@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body
-        className={`${inter.variable} ${lora.variable} font-sans bg-gray-50 text-gray-900 antialiased`}
+        className={`${inter.variable} ${lora.variable} font-sans bg-background text-foreground antialiased`}
       >
         <div
           aria-hidden="true"
