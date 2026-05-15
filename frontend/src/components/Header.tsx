@@ -19,10 +19,10 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const ROLE_COLOR: Record<string, string> = {
-  admin: "bg-red-100 text-red-700",
-  cs_senior: "bg-brand-100 text-brand-700",
-  cs_junior: "bg-gray-100 text-gray-600",
-  viewer: "bg-gray-100 text-gray-400",
+  admin: "bg-red-900/40 text-red-300",
+  cs_senior: "bg-brand-700 text-brand-400",
+  cs_junior: "bg-white/10 text-white/60",
+  viewer: "bg-white/5 text-white/40",
 };
 
 const NAV_LINKS = [
@@ -37,7 +37,7 @@ function UserAvatar({ email }: { email: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-600 text-white text-xs font-semibold select-none"
+      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-mm-lilac text-brand-900 text-xs font-semibold select-none"
     >
       {initials}
     </span>
@@ -57,9 +57,9 @@ export default function Header({ user }: HeaderProps) {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <header className="bg-brand-800 border-b border-brand-700 sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="font-bold text-brand-700 text-lg tracking-tight">
+        <Link href="/" className="font-bold text-white text-lg tracking-tight">
           MarryMe
         </Link>
 
@@ -72,8 +72,8 @@ export default function Header({ user }: HeaderProps) {
                 href={href}
                 className={`text-sm px-3 py-1.5 rounded-lg transition ${
                   active
-                    ? "bg-brand-50 text-brand-700 font-medium"
-                    : "text-gray-600 hover:text-brand-600 hover:bg-gray-50"
+                    ? "bg-white/10 text-brand-400 font-medium"
+                    : "text-white/70 hover:text-white hover:bg-white/5"
                 }`}
               >
                 {label}
@@ -81,7 +81,11 @@ export default function Header({ user }: HeaderProps) {
             );
           })}
 
-          <Button asChild size="sm" className="ml-1">
+          <Button
+            asChild
+            size="sm"
+            className="ml-1 bg-mm-fuchsia text-white hover:bg-mm-lilac hover:text-brand-900 border-0"
+          >
             <Link href="/novo">+ Novo</Link>
           </Button>
         </nav>
@@ -91,7 +95,7 @@ export default function Header({ user }: HeaderProps) {
             <>
               <div className="flex items-center gap-2">
                 <UserAvatar email={user.email ?? "?"} />
-                <span className="text-xs text-gray-500 hidden sm:block max-w-[140px] truncate">
+                <span className="text-xs text-white/60 hidden sm:block max-w-[140px] truncate">
                   {user.email}
                 </span>
                 {role && (
@@ -108,13 +112,18 @@ export default function Header({ user }: HeaderProps) {
               {role === "admin" && (
                 <Link
                   href="/admin/logs"
-                  className="text-xs text-gray-400 hover:text-gray-700 transition hidden sm:block"
+                  className="text-xs text-white/40 hover:text-white/80 transition hidden sm:block"
                 >
                   Admin
                 </Link>
               )}
 
-              <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="text-white/70 hover:text-white hover:bg-white/10"
+              >
                 Sair
               </Button>
             </>

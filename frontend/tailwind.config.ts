@@ -10,17 +10,27 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        /* ── Escala brand (roxo → lilás) ─────────────────────────────── */
         brand: {
-          50: "#fdf2f8",
-          100: "#fce7f3",
-          200: "#fbcfe8",
-          300: "#f9a8d4",
-          400: "#f472b6",
-          500: "#ec4899",
-          600: "#db2777",
-          700: "#be185d",
-          800: "#9d174d",
-          900: "#831843",
+          50: "#f5efff" /* lavanda quase branco — bg ativo leve       */,
+          100: "#ede0ff" /* lavanda clara — badges, tags                */,
+          200: "#dcc4ff",
+          300: "#c9a0fd",
+          400: "#C084FC" /* lilás vibrante — secondary highlights       */,
+          500: "#a84ff8",
+          600: "#8b2fe8" /* roxo vibrante — CTAs em fundo claro         */,
+          700: "#2D1654" /* roxo médio — primary-mid, textos escuros    */,
+          800: "#1A0A2E" /* roxo noite — nav, fundos premium            */,
+          900: "#0f0620",
+        },
+        /* ── Cores nomeadas da paleta MM ─────────────────────────────── */
+        mm: {
+          fuchsia: "#E879F9" /* rosa-lilás — accent, hover, CTA principal */,
+          warm: "#F472B6" /* rosa quente — badges emocionais           */,
+          gold: "#D4AF37" /* dourado — premium, conversão especial     */,
+          lilac: "#C084FC" /* lilás vibrante (alias brand-400)          */,
+          purple: "#2D1654" /* roxo médio (alias brand-700)              */,
+          night: "#1A0A2E" /* roxo noite (alias brand-800)              */,
         },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

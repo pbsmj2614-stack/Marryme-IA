@@ -5,58 +5,73 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --foreground: 267 64% 8%; /* texto principal tom roxo-escuro */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 267 64% 8%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    /* primary = brand pink (brand-600 #db2777) */
-    --primary: 336 74% 51%;
+    --popover-foreground: 267 64% 8%;
+
+    /* primary = #1A0A2E roxo noite — botões principais, CTAs escuros */
+    --primary: 267 64% 11%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 336 74% 96%;
-    --accent-foreground: 336 74% 35%;
+
+    /* secondary = lavanda suave — backgrounds de badges, tags, botões secondários */
+    --secondary: 270 60% 94%;
+    --secondary-foreground: 267 58% 20%;
+
+    --muted: 270 25% 96%;
+    --muted-foreground: 267 20% 48%;
+
+    /* accent = hover leve em listas e itens ativos */
+    --accent: 270 55% 95%;
+    --accent-foreground: 267 64% 11%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 336 74% 51%;
+
+    --border: 270 25% 87%;
+    --input: 270 25% 87%;
+
+    /* ring = #C084FC lilás vibrante — focus rings */
+    --ring: 270 95% 75%;
     --radius: 0.5rem;
-    --chart-1: 336 74% 51%;
-    --chart-2: 346 77% 49%;
-    --chart-3: 316 70% 52%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 220 70% 50%;
+
+    /* charts — paleta completa */
+    --chart-1: 270 95% 75%; /* #C084FC lilás vibrante  */
+    --chart-2: 292 91% 73%; /* #E879F9 fúcsia          */
+    --chart-3: 329 86% 70%; /* #F472B6 rosa quente     */
+    --chart-4: 46 65% 52%; /* #D4AF37 dourado         */
+    --chart-5: 262 58% 21%; /* #2D1654 roxo médio      */
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 336 74% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --background: 267 64% 5%;
+    --foreground: 270 50% 93%;
+    --card: 267 55% 8%;
+    --card-foreground: 270 50% 93%;
+    --popover: 267 55% 8%;
+    --popover-foreground: 270 50% 93%;
+
+    /* no dark, primary vira o lilás vibrante */
+    --primary: 270 95% 75%;
+    --primary-foreground: 267 64% 8%;
+
+    --secondary: 262 50% 15%;
+    --secondary-foreground: 270 50% 88%;
+    --muted: 262 45% 12%;
+    --muted-foreground: 270 30% 55%;
+    --accent: 262 50% 18%;
+    --accent-foreground: 270 50% 93%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 336 74% 60%;
-    --chart-1: 336 74% 60%;
-    --chart-2: 346 77% 55%;
-    --chart-3: 316 70% 58%;
-    --chart-4: 280 65% 65%;
-    --chart-5: 220 70% 55%;
+    --border: 262 35% 20%;
+    --input: 262 35% 20%;
+    --ring: 270 95% 75%;
+    --chart-1: 270 95% 75%;
+    --chart-2: 292 91% 73%;
+    --chart-3: 329 86% 70%;
+    --chart-4: 46 65% 52%;
+    --chart-5: 270 70% 55%;
   }
 }
 
