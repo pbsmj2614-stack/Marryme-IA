@@ -26,7 +26,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     if (error) throw new Error(error.message);
 
     revalidatePath("/");
-    revalidatePath(`/prestador/${id}`);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

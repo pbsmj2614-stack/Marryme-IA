@@ -343,37 +343,51 @@ export async function POST(req: NextRequest) {
 
     // ── 10. Adicionar linha no Cadastro_Clientes ──
     const hojeStr = dateBR(hoje);
+    // Ordem real da aba cadastro_clientes (B até P):
+    // B=ID Cliente, C=Nome/Empresa, D=Segmento, E=Cidade, F=WhatsApp, G=E-mail,
+    // H=Início Contrato, I=Plano, J=Valor, K=Fase do Projeto, L=Status,
+    // M=Último Check-in, N=URL Planilha de Controle, O=Responsável MM, P=Observações
     const novaLinha = [
-      newId,
-      nomeTrimmed,
-      segmento?.trim() ?? "",
-      cidade?.trim() ?? "",
-      normalizePhone(whatsapp ?? ""),
-      email?.trim() ?? "",
-      hojeStr,
-      plano?.trim() ?? "",
-      fase_projeto?.trim() ?? "Onboarding",
-      "Ativo",
-      responsavel_mm?.trim() ?? "",
-      observacoes?.trim() ?? "",
+      newId, // B: ID Cliente
+      nomeTrimmed, // C: Nome / Empresa
+      segmento?.trim() ?? "", // D: Segmento
+      cidade?.trim() ?? "", // E: Cidade
+      normalizePhone(whatsapp ?? ""), // F: WhatsApp
+      email?.trim() ?? "", // G: E-mail
+      hojeStr, // H: Início Contrato
+      plano?.trim() ?? "", // I: Plano
+      "", // J: Valor (não coletado no form)
+      fase_projeto?.trim() ?? "Onboarding", // K: Fase do Projeto
+      "Ativo", // L: Status
+      "", // M: Último Check-in
+      "", // N: URL Planilha de Controle
+      responsavel_mm?.trim() ?? "", // O: Responsável MM
+      observacoes?.trim() ?? "", // P: Observações
     ];
 
-    // Lê só a coluna A com range fixo (A1:A500) para garantir que aRows[i] = linha i+1
-    // ignora colunas com valores pré-formatados (dropdowns) que enganariam o sAppend
-    const aColData = (await sGet(
+    // Lê A:P para detectar MM IDs em qualquer coluna (a planilha pode ter layout variável)
+    const cadRowsData = (await sGet(
       token,
-      `/values/${encodeURIComponent(cadastroSheet.properties.title + "!A1:A500")}`
+      `/values/${encodeURIComponent(cadastroSheet.properties.title + "!A1:P500")}`
     )) as { values?: string[][] };
-    const aRows: string[][] = aColData.values ?? [];
+    const cadRows: string[][] = cadRowsData.values ?? [];
 
     let lastMMRowIdx = -1;
-    for (let i = 0; i < aRows.length; i++) {
-      if (/^MM\d+/i.test((aRows[i]?.[0] ?? "").trim())) lastMMRowIdx = i;
+    let idColIdx = 1; // coluna onde estão os MM IDs (padrão: B — layout da cadastro_clientes)
+    for (let i = 0; i < cadRows.length; i++) {
+      const col = cadRows[i]?.findIndex((c) => /^MM\d+/i.test((c ?? "").trim())) ?? -1;
+      if (col >= 0) {
+        lastMMRowIdx = i;
+        idColIdx = col;
+      }
     }
     const insertRow = Math.max(2, lastMMRowIdx + 2); // i+1 = linha real, +1 = próxima
+    const startCol = colLetter(idColIdx); // ex: coluna B → "B"
 
     const tabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
-    await sBatchUpdate(token, [{ range: `${tabQuoted}!A${insertRow}`, values: [novaLinha] }]);
+    await sBatchUpdate(token, [
+      { range: `${tabQuoted}!${startCol}${insertRow}`, values: [novaLinha] },
+    ]);
 
     // ── 11. Inserir no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";

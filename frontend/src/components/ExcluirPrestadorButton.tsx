@@ -2,7 +2,6 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { excluirPrestadorAction } from "@/app/prestador/[id]/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,12 +20,14 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
 
   function handleExcluir() {
     startTransition(async () => {
-      const result = await excluirPrestadorAction(prestadorId);
-      if (result.ok) {
+      // Usa fetch (Route Handler) em vez de Server Action para evitar o
+      // auto router.refresh() que o Next.js dispara após Server Actions com
+      // revalidatePath — esse refresh re-renderiza a página atual antes da
+      // navegação completar, causando notFound() → 404.
+      const res = await fetch(`/api/prestadores/${prestadorId}`, { method: "DELETE" });
+      const result = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.ok && result.ok) {
         toast.success("Prestador excluído com sucesso!");
-        // window.location bypassa o React Router e evita que o Next.js
-        // re-renderize a página atual (que chamaria notFound() pois o
-        // prestador já foi deletado)
         window.location.replace("/");
       } else {
         toast.error("Erro ao excluir: " + (result.error ?? "erro desconhecido"));

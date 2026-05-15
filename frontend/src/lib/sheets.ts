@@ -20,18 +20,21 @@ function apiKey(): string {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ClienteSheet {
-  id_cliente: string; // col A
-  nome_empresa: string; // col B
-  segmento: string; // col C
-  cidade: string; // col D
-  whatsapp: string; // col E
-  email: string; // col F
-  inicio_contrato: string; // col G  (DD/MM/YYYY)
-  plano: string; // col H
-  fase_projeto: string; // col I
-  status: string; // col J
-  responsavel_mm: string; // col K
-  observacoes: string; // col L
+  id_cliente: string; // col B
+  nome_empresa: string; // col C
+  segmento: string; // col D
+  cidade: string; // col E
+  whatsapp: string; // col F
+  email: string; // col G
+  inicio_contrato: string; // col H  (DD/MM/YYYY)
+  plano: string; // col I
+  // col J: Valor — não importado
+  fase_projeto: string; // col K
+  status: string; // col L
+  // col M: Último Check-in — não importado
+  // col N: URL Planilha de Controle — não importado
+  responsavel_mm: string; // col O
+  observacoes: string; // col P
 }
 
 export interface TarefaSheet {
@@ -187,10 +190,10 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
       email: col(r, 5, "email", "e_mail"),
       inicio_contrato: col(r, 6, "inicio_contrato", "inicio", "data_inicio"),
       plano: col(r, 7, "plano"),
-      fase_projeto: col(r, 8, "fase_projeto", "fase", "fase_do_projeto"),
-      status: col(r, 9, "status"),
-      responsavel_mm: col(r, 10, "responsavel_mm", "responsavel"),
-      observacoes: col(r, 11, "observacoes", "observacao", "obs"),
+      fase_projeto: col(r, 9, "fase_projeto", "fase", "fase_do_projeto"), // col K (skip J=Valor)
+      status: col(r, 10, "status"), // col L
+      responsavel_mm: col(r, 13, "responsavel_mm", "responsavel"), // col O (skip M,N)
+      observacoes: col(r, 14, "observacoes", "observacao", "obs"), // col P
     }))
     .filter((c) => /^MM\d+/i.test(c.id_cliente));
 
