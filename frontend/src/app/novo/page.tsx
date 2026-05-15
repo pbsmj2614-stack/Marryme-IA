@@ -34,6 +34,30 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
   { value: "outro", label: "Outro" },
 ];
 
+// Opções de segmento exatas da planilha Cadastro_Clientes
+const SEGMENTOS = [
+  "Fotógrafo",
+  "Filmmaker",
+  "Músico/Banda",
+  "DJ",
+  "Cerimonialista",
+  "Celebrante",
+  "Decorador",
+  "Buffet",
+  "Floricultura",
+  "Assessoria",
+  "Outro",
+];
+
+// Sugestão automática de segmento ao selecionar categoria
+const CATEGORIA_TO_SEGMENTO: Record<string, string> = {
+  musico: "Músico/Banda",
+  fotografo: "Fotógrafo",
+  celebrante: "Celebrante",
+  dj: "DJ",
+  outro: "Outro",
+};
+
 const PLANOS = ["Essencial", "Growth", "Enterprise"];
 const FASES = [
   "Onboarding",
@@ -48,6 +72,7 @@ const RESPS = RESPONSAVEIS;
 const INITIAL: DadosEntrevista = {
   nome_artistico: "",
   categoria: "musico",
+  segmento: "Músico/Banda",
   whatsapp: "",
   email: "",
   cidade_base: "",
@@ -303,14 +328,15 @@ export default function NovoPage() {
         setStatus("Criando pipeline completa (planilha + tarefas)...");
         let abortarCadastro = false;
         try {
-          const segmentoLabel =
-            CATEGORIAS.find((c) => c.value === dados.categoria)?.label ?? dados.categoria;
+          // Usa o segmento selecionado no dropdown; fallback: mapeamento da categoria
+          const segmentoEnvio =
+            dados.segmento?.trim() || CATEGORIA_TO_SEGMENTO[dados.categoria] || dados.categoria;
           const res = await fetch("/api/sheets/novo-cliente", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               nome_empresa: nomeBusca,
-              segmento: segmentoLabel,
+              segmento: segmentoEnvio,
               cidade: dados.cidade_base || "",
               whatsapp: dados.whatsapp || "",
               email: dados.email || "",
@@ -428,11 +454,26 @@ export default function NovoPage() {
                   <SelectField
                     label="Categoria"
                     value={dados.categoria}
-                    onChange={(v) => set("categoria", v as Categoria)}
+                    onChange={(v) => {
+                      set("categoria", v as Categoria);
+                      // Sugere segmento automaticamente se ainda não foi alterado manualmente
+                      const sugestao = CATEGORIA_TO_SEGMENTO[v] ?? "";
+                      if (sugestao) set("segmento", sugestao);
+                    }}
                     options={CATEGORIAS}
                     required
                     disabled={loading}
                   />
+                  <SelectField
+                    label="Segmento (planilha)"
+                    value={dados.segmento ?? ""}
+                    onChange={(v) => set("segmento", v)}
+                    options={SEGMENTOS.map((s) => ({ value: s, label: s }))}
+                    placeholder="— selecione —"
+                    disabled={loading}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SelectField
                     label="Plano"
                     value={dados.plano ?? "Essencial"}
@@ -440,9 +481,6 @@ export default function NovoPage() {
                     options={PLANOS.map((p) => ({ value: p, label: p }))}
                     disabled={loading}
                   />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SelectField
                     label="Fase do projeto"
                     value={dados.fase_projeto ?? "Onboarding"}
@@ -450,6 +488,9 @@ export default function NovoPage() {
                     options={FASES.map((f) => ({ value: f, label: f }))}
                     disabled={loading}
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <SelectField
                     label="Responsável MM"
                     value={dados.responsavel_mm ?? ""}

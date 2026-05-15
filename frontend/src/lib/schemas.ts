@@ -6,6 +6,7 @@ export const entrevistaSchema = z.object({
   // Básicos
   nome_artistico: z.string().min(2, "Nome artístico é obrigatório (mínimo 2 caracteres)."),
   categoria: z.enum(CATEGORIAS),
+  segmento: z.string().optional(), // label exato da planilha (ex: "Músico/Banda", "Filmmaker")
   whatsapp: z.string(),
   email: z.string().refine((v) => !v.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()), {
     message: "E-mail inválido.",
