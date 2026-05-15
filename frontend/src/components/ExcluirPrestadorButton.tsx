@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { excluirPrestadorAction } from "@/app/prestador/[id]/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,24 +18,19 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: string }) {
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
-  async function handleExcluir() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/prestadores/${prestadorId}`, { method: "DELETE" });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (res.ok && data.ok) {
+  function handleExcluir() {
+    startTransition(async () => {
+      const result = await excluirPrestadorAction(prestadorId);
+      if (result.ok) {
         toast.success("Prestador excluído com sucesso!");
-        window.location.replace("/");
+        router.push("/");
       } else {
-        toast.error("Erro ao excluir: " + (data.error ?? res.statusText));
-        setLoading(false);
+        toast.error("Erro ao excluir: " + (result.error ?? "erro desconhecido"));
       }
-    } catch {
-      toast.error("Erro de rede ao excluir prestador.");
-      setLoading(false);
-    }
+    });
   }
 
   return (
@@ -56,13 +53,13 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleExcluir}
-            disabled={loading}
+            disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {loading ? "Excluindo..." : "Excluir"}
+            {isPending ? "Excluindo..." : "Excluir"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
