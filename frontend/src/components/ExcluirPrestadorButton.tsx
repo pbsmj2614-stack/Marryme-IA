@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,14 +20,17 @@ export default function ExcluirPrestadorButton({ prestadorId }: { prestadorId: s
 
   async function handleExcluir() {
     setLoading(true);
-    const supabase = createClient();
-    await supabase.from("roteiros").delete().eq("prestador_id", prestadorId);
-    await supabase.from("entrevistas").delete().eq("prestador_id", prestadorId);
-    const r3 = await supabase.from("prestadores").delete().eq("id", prestadorId);
-    if (!r3.error) {
-      window.location.href = "/";
-    } else {
-      toast.error("Erro ao excluir: " + r3.error.message);
+    try {
+      const res = await fetch(`/api/prestadores/${prestadorId}`, { method: "DELETE" });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (res.ok && data.ok) {
+        window.location.href = "/";
+      } else {
+        toast.error("Erro ao excluir: " + (data.error ?? res.statusText));
+        setLoading(false);
+      }
+    } catch {
+      toast.error("Erro de rede ao excluir prestador.");
       setLoading(false);
     }
   }
