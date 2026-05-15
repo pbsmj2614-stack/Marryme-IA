@@ -278,15 +278,18 @@ export default function NovoPage() {
 
       if (clienteExistente) {
         // ── Já existe na pipeline — só vincula o mm_id, sem criar duplicata ──
+        console.log("[novo] clienteExistente encontrado:", clienteExistente.id_cliente);
         await supabase
           .from("entrevistas")
           .update({ dados_json: { ...dados, mm_id: clienteExistente.id_cliente } })
           .eq("id", entrevista.id);
-        toast.success(
-          `Vinculado ao cliente existente: ${clienteExistente.nome_empresa} (${clienteExistente.id_cliente}). Nenhuma entrada duplicada criada.`
+        toast.info(
+          `Cliente já existe na pipeline: ${clienteExistente.nome_empresa} (${clienteExistente.id_cliente}). Card vinculado, sem criar nova entrada na planilha.`,
+          { duration: 8000 }
         );
       } else {
         // ── Novo cliente — criar pipeline completa (Sheets + mm_clientes) ──
+        console.log("[novo] cliente novo, chamando /api/sheets/novo-cliente para:", nomeBusca);
         setStatus("Criando pipeline completa (planilha + tarefas)...");
         let abortarCadastro = false;
         try {
@@ -307,7 +310,15 @@ export default function NovoPage() {
               observacoes: dados.informacoes_adicionais || "",
             }),
           });
-          const sheetData = await res.json();
+          const sheetData = (await res.json()) as {
+            ok?: boolean;
+            id?: string;
+            aba?: string;
+            tarefas?: number;
+            error?: string;
+            duplicado?: boolean;
+          };
+          console.log("[novo] resposta sheets:", res.status, sheetData);
 
           if (res.status === 409 || sheetData.duplicado) {
             // Sheets achou duplicata que o Supabase não tinha — desfaz e aborta
@@ -328,12 +339,18 @@ export default function NovoPage() {
               `Pipeline criada: ${sheetData.aba} · ID: ${sheetData.id} · ${sheetData.tarefas} tarefa(s) com prazo.`
             );
           } else {
-            toast.warning(`Sheets: ${sheetData.error ?? "falha ao criar aba"}`);
+            toast.error(
+              `Erro ao criar pipeline na planilha: ${sheetData.error ?? "falha desconhecida"}`,
+              {
+                duration: 15000,
+              }
+            );
           }
         } catch (sheetsErr) {
           if (abortarCadastro) throw sheetsErr;
-          toast.warning(
-            `Planilha não atualizada: ${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"}`
+          toast.error(
+            `Planilha não atualizada: ${sheetsErr instanceof Error ? sheetsErr.message : "erro de rede"}`,
+            { duration: 15000 }
           );
         }
       }

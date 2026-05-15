@@ -144,6 +144,7 @@ function normalizePhone(phone: string): string {
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  console.log("[novo-cliente] POST iniciado");
   try {
     const user = await getAuthUser();
     if (!user) return UNAUTHORIZED();
