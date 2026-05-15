@@ -394,7 +394,7 @@ function ExpandedRow({
           </Button>
           <Link
             href={`/prestador/${prestador.id}?tab=campanha#campanha`}
-            className="text-xs px-3 py-1.5 rounded-lg bg-brand-800 text-brand-300 hover:bg-brand-700 transition"
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-100 text-brand-700 hover:bg-brand-200 transition"
           >
             Ver relatório completo →
           </Link>
@@ -796,7 +796,7 @@ export default function DashboardBIPage() {
                   setFiltro("Pausados");
                   setTableExpanded(false);
                 }}
-                className="text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-500 hover:text-gray-200 transition"
+                className="text-xs px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition"
               >
                 {metrics.pausados} pausado{metrics.pausados > 1 ? "s" : ""}
               </button>
@@ -807,7 +807,7 @@ export default function DashboardBIPage() {
                   setFiltro("Encerrados");
                   setTableExpanded(false);
                 }}
-                className="text-xs px-3 py-1 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-700 hover:border-zinc-500 hover:text-zinc-300 transition"
+                className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700 transition"
               >
                 {metrics.encerrados} encerrado{metrics.encerrados > 1 ? "s" : ""}
               </button>

@@ -127,15 +127,15 @@ function ClienteStatusBadge({
 
 function TarefaStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Finalizado: "bg-green-900 text-green-300",
-    Atrasado: "bg-red-900 text-red-300",
-    "Em andamento": "bg-blue-900 text-blue-300",
-    "Não iniciado": "bg-gray-700 text-gray-400",
-    Cancelado: "bg-gray-800 text-gray-600 line-through",
+    Finalizado: "bg-green-100 text-green-700",
+    Atrasado: "bg-red-100 text-red-700",
+    "Em andamento": "bg-brand-100 text-brand-700",
+    "Não iniciado": "bg-gray-100 text-gray-500",
+    Cancelado: "bg-gray-100 text-gray-400 line-through",
   };
   return (
     <span
-      className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] ?? "bg-gray-700 text-gray-400"}`}
+      className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[status] ?? "bg-gray-100 text-gray-500"}`}
     >
       {status}
     </span>
@@ -1265,11 +1265,11 @@ export default function PipelinePage() {
                                   className={`text-xs px-3 py-1.5 rounded-lg border transition ${
                                     c.status === s
                                       ? s === "Ativo"
-                                        ? "bg-green-950 border-green-700 text-green-300 cursor-default"
+                                        ? "bg-green-100 border-green-300 text-green-700 cursor-default"
                                         : s === "Pausado"
-                                          ? "bg-gray-800 border-gray-600 text-gray-300 cursor-default"
-                                          : "bg-zinc-900 border-zinc-600 text-zinc-300 cursor-default"
-                                      : "bg-transparent border-[#444] text-gray-500 hover:border-[#666] hover:text-gray-300"
+                                          ? "bg-amber-100 border-amber-300 text-amber-700 cursor-default"
+                                          : "bg-gray-100 border-gray-300 text-gray-600 cursor-default"
+                                      : "bg-transparent border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700"
                                   }`}
                                 >
                                   {s === c.status ? `● ${s}` : s}
