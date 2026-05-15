@@ -72,15 +72,15 @@ const CATEGORIA_LABEL: Record<string, string> = {
 };
 
 const PLANO_COLORS: Record<string, string> = {
-  essencial: "bg-pink-900 text-pink-300",
-  growth: "bg-violet-900 text-violet-300",
-  enterprise: "bg-amber-900 text-amber-300",
-  premium: "bg-purple-900 text-purple-300",
-  trial: "bg-gray-700 text-gray-300",
+  essencial: "bg-pink-100 text-pink-700",
+  growth: "bg-violet-100 text-violet-700",
+  enterprise: "bg-amber-100 text-amber-700",
+  premium: "bg-purple-100 text-purple-700",
+  trial: "bg-gray-100 text-gray-600",
 };
 
 function planoBadgeClass(plano: string | null) {
-  return PLANO_COLORS[plano?.toLowerCase() ?? ""] ?? "bg-gray-700 text-gray-200";
+  return PLANO_COLORS[plano?.toLowerCase() ?? ""] ?? "bg-gray-100 text-gray-600";
 }
 
 function planoLabel(plano: string | null) {
@@ -120,7 +120,7 @@ function MetricCard({
   title,
   value,
   subtitle,
-  valueColor = "text-white",
+  valueColor = "text-foreground",
 }: {
   title: string;
   value: string;
@@ -128,10 +128,10 @@ function MetricCard({
   valueColor?: string;
 }) {
   return (
-    <div className="bg-[#242424] border border-[#333] rounded-xl p-5">
-      <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">{title}</p>
+    <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">{title}</p>
       <p className={`text-3xl font-bold mb-1 ${valueColor}`}>{value}</p>
-      <p className="text-xs text-gray-500">{subtitle}</p>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
     </div>
   );
 }
@@ -139,17 +139,17 @@ function MetricCard({
 function StatusBadge({ score }: { score: number | null }) {
   const s = statusMeta(score);
   const styles: Record<StatusMeta, string> = {
-    "Em risco": "bg-red-900 text-red-300",
-    "Em atenção": "bg-yellow-900 text-yellow-300",
-    Saudável: "bg-green-900 text-green-300",
-    "Sem dados": "bg-gray-700 text-gray-400",
+    "Em risco": "bg-red-100 text-red-700",
+    "Em atenção": "bg-amber-100 text-amber-700",
+    Saudável: "bg-green-100 text-green-700",
+    "Sem dados": "bg-gray-100 text-gray-500",
   };
   return <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${styles[s]}`}>{s}</span>;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
   return (
-    <span className={`ml-1 ${active ? "text-gray-200" : "text-gray-600"}`}>
+    <span className={`ml-1 ${active ? "text-foreground" : "text-muted-foreground"}`}>
       {active ? (dir === "asc" ? "↑" : "↓") : "⇅"}
     </span>
   );
@@ -166,7 +166,7 @@ function MiniGauge({ score }: { score: number | null }) {
   return (
     <div className="relative w-16 h-16 shrink-0">
       <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={r} fill="none" stroke="#333" strokeWidth="8" />
+        <circle cx="36" cy="36" r={r} fill="none" stroke="#e5e7eb" strokeWidth="8" />
         <circle
           cx="36"
           cy="36"
@@ -205,18 +205,18 @@ function KpiGrid({ kpis, conta }: { kpis: KPIsCampanha; conta?: ContaMeta | null
   return (
     <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-5 gap-3">
       {items.map(({ label, value }) => (
-        <div key={label} className="bg-[#2a2a2a] rounded-lg px-3 py-2.5 border border-[#333]">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{label}</p>
-          <p className="text-sm font-bold text-white">{value}</p>
+        <div key={label} className="bg-secondary/40 rounded-lg px-3 py-2.5 border border-border">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+          <p className="text-sm font-bold text-foreground">{value}</p>
         </div>
       ))}
       {conta?.metodo != null || conta?.saldo != null ? (
-        <div className="bg-[#1a2540] rounded-lg px-3 py-2.5 border border-blue-800">
-          <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Saldo</p>
+        <div className="bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Saldo</p>
           {conta?.metodo === "cartao" ? (
-            <p className="text-sm font-bold text-blue-300">Cartão</p>
+            <p className="text-sm font-bold text-blue-700">Cartão</p>
           ) : (
-            <p className="text-sm font-bold text-blue-300">
+            <p className="text-sm font-bold text-blue-700">
               {conta?.saldo != null ? fmtBRL(conta.saldo) : "—"}
             </p>
           )}
@@ -230,12 +230,12 @@ function KpiGrid({ kpis, conta }: { kpis: KPIsCampanha; conta?: ContaMeta | null
 
 function MiniCampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
   if (campanhas.length === 0)
-    return <p className="text-xs text-gray-500 py-2">Nenhuma campanha no período.</p>;
+    return <p className="text-xs text-muted-foreground py-2">Nenhuma campanha no período.</p>;
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#333]">
+    <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-[#2a2a2a] text-gray-500 uppercase tracking-wider">
+          <tr className="bg-secondary/40 text-muted-foreground uppercase tracking-wider">
             <th className="px-3 py-2 text-left">Campanha</th>
             <th className="px-3 py-2 text-right">Impressões</th>
             <th className="px-3 py-2 text-right">CTR Link</th>
@@ -244,33 +244,35 @@ function MiniCampanhasTable({ campanhas }: { campanhas: CampanhaInsight[] }) {
             <th className="px-3 py-2 text-right">Mensagens</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#333]">
+        <tbody className="divide-y divide-border">
           {campanhas.map((c) => (
-            <tr key={c.campaign_id} className="hover:bg-[#2c2c2c] transition">
+            <tr key={c.campaign_id} className="hover:bg-accent transition">
               <td
-                className="px-3 py-2 text-gray-300 max-w-[200px] truncate"
+                className="px-3 py-2 text-foreground max-w-[200px] truncate"
                 title={c.campaign_name}
               >
                 {c.campaign_name}
               </td>
-              <td className="px-3 py-2 text-right text-gray-400">{fmt(c.impressions)}</td>
+              <td className="px-3 py-2 text-right text-muted-foreground">{fmt(c.impressions)}</td>
               <td className="px-3 py-2 text-right">
                 <span
                   className={
                     c.link_ctr >= 1
-                      ? "text-green-400"
+                      ? "text-green-600"
                       : c.link_ctr >= 0.5
-                        ? "text-yellow-400"
-                        : "text-red-400"
+                        ? "text-amber-600"
+                        : "text-red-600"
                   }
                 >
                   {fmtPct(c.link_ctr)}
                 </span>
               </td>
-              <td className="px-3 py-2 text-right text-gray-400">{fmtBRL(c.cpm)}</td>
-              <td className="px-3 py-2 text-right text-white font-medium">{fmtBRL(c.spend)}</td>
+              <td className="px-3 py-2 text-right text-muted-foreground">{fmtBRL(c.cpm)}</td>
+              <td className="px-3 py-2 text-right text-foreground font-medium">
+                {fmtBRL(c.spend)}
+              </td>
               <td className="px-3 py-2 text-right">
-                <span className="bg-brand-900 text-brand-300 text-xs px-1.5 py-0.5 rounded-full">
+                <span className="bg-brand-100 text-brand-700 text-xs px-1.5 py-0.5 rounded-full">
                   {fmt(c.results)}
                 </span>
               </td>
@@ -301,10 +303,12 @@ function ExpandedRow({
   if (!prestador.id) {
     return (
       <div className="flex items-center gap-3 flex-wrap">
-        <p className="text-sm text-gray-500">Cliente não cadastrado no sistema de roteiros.</p>
+        <p className="text-sm text-muted-foreground">
+          Cliente não cadastrado no sistema de roteiros.
+        </p>
         <Link
           href="/novo"
-          className="text-xs px-3 py-1.5 rounded-lg bg-[#333] text-gray-300 hover:bg-[#444] transition"
+          className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition"
         >
           + Cadastrar prestador
         </Link>
@@ -315,10 +319,12 @@ function ExpandedRow({
   if (!prestador.meta_ad_account_id) {
     return (
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-gray-500">Conta Meta Ads não configurada para este cliente.</p>
+        <p className="text-sm text-muted-foreground">
+          Conta Meta Ads não configurada para este cliente.
+        </p>
         <Link
           href={`/prestador/${prestador.id}/configurar`}
-          className="text-xs px-3 py-1.5 rounded-lg bg-blue-900 text-blue-300 hover:bg-blue-800 transition"
+          className="text-xs px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
         >
           Configurar conta
         </Link>
@@ -329,13 +335,13 @@ function ExpandedRow({
   if (!rel || !kpis) {
     return (
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-gray-500">Nenhum relatório gerado ainda.</p>
+        <p className="text-sm text-muted-foreground">Nenhum relatório gerado ainda.</p>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onSincronizar(prestador.id!)}
           disabled={sincronizando}
-          className="text-xs bg-[#333] text-gray-300 hover:bg-[#444] hover:text-gray-300 flex items-center gap-1.5"
+          className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5"
         >
           {sincronizando ? (
             <>
@@ -360,13 +366,13 @@ function ExpandedRow({
         <div className="flex items-center gap-4">
           <MiniGauge score={rel.health_score} />
           <div>
-            <p className="text-sm font-semibold text-white">
+            <p className="text-sm font-semibold text-foreground">
               Health Score: {rel.health_score ?? "—"}
             </p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Período: {fmtDate(rel.periodo_inicio)} → {fmtDate(rel.periodo_fim)}
             </p>
-            <p className="text-xs text-gray-600 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Última sync: {rel.gerado_em ? new Date(rel.gerado_em).toLocaleString("pt-BR") : "—"}
             </p>
           </div>
@@ -378,7 +384,7 @@ function ExpandedRow({
             onClick={() => onSincronizar(prestador.id!)}
             disabled={sincronizando}
             title="Sincroniza com a Meta usando o período padrão (30 dias). Para escolher o período, use 'Ver relatório completo'"
-            className="text-xs bg-[#333] text-gray-300 hover:bg-[#444] hover:text-gray-300 flex items-center gap-1.5"
+            className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5"
           >
             {sincronizando ? (
               <>
@@ -407,7 +413,7 @@ function ExpandedRow({
       {/* Campanhas */}
       {camps.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Campanhas ({camps.length})
           </p>
           <MiniCampanhasTable campanhas={camps} />
@@ -455,7 +461,7 @@ function AtualizarTodosBtn({ onDone }: { onDone: () => void }) {
         variant="ghost"
         onClick={handleClick}
         disabled={loading}
-        className="flex items-center gap-2 bg-[#2a2a2a] border border-[#444] text-sm text-gray-200 hover:border-[#666] hover:text-white hover:bg-[#2a2a2a]"
+        className="flex items-center gap-2 bg-card border border-border text-sm text-foreground hover:bg-accent"
       >
         {loading ? (
           <>
@@ -470,7 +476,7 @@ function AtualizarTodosBtn({ onDone }: { onDone: () => void }) {
         )}
       </Button>
       {resultado && (
-        <p className={`text-xs ${resultado.startsWith("✓") ? "text-green-400" : "text-red-400"}`}>
+        <p className={`text-xs ${resultado.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>
           {resultado}
         </p>
       )}
@@ -738,15 +744,15 @@ export default function DashboardBIPage() {
   const visiveis = tableExpanded ? filtrados : filtrados.slice(0, TABLE_LIMIT);
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white">
+    <div className="min-h-screen">
       <Header user={user} />
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* ── Título ── */}
         <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard BI — Meta Ads</h1>
-            <p className="text-xs text-gray-500 mt-1">
+            <h1 className="text-2xl font-bold text-foreground">Dashboard BI — Meta Ads</h1>
+            <p className="text-xs text-muted-foreground mt-1">
               Health score calculado por CTR Link, Frequência, CPM e Hook Rate das campanhas
             </p>
           </div>
@@ -761,29 +767,29 @@ export default function DashboardBIPage() {
             subtitle={`${metrics.configurados} contas configuradas`}
             valueColor={
               metrics.avgScore >= 70
-                ? "text-green-400"
+                ? "text-green-600"
                 : metrics.avgScore >= 40
-                  ? "text-yellow-400"
-                  : "text-red-400"
+                  ? "text-amber-600"
+                  : "text-red-600"
             }
           />
           <MetricCard
             title="Em Risco"
             value={String(metrics.emRisco)}
             subtitle="health score abaixo de 40"
-            valueColor={metrics.emRisco > 0 ? "text-red-400" : "text-white"}
+            valueColor={metrics.emRisco > 0 ? "text-red-600" : "text-foreground"}
           />
           <MetricCard
             title="Em Atenção"
             value={String(metrics.emAtencao)}
             subtitle="score entre 40 e 69"
-            valueColor={metrics.emAtencao > 0 ? "text-yellow-400" : "text-white"}
+            valueColor={metrics.emAtencao > 0 ? "text-amber-600" : "text-foreground"}
           />
           <MetricCard
             title="Sem Dados"
             value={String(metrics.semDados)}
             subtitle={`de ${metrics.total} ativos`}
-            valueColor={metrics.semDados > 0 ? "text-gray-400" : "text-white"}
+            valueColor={metrics.semDados > 0 ? "text-muted-foreground" : "text-foreground"}
           />
         </div>
 
@@ -828,8 +834,8 @@ export default function DashboardBIPage() {
               }}
               className={`rounded-full text-sm font-medium border ${
                 filtro === f
-                  ? "border-white text-white bg-white/10 hover:bg-white/15 hover:text-white"
-                  : "border-[#444] text-gray-400 hover:border-[#666] hover:text-gray-200 hover:bg-transparent"
+                  ? "border-primary text-primary bg-primary/10 hover:bg-primary/15 hover:text-primary"
+                  : "border-border text-muted-foreground hover:border-ring hover:text-foreground hover:bg-accent"
               }`}
             >
               {f}
@@ -838,23 +844,23 @@ export default function DashboardBIPage() {
         </div>
 
         {/* ── Tabela ── */}
-        <div className="rounded-xl border border-[#333] overflow-hidden mb-8">
-          <div className="bg-[#2a2a2a] border-b border-[#333] px-4 py-2 flex items-center justify-between">
-            <p className="text-xs text-gray-500">
+        <div className="rounded-xl border border-border overflow-hidden mb-8 shadow-sm">
+          <div className="bg-secondary/30 border-b border-border px-4 py-2 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
               Clique no cabeçalho para ordenar · Clique na linha para ver o relatório
             </p>
-            <p className="text-xs text-gray-600">{filtrados.length} clientes</p>
+            <p className="text-xs text-muted-foreground">{filtrados.length} clientes</p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-[#2a2a2a]">
+              <thead className="bg-secondary/30">
                 <tr>
                   {TABLE_COLS.map(({ key, label }) => (
                     <th
                       key={label}
                       onClick={() => key && handleSort(key)}
-                      className={`px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap ${key ? "cursor-pointer hover:text-white select-none" : ""}`}
+                      className={`px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${key ? "cursor-pointer hover:text-foreground select-none" : ""}`}
                     >
                       {label}
                       {key && <SortIcon active={sortKey === key} dir={sortDir} />}
@@ -866,7 +872,7 @@ export default function DashboardBIPage() {
               <tbody>
                 {filtrados.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-12 text-gray-500">
+                    <td colSpan={9} className="text-center py-12 text-muted-foreground">
                       Nenhum cliente neste filtro
                     </td>
                   </tr>
@@ -882,14 +888,16 @@ export default function DashboardBIPage() {
                           onClick={() =>
                             setExpandedId(expandedId === p.id_cliente ? null : p.id_cliente)
                           }
-                          className={`cursor-pointer border-t border-[#2a2a2a] transition-colors ${
-                            i % 2 === 0 ? "bg-[#1e1e1e]" : "bg-[#222]"
-                          } hover:bg-[#2c2c2c]`}
+                          className={`cursor-pointer border-t border-border transition-colors ${
+                            i % 2 === 0 ? "bg-card" : "bg-background"
+                          } hover:bg-accent`}
                         >
                           {/* Cliente */}
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-white whitespace-nowrap">{p.nome}</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="font-semibold text-foreground whitespace-nowrap">
+                              {p.nome}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
                               {p.id_cliente}
                               {p.categoria
                                 ? ` · ${CATEGORIA_LABEL[p.categoria] ?? p.categoria}`
@@ -905,13 +913,13 @@ export default function DashboardBIPage() {
                                 {planoLabel(p.plano)}
                               </span>
                             ) : (
-                              <span className="text-gray-600 text-xs">—</span>
+                              <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </td>
                           {/* Health Score */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="w-24 h-2 bg-[#333] rounded-full overflow-hidden">
+                              <div className="w-24 h-2 bg-border rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all"
                                   style={{
@@ -932,40 +940,48 @@ export default function DashboardBIPage() {
                           <td className="px-4 py-3 text-right">
                             {kpis ? (
                               <span
-                                className={`text-sm font-medium ${kpis.link_ctr >= 1 ? "text-green-400" : kpis.link_ctr >= 0.5 ? "text-yellow-400" : "text-red-400"}`}
+                                className={`text-sm font-medium ${kpis.link_ctr >= 1 ? "text-green-600" : kpis.link_ctr >= 0.5 ? "text-amber-600" : "text-red-600"}`}
                               >
                                 {fmtPct(kpis.link_ctr)}
                               </span>
                             ) : (
-                              <span className="text-gray-600">—</span>
+                              <span className="text-muted-foreground">—</span>
                             )}
                           </td>
                           {/* Frequência */}
                           <td className="px-4 py-3 text-right">
                             {kpis ? (
                               <span
-                                className={`text-sm font-medium ${kpis.frequency <= 1.5 ? "text-green-400" : kpis.frequency <= 3 ? "text-yellow-400" : "text-red-400"}`}
+                                className={`text-sm font-medium ${kpis.frequency <= 1.5 ? "text-green-600" : kpis.frequency <= 3 ? "text-amber-600" : "text-red-600"}`}
                               >
                                 {fmt(kpis.frequency, 1)}x
                               </span>
                             ) : (
-                              <span className="text-gray-600">—</span>
+                              <span className="text-muted-foreground">—</span>
                             )}
                           </td>
                           {/* CPM */}
-                          <td className="px-4 py-3 text-right text-gray-300">
-                            {kpis ? fmtBRL(kpis.cpm) : <span className="text-gray-600">—</span>}
+                          <td className="px-4 py-3 text-right text-foreground">
+                            {kpis ? (
+                              fmtBRL(kpis.cpm)
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </td>
                           {/* Gasto */}
-                          <td className="px-4 py-3 text-right text-white font-medium">
-                            {kpis ? fmtBRL(kpis.spend) : <span className="text-gray-600">—</span>}
+                          <td className="px-4 py-3 text-right text-foreground font-medium">
+                            {kpis ? (
+                              fmtBRL(kpis.spend)
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </td>
                           {/* Status */}
                           <td className="px-4 py-3">
                             <StatusBadge score={score} />
                           </td>
                           {/* Expand icon */}
-                          <td className="px-4 py-3 text-gray-500 text-center">
+                          <td className="px-4 py-3 text-muted-foreground text-center">
                             {expandedId === p.id_cliente ? "▲" : "▼"}
                           </td>
                         </tr>
@@ -975,14 +991,14 @@ export default function DashboardBIPage() {
                           <tr>
                             <td
                               colSpan={9}
-                              className="px-6 py-5 bg-[#161620] border-t border-[#1a1a1a]"
+                              className="px-6 py-5 bg-secondary/20 border-t border-border"
                             >
                               <div className="flex items-center justify-between mb-4">
-                                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
+                                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                                   Campanha Meta Ads · {p.nome}
                                 </p>
                                 {p.fase_projeto && (
-                                  <span className="text-xs text-blue-400 bg-blue-950 px-2 py-0.5 rounded-full">
+                                  <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
                                     {p.fase_projeto}
                                   </span>
                                 )}
@@ -1007,7 +1023,7 @@ export default function DashboardBIPage() {
             <Button
               variant="ghost"
               onClick={() => setTableExpanded(!tableExpanded)}
-              className="w-full rounded-none py-3 text-xs text-gray-500 hover:text-gray-300 hover:bg-[#2a2a2a] border-t border-[#333] gap-2"
+              className="w-full rounded-none py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-accent border-t border-border gap-2"
             >
               {tableExpanded ? (
                 <>
@@ -1026,11 +1042,13 @@ export default function DashboardBIPage() {
 
         {/* ── Gráfico de health scores ── */}
         {chartData.length > 0 && (
-          <div className="bg-[#242424] border border-[#333] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#2a2a2a]">
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border">
               <div>
-                <h2 className="text-base font-semibold text-white">Health Score por cliente</h2>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <h2 className="text-base font-semibold text-foreground">
+                  Health Score por cliente
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {chartData.length} clientes com dados · CTR Link 40% + Frequência 20% + CPM 20% +
                   Hook Rate 20%
                 </p>
@@ -1041,7 +1059,10 @@ export default function DashboardBIPage() {
                   { color: "bg-yellow-500", label: "40–69 (atenção)" },
                   { color: "bg-green-500", label: "≥ 70 (saudável)" },
                 ].map(({ color, label }) => (
-                  <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <div
+                    key={label}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  >
                     <span className={`w-2.5 h-2.5 rounded-sm ${color} inline-block`} />
                     {label}
                   </div>
@@ -1055,31 +1076,31 @@ export default function DashboardBIPage() {
                   layout="vertical"
                   margin={{ top: 0, right: 60, left: 10, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
                   <XAxis
                     type="number"
                     domain={[0, 100]}
-                    tick={{ fill: "#6b7280", fontSize: 11 }}
+                    tick={{ fill: "#9ca3af", fontSize: 11 }}
                     tickLine={false}
-                    axisLine={{ stroke: "#333" }}
+                    axisLine={{ stroke: "#e5e7eb" }}
                     tickFormatter={(v) => `${v}`}
                   />
                   <YAxis
                     type="category"
                     dataKey="nome"
-                    tick={{ fill: "#d1d5db", fontSize: 12 }}
+                    tick={{ fill: "#374151", fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
                     width={150}
                   />
                   <Tooltip
-                    cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                    cursor={{ fill: "rgba(0,0,0,0.04)" }}
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
                       const d = payload[0].payload as { score: number; color: string };
                       return (
-                        <div className="bg-[#1a1a1a] border border-[#444] rounded-lg px-3 py-2 shadow-xl text-xs">
-                          <p className="font-semibold text-white mb-1">{label}</p>
+                        <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl text-xs">
+                          <p className="font-semibold text-foreground mb-1">{label}</p>
                           <p className="font-bold text-lg" style={{ color: d.color }}>
                             {d.score}
                           </p>
@@ -1104,8 +1125,8 @@ export default function DashboardBIPage() {
         <div
           className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl text-sm font-medium transition-all ${
             toast.type === "success"
-              ? "bg-green-950 border-green-700 text-green-300"
-              : "bg-red-950 border-red-700 text-red-300"
+              ? "bg-green-50 border-green-200 text-green-700"
+              : "bg-red-50 border-red-200 text-red-700"
           }`}
         >
           <span>{toast.type === "success" ? "✓" : "✕"}</span>
