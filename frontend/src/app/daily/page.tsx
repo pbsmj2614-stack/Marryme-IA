@@ -90,14 +90,14 @@ function ModalTarefas({
       onClick={onClose}
     >
       <div
-        className="bg-[#242424] border border-[#333] rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
+        className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header do modal */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#333]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
-            <p className="font-bold text-white text-base">{cliente.nome_empresa}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="font-bold text-foreground text-base">{cliente.nome_empresa}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {cliente.id_cliente} · Score {cliente.score}% · {cliente.finalizadas}/{tarefas.length}{" "}
               concluídas
             </p>
@@ -105,7 +105,7 @@ function ModalTarefas({
           {finalizadas.length > 0 && (
             <Button
               onClick={() => setMostrarFeitas((v) => !v)}
-              className="text-xs px-2.5 py-1 rounded-lg bg-[#2a2a2a] border border-[#333] text-gray-500 hover:text-gray-300 transition mr-6"
+              className="text-xs px-2.5 py-1 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition mr-6"
             >
               {mostrarFeitas
                 ? "Ocultar concluídas"
@@ -114,7 +114,7 @@ function ModalTarefas({
           )}
           <Button
             onClick={onClose}
-            className="text-gray-500 hover:text-white text-lg leading-none p-1"
+            className="text-muted-foreground hover:text-foreground text-lg leading-none p-1"
           >
             <X className="w-4 h-4" />
           </Button>
@@ -123,7 +123,7 @@ function ModalTarefas({
         {/* Lista de tarefas */}
         <div className="overflow-y-auto flex-1 px-5 py-3 space-y-2">
           {lista.length === 0 ? (
-            <p className="text-gray-500 text-sm py-4">Nenhuma tarefa pendente.</p>
+            <p className="text-muted-foreground text-sm py-4">Nenhuma tarefa pendente.</p>
           ) : (
             lista.map((t) => {
               const vencida = t.prazo && t.prazo < TODAY && t.status !== "Finalizado";
@@ -131,7 +131,7 @@ function ModalTarefas({
                 <div
                   key={t.id}
                   className={`flex items-start gap-3 p-3 rounded-lg border ${
-                    vencida ? "border-red-900 bg-red-950/30" : "border-[#2a2a2a] bg-[#1e1e1e]"
+                    vencida ? "border-red-200 bg-red-50" : "border-border bg-card"
                   }`}
                 >
                   <input
@@ -142,16 +142,16 @@ function ModalTarefas({
                   />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-sm ${t.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}
+                      className={`text-sm ${t.check_feito ? "line-through text-muted-foreground" : "text-foreground"}`}
                     >
                       {t.o_que}
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {t.etapa && <span className="text-xs text-gray-600">{t.etapa}</span>}
-                      {t.quem && <span className="text-xs text-blue-400">{t.quem}</span>}
+                      {t.etapa && <span className="text-xs text-muted-foreground">{t.etapa}</span>}
+                      {t.quem && <span className="text-xs text-blue-600">{t.quem}</span>}
                       {t.prazo && (
                         <span
-                          className={`text-xs ${vencida ? "text-red-400 font-bold" : "text-gray-500"}`}
+                          className={`text-xs ${vencida ? "text-red-600 font-bold" : "text-muted-foreground"}`}
                         >
                           {formatDate(t.prazo)}
                           {vencida ? " !" : ""}
@@ -162,12 +162,12 @@ function ModalTarefas({
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
                       t.status === "Finalizado"
-                        ? "bg-green-900 text-green-300"
+                        ? "bg-green-100 text-green-700"
                         : t.status === "Atrasado"
-                          ? "bg-red-900 text-red-300"
+                          ? "bg-red-100 text-red-700"
                           : t.status === "Em andamento"
-                            ? "bg-blue-900 text-blue-300"
-                            : "bg-gray-700 text-gray-400"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-gray-100 text-gray-600"
                     }`}
                   >
                     {t.status}
@@ -187,7 +187,7 @@ function ModalTarefas({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-base font-semibold text-gray-300 mb-3 uppercase tracking-wider text-xs">
+      <h2 className="text-base font-semibold text-foreground mb-3 uppercase tracking-wider text-xs">
         {title}
       </h2>
       {children}
@@ -215,16 +215,16 @@ function SituacaoCard({
   footer?: React.ReactNode;
 }) {
   return (
-    <div className={`bg-[#242424] border ${borderColor} rounded-xl flex flex-col h-full`}>
-      <div className="px-4 py-3 border-b border-[#333]">
-        <h3 className="font-semibold text-sm text-white">{title}</h3>
+    <div className={`bg-card border ${borderColor} rounded-xl flex flex-col h-full shadow-sm`}>
+      <div className="px-4 py-3 border-b border-border">
+        <h3 className="font-semibold text-sm text-foreground">{title}</h3>
       </div>
       <div
         className={`px-4 py-3 flex-1 overflow-y-auto ${expanded ? "max-h-[460px]" : "max-h-72"}`}
       >
-        {empty ? <p className="text-gray-500 text-sm py-2">{emptyMsg}</p> : children}
+        {empty ? <p className="text-muted-foreground text-sm py-2">{emptyMsg}</p> : children}
       </div>
-      {footer && <div className="border-t border-[#2a2a2a]">{footer}</div>}
+      {footer && <div className="border-t border-border">{footer}</div>}
     </div>
   );
 }
@@ -233,7 +233,7 @@ function SituacaoCard({
 
 function ProgressBar({ score, height = "h-2" }: { score: number; height?: string }) {
   return (
-    <div className={`flex-1 ${height} bg-[#333] rounded-full overflow-hidden`}>
+    <div className={`flex-1 ${height} bg-border rounded-full overflow-hidden`}>
       <div
         className="h-full rounded-full transition-all duration-500"
         style={{ width: `${score}%`, backgroundColor: getScoreColor(score) }}
@@ -256,7 +256,7 @@ function TarefaCheck({
   onCheckChange: (id: string, val: boolean) => void;
 }) {
   return (
-    <div className="flex items-start gap-2.5 py-2 border-b border-[#2a2a2a] last:border-0">
+    <div className="flex items-start gap-2.5 py-2 border-b border-border last:border-0">
       <input
         type="checkbox"
         checked={tarefa.check_feito}
@@ -265,11 +265,11 @@ function TarefaCheck({
       />
       <div className="min-w-0">
         <p
-          className={`text-sm leading-snug ${tarefa.check_feito ? "line-through text-gray-500" : "text-gray-200"}`}
+          className={`text-sm leading-snug ${tarefa.check_feito ? "line-through text-muted-foreground" : "text-foreground"}`}
         >
           {label}
         </p>
-        {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -574,7 +574,7 @@ export default function DailyPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white pb-24">
+    <div className="min-h-screen pb-24">
       <Header user={user} />
 
       {/* Modal */}
@@ -591,14 +591,14 @@ export default function DailyPage() {
         {/* ── Título + Filtro ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold">Daily Interativo</h1>
-            <p className="text-sm text-gray-500 mt-1 capitalize">{today}</p>
+            <h1 className="text-2xl font-bold text-foreground">Daily Interativo</h1>
+            <p className="text-sm text-muted-foreground mt-1 capitalize">{today}</p>
           </div>
 
           {/* Busca por cliente */}
           <div className="relative flex items-center">
             <svg
-              className="absolute left-2.5 w-3.5 h-3.5 text-gray-500 pointer-events-none"
+              className="absolute left-2.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -612,12 +612,12 @@ export default function DailyPage() {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar cliente..."
-              className="pl-8 pr-7 py-2 text-sm bg-[#242424] border border-[#444] text-gray-200 rounded-lg placeholder-gray-600 focus:outline-none focus:border-[#666] transition w-44"
+              className="pl-8 pr-7 py-2 text-sm bg-input border border-border text-foreground rounded-lg placeholder-muted-foreground focus:outline-none focus:border-ring transition w-44"
             />
             {busca && (
               <Button
                 onClick={() => setBusca("")}
-                className="absolute right-2 text-gray-500 hover:text-gray-300 text-xs"
+                className="absolute right-2 text-muted-foreground hover:text-foreground text-xs"
               >
                 <X className="w-3 h-3" />
               </Button>
@@ -626,12 +626,12 @@ export default function DailyPage() {
 
           {/* Filtro por responsável */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Ver tarefas de:</span>
+            <span className="text-xs text-muted-foreground">Ver tarefas de:</span>
             <div className="relative">
               <select
                 value={filtroResp}
                 onChange={(e) => setFiltroResp(e.target.value)}
-                className="appearance-none bg-[#242424] border border-[#444] text-sm text-gray-200 rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-[#666] focus:outline-none focus:border-[#888] transition"
+                className="appearance-none bg-input border border-border text-sm text-foreground rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-ring focus:outline-none focus:border-ring transition"
               >
                 {respOptions.map((resp) => (
                   <option key={resp} value={resp}>
@@ -639,7 +639,7 @@ export default function DailyPage() {
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
                 ▼
               </span>
             </div>
@@ -654,7 +654,7 @@ export default function DailyPage() {
             {/* ── Card Atrasados ── */}
             <SituacaoCard
               title={`⚠ Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
-              borderColor="border-red-800"
+              borderColor="border-red-200"
               empty={atrasados.length === 0}
               emptyMsg="Nenhum item atrasado"
               expanded={atrasadosExp}
@@ -662,7 +662,7 @@ export default function DailyPage() {
                 atrasados.length > CARD_LIMIT ? (
                   <Button
                     onClick={() => setAtrasadosExp(!atrasadosExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
                   >
                     {atrasadosExp ? (
                       <>
@@ -685,7 +685,7 @@ export default function DailyPage() {
                       <div key={cliente.id_cliente}>
                         {/* Cabeçalho do grupo */}
                         <Button
-                          className="w-full flex items-center justify-between py-2 text-left hover:text-white transition-colors"
+                          className="w-full flex items-center justify-between py-2 text-left hover:text-foreground transition-colors"
                           onClick={() =>
                             setAtrasadosOpen((prev) => {
                               const next = new Set(prev);
@@ -697,12 +697,12 @@ export default function DailyPage() {
                           <Link
                             href="/pipeline"
                             onClick={(e) => e.stopPropagation()}
-                            className="text-sm font-medium text-red-300 hover:underline"
+                            className="text-sm font-medium text-red-600 hover:underline"
                           >
                             {cliente.nome_empresa}
                           </Link>
-                          <span className="text-xs text-gray-500 flex items-center gap-1.5 flex-shrink-0">
-                            <span className="bg-red-900 text-red-300 px-1.5 py-0.5 rounded-full">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1.5 flex-shrink-0">
+                            <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
                               {tList.length}
                             </span>
                             <span>{open ? "▲" : "▼"}</span>
@@ -711,21 +711,21 @@ export default function DailyPage() {
 
                         {/* Tarefas expandidas */}
                         {open && (
-                          <div className="pl-3 border-l border-red-900 mb-2 space-y-1">
+                          <div className="pl-3 border-l border-red-200 mb-2 space-y-1">
                             {tList.map((t) => (
                               <div
                                 key={t.id}
-                                className="text-xs text-gray-400 py-0.5 flex items-start gap-1.5"
+                                className="text-xs text-muted-foreground py-0.5 flex items-start gap-1.5"
                               >
-                                <span className="text-red-500 mt-0.5 flex-shrink-0">•</span>
+                                <span className="text-red-600 mt-0.5 flex-shrink-0">•</span>
                                 <span>
                                   {t.o_que}
                                   {t.prazo && (
-                                    <span className="text-red-500 ml-1">
+                                    <span className="text-red-600 ml-1">
                                       ({formatDate(t.prazo)})
                                     </span>
                                   )}
-                                  {t.quem && <span className="text-blue-400 ml-1">· {t.quem}</span>}
+                                  {t.quem && <span className="text-blue-600 ml-1">· {t.quem}</span>}
                                 </span>
                               </div>
                             ))}
@@ -741,7 +741,7 @@ export default function DailyPage() {
             {/* ── Card Prioridades de Hoje ── */}
             <SituacaoCard
               title={`Hoje (${prioHoje.length})`}
-              borderColor="border-yellow-700"
+              borderColor="border-amber-200"
               empty={prioHoje.length === 0}
               emptyMsg="Nada para hoje"
               expanded={hojeExp}
@@ -749,7 +749,7 @@ export default function DailyPage() {
                 prioHoje.length > CARD_LIMIT ? (
                   <Button
                     onClick={() => setHojeExp(!hojeExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
                   >
                     {hojeExp ? (
                       <>
@@ -784,7 +784,7 @@ export default function DailyPage() {
             {/* ── Card Esta Semana ── */}
             <SituacaoCard
               title={`Esta semana (${prioSemana.reduce((s, [, l]) => s + l.length, 0)})`}
-              borderColor="border-blue-800"
+              borderColor="border-blue-200"
               empty={prioSemana.length === 0}
               emptyMsg="Semana tranquila"
               expanded={semanaExp}
@@ -792,7 +792,7 @@ export default function DailyPage() {
                 prioSemana.length > CARD_LIMIT ? (
                   <Button
                     onClick={() => setSemanaExp(!semanaExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
                   >
                     {semanaExp ? (
                       <>
@@ -810,13 +810,13 @@ export default function DailyPage() {
               <div className="space-y-3">
                 {(semanaExp ? prioSemana : prioSemana.slice(0, CARD_LIMIT)).map(([data, tList]) => (
                   <div key={data}>
-                    <p className="text-xs text-blue-400 font-semibold mb-1 capitalize">
+                    <p className="text-xs text-blue-600 font-semibold mb-1 capitalize">
                       {formatDateFull(data)}
                     </p>
                     {tList.map((t) => (
                       <div
                         key={t.id}
-                        className="text-xs text-gray-300 py-0.5 flex items-start gap-1.5 pl-2"
+                        className="text-xs text-foreground py-0.5 flex items-start gap-1.5 pl-2"
                       >
                         <span
                           className={`mt-0.5 flex-shrink-0 ${
@@ -824,16 +824,16 @@ export default function DailyPage() {
                               ? "text-blue-500"
                               : t.status === "Atrasado"
                                 ? "text-red-500"
-                                : "text-gray-600"
+                                : "text-muted-foreground"
                           }`}
                         >
                           •
                         </span>
                         <span>
-                          <span className="text-gray-500">{t.cliente.nome_empresa}</span>
+                          <span className="text-muted-foreground">{t.cliente.nome_empresa}</span>
                           {" — "}
-                          <span className="text-gray-200">{t.o_que}</span>
-                          {t.quem && <span className="text-gray-500 ml-1">· {t.quem}</span>}
+                          <span className="text-foreground">{t.o_que}</span>
+                          {t.quem && <span className="text-muted-foreground ml-1">· {t.quem}</span>}
                         </span>
                       </div>
                     ))}
@@ -848,28 +848,28 @@ export default function DailyPage() {
         {/* SEÇÃO 2 — Ranking de saúde                                         */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Clientes que precisam de atenção">
-          <div className="bg-[#242424] border border-[#333] rounded-xl overflow-hidden">
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             {ranking.length === 0 ? (
-              <p className="text-gray-500 text-sm px-5 py-6">Nenhum cliente ativo.</p>
+              <p className="text-muted-foreground text-sm px-5 py-6">Nenhum cliente ativo.</p>
             ) : (
               ranking.map((c, i) => (
                 <div
                   key={c.id}
                   className={`flex items-center gap-4 px-5 py-3.5 ${
-                    i !== 0 ? "border-t border-[#2a2a2a]" : ""
+                    i !== 0 ? "border-t border-border" : ""
                   }`}
                 >
                   {/* Posição */}
-                  <span className="text-lg font-bold text-gray-600 w-6 flex-shrink-0 text-center">
+                  <span className="text-lg font-bold text-muted-foreground w-6 flex-shrink-0 text-center">
                     {i + 1}
                   </span>
 
                   {/* Nome + ID */}
                   <div className="w-44 flex-shrink-0">
-                    <p className="font-semibold text-white text-sm leading-tight">
+                    <p className="font-semibold text-foreground text-sm leading-tight">
                       {c.nome_empresa}
                     </p>
-                    <p className="text-xs text-gray-500">{c.id_cliente}</p>
+                    <p className="text-xs text-muted-foreground">{c.id_cliente}</p>
                   </div>
 
                   {/* Barra + score */}
@@ -885,7 +885,7 @@ export default function DailyPage() {
 
                   {/* Atrasadas */}
                   {c.atrasadas > 0 && (
-                    <span className="bg-red-900 text-red-300 text-xs px-2 py-0.5 rounded-full flex-shrink-0">
+                    <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full flex-shrink-0">
                       {c.atrasadas} atrasada{c.atrasadas > 1 ? "s" : ""}
                     </span>
                   )}
@@ -893,7 +893,7 @@ export default function DailyPage() {
                   {/* Botão ver tarefas */}
                   <Button
                     onClick={() => setModalCliente(c)}
-                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#666] hover:text-white transition"
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition"
                   >
                     Ver tarefas
                   </Button>
@@ -911,10 +911,10 @@ export default function DailyPage() {
             {resumoResponsavel
               .filter(({ total }) => total > 0)
               .map(({ resp, total, finalizadas, atrasadas, score }) => (
-                <div key={resp} className="bg-[#242424] border border-[#333] rounded-xl p-5">
+                <div key={resp} className="bg-card border border-border rounded-xl p-5 shadow-sm">
                   {/* Nome */}
                   <div className="flex items-center justify-between mb-4">
-                    <p className="font-semibold text-white">{resp}</p>
+                    <p className="font-semibold text-foreground">{resp}</p>
                     <span className="text-sm font-bold" style={{ color: getScoreColor(score) }}>
                       {score}%
                     </span>
@@ -923,28 +923,28 @@ export default function DailyPage() {
                   {/* Métricas */}
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     <div className="text-center">
-                      <p className="text-lg font-bold text-gray-200">{total}</p>
-                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-lg font-bold text-foreground">{total}</p>
+                      <p className="text-xs text-muted-foreground">Total</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-lg font-bold text-green-400">{finalizadas}</p>
-                      <p className="text-xs text-gray-500">Finaliz.</p>
+                      <p className="text-lg font-bold text-green-600">{finalizadas}</p>
+                      <p className="text-xs text-muted-foreground">Finaliz.</p>
                     </div>
                     <div className="text-center">
                       <p
-                        className={`text-lg font-bold ${atrasadas > 0 ? "text-red-400" : "text-gray-400"}`}
+                        className={`text-lg font-bold ${atrasadas > 0 ? "text-red-600" : "text-muted-foreground"}`}
                       >
                         {atrasadas}
                       </p>
-                      <p className="text-xs text-gray-500">Atrasadas</p>
+                      <p className="text-xs text-muted-foreground">Atrasadas</p>
                     </div>
                   </div>
 
                   {/* Barra semanal */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs text-gray-500">Progresso geral</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-muted-foreground">Progresso geral</p>
+                      <p className="text-xs text-muted-foreground">
                         {finalizadas}/{total}
                       </p>
                     </div>
@@ -960,7 +960,7 @@ export default function DailyPage() {
       <Button
         onClick={handleSync}
         disabled={syncing}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-[#2a2a2a] border border-[#555] text-sm font-medium text-gray-200 hover:border-[#888] hover:text-white shadow-xl transition disabled:opacity-50"
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-card border border-border text-sm font-medium text-foreground hover:bg-accent shadow-xl transition disabled:opacity-50"
       >
         {syncing ? (
           <>
