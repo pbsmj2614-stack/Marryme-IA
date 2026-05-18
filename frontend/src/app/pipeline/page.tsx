@@ -21,7 +21,6 @@ import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
 import { Loader2, RefreshCw, X, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,8 +83,6 @@ const FILTROS: FiltroStatus[] = [
   "Encerrados",
 ];
 const RESPONSAVEIS = ["Todos", ...RESPONSAVEIS_BASE] as const;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // ─── Status badges ────────────────────────────────────────────────────────────
 
@@ -162,7 +159,9 @@ function ProgressBar({ score }: { score: number }) {
 
 function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
   return (
-    <span className={`ml-1 text-xs ${active ? "text-foreground" : "text-muted-foreground"}`}>
+    <span
+      className={`ml-1 text-xs ${active ? "text-brand-600 font-bold" : "text-muted-foreground"}`}
+    >
       {active ? (dir === "asc" ? "↑" : "↓") : "⇅"}
     </span>
   );
@@ -200,7 +199,7 @@ function TabelaTarefas({
     setEditForm({
       etapa: t.etapa ?? "",
       quem: t.quem ?? "",
-      prazo: t.prazo ?? "", // YYYY-MM-DD
+      prazo: t.prazo ?? "",
       status: t.status ?? "Não iniciado",
       observacoes: t.observacoes ?? "",
     });
@@ -221,21 +220,21 @@ function TabelaTarefas({
     );
 
   const inputCls =
-    "bg-input border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-ring w-full";
+    "bg-white border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-brand-400 w-full";
   const selectCls = inputCls + " cursor-pointer";
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-secondary/30 text-muted-foreground uppercase tracking-wider">
-            <th className="px-3 py-2 text-center w-8">✓</th>
-            <th className="px-3 py-2 text-left">Etapa</th>
-            <th className="px-3 py-2 text-left">O que?</th>
-            <th className="px-3 py-2 text-left">Tipo</th>
-            <th className="px-3 py-2 text-left">Quem</th>
-            <th className="px-3 py-2 text-left">Prazo</th>
-            <th className="px-3 py-2 text-left">Status</th>
+          <tr className="bg-brand-50 text-brand-700 border-b border-brand-100">
+            <th className="px-3 py-2 text-center w-8 font-semibold">✓</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Etapa</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">O que?</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Tipo</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Quem</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Prazo</th>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Status</th>
             <th className="px-2 py-2 w-16"></th>
           </tr>
         </thead>
@@ -245,7 +244,7 @@ function TabelaTarefas({
             const isEdit = editingId === t.id;
             const rowClass = t.check_feito
               ? "border-t border-border opacity-50"
-              : `border-t border-border ${isEdit ? "bg-secondary/40" : "hover:bg-accent transition-colors"}`;
+              : `border-t border-border ${isEdit ? "bg-brand-50/60" : "hover:bg-rose-50/30 transition-colors"}`;
             return (
               <React.Fragment key={t.id}>
                 <tr className={rowClass}>
@@ -258,7 +257,7 @@ function TabelaTarefas({
                         if (!isEdit && !locked) onCheckChange(t, e.target.checked);
                       }}
                       disabled={locked}
-                      className="w-3.5 h-3.5 accent-green-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      className="w-3.5 h-3.5 accent-brand-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                       title={locked ? "Cliente pausado/encerrado" : "Marcar como concluído"}
                     />
                   </td>
@@ -267,21 +266,21 @@ function TabelaTarefas({
                     {t.etapa ?? "—"}
                   </td>
                   {/* O que */}
-                  <td className="px-3 py-2 text-foreground">{t.o_que}</td>
+                  <td className="px-3 py-2 text-foreground font-medium">{t.o_que}</td>
                   {/* Tipo */}
                   <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                     {t.tipo ?? "—"}
                   </td>
                   {/* Quem */}
                   <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
-                    {t.quem ?? "—"}
+                    {t.quem ? <span className="text-brand-600 font-medium">{t.quem}</span> : "—"}
                   </td>
                   {/* Prazo */}
                   <td
                     className={`px-3 py-2 whitespace-nowrap font-medium ${vencida ? "text-red-600" : "text-muted-foreground"}`}
                   >
                     {formatDate(t.prazo)}
-                    {vencida && <span className="ml-1 text-red-600">!</span>}
+                    {vencida && <span className="ml-1 text-red-500">⚠</span>}
                   </td>
                   {/* Status */}
                   <td className="px-3 py-2">
@@ -291,28 +290,28 @@ function TabelaTarefas({
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     {!locked &&
                       (isEdit ? (
-                        <Button
+                        <button
                           onClick={() => setEditingId(null)}
-                          className="text-muted-foreground hover:text-foreground px-1"
+                          className="text-muted-foreground hover:text-red-600 px-1.5 py-0.5 rounded transition"
                           title="Cancelar"
                         >
                           ✕
-                        </Button>
+                        </button>
                       ) : (
-                        <Button
+                        <button
                           onClick={() => startEdit(t)}
-                          className="text-muted-foreground hover:text-foreground px-1 transition"
+                          className="text-muted-foreground hover:text-brand-600 px-1.5 py-0.5 rounded transition"
                           title="Editar tarefa"
                         >
                           ✎
-                        </Button>
+                        </button>
                       ))}
                   </td>
                 </tr>
 
                 {/* Linha de edição inline */}
                 {isEdit && (
-                  <tr className="bg-secondary/20 border-t border-border">
+                  <tr className="bg-brand-50/40 border-t border-brand-100">
                     <td />
                     <td className="px-2 py-2">
                       <input
@@ -359,13 +358,13 @@ function TabelaTarefas({
                       </select>
                     </td>
                     <td className="px-2 py-2">
-                      <Button
+                      <button
                         onClick={() => saveEdit(t)}
                         disabled={saving}
-                        className="text-xs px-3 py-1 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-40 transition whitespace-nowrap"
+                        className="text-xs px-3 py-1 rounded bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-40 transition whitespace-nowrap font-medium"
                       >
                         {saving ? "…" : "Salvar"}
-                      </Button>
+                      </button>
                     </td>
                   </tr>
                 )}
@@ -384,13 +383,20 @@ function SummaryBadge({
   label,
   value,
   color = "text-foreground",
+  alert = false,
 }: {
   label: string;
   value: number | string;
   color?: string;
+  alert?: boolean;
 }) {
+  const hasAlert = alert && Number(value) > 0;
   return (
-    <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-1.5 shadow-sm">
+    <div
+      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 shadow-sm border transition ${
+        hasAlert ? "bg-red-50 border-red-200 shadow-red-100" : "bg-white border-border"
+      }`}
+    >
       <span className={`text-base font-bold ${color}`}>{value}</span>
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
@@ -479,32 +485,26 @@ export default function PipelinePage() {
   });
   const [savingTarefa, setSavingTarefa] = useState(false);
 
-  // Sync query data → local state (preserva optimistic updates entre fetches)
   useEffect(() => {
     if (rawData)
       setClientes(buildClientes(rawData.clientes as Cliente[], rawData.tarefas as Tarefa[]));
   }, [rawData]);
 
-  // Redirect se não autenticado
   useEffect(() => {
     if (!userLoading && !user) router.push("/login");
   }, [user, userLoading, router]);
 
-  // ── Sync ──
   async function handleSync() {
     setSyncing(true);
     try {
-      // Sync primeiro (apaga e reinsere mm_clientes); write-back lê depois
       const result = await importarPlanilha();
       const wb = await fetch("/api/sheets/write-back-status", { method: "POST" }).catch(() => null);
 
-      // ── monta mensagem de sync ──
       const parts: string[] = [`${result.clientes} clientes · ${result.tarefas} tarefas`];
       if (result.semAbas.length > 0) parts.push(`sem aba: ${result.semAbas.join(", ")}`);
       if (result.semTarefas.length > 0) parts.push(`sem tarefas: ${result.semTarefas.join(", ")}`);
       if (result.erros.length > 0) parts.push(`erros: ${result.erros.join(" | ")}`);
 
-      // ── sufixo do write-back (só mostra se corrigiu algo ou deu erro) ──
       let wbErro = "";
       if (!wb) {
         wbErro = "planilha: erro de rede";
@@ -543,7 +543,6 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Corrigir Gaps: cria pipeline para prestadores sem mm_clientes ──
   async function handleSyncGaps() {
     setSyncingGaps(true);
     try {
@@ -579,7 +578,6 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Limpar Gaps: remove mm_clientes a partir de um ID ──
   async function handleCleanGaps(fromId: string) {
     const confirm = window.confirm(
       `Isso vai APAGAR permanentemente todos os registros de pipeline a partir de ${fromId} (Supabase + Sheets). Continuar?`
@@ -615,7 +613,6 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Check toggle — atualiza Supabase + Sheets ──
   async function handleCheckChange(tarefa: Tarefa, checked: boolean) {
     const hoje = new Date().toISOString().split("T")[0];
     const newStatus = checked
@@ -624,7 +621,6 @@ export default function PipelinePage() {
         ? "Atrasado"
         : "Não iniciado";
 
-    // Optimistic update (check + status)
     setClientes((prev) =>
       prev.map((c) => ({
         ...c,
@@ -651,7 +647,6 @@ export default function PipelinePage() {
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar");
     } catch (err) {
-      // Revert
       setClientes((prev) =>
         prev.map((c) => ({
           ...c,
@@ -664,9 +659,7 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Atualizar campos de tarefa — atualiza Supabase + Sheets ──
   async function handleUpdateTarefa(tarefa: Tarefa, updates: EditForm): Promise<void> {
-    // Optimistic update
     setClientes((prev) =>
       prev.map((c) => ({
         ...c,
@@ -706,7 +699,6 @@ export default function PipelinePage() {
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar");
       toast.success("Tarefa atualizada na planilha");
     } catch (err) {
-      // Revert
       setClientes((prev) =>
         prev.map((c) => ({
           ...c,
@@ -773,7 +765,6 @@ export default function PipelinePage() {
     }
   }
 
-  // ── Summary metrics ──
   const metrics = useMemo(() => {
     const ativos = clientes.filter((c) => !/paus|encerr/i.test(c.status ?? ""));
     const pausados = clientes.filter((c) => /paus/i.test(c.status ?? "")).length;
@@ -783,7 +774,6 @@ export default function PipelinePage() {
     return { ativos: ativos.length, pausados, encerrados, atrasadasTotal, emRisco };
   }, [clientes]);
 
-  // ── Filtered + sorted ──
   const clientesFiltrados = useMemo(() => {
     let lista = clientes.filter((c) => {
       if (filtro === "Encerrados") return /encerr/i.test(c.status ?? "");
@@ -796,7 +786,6 @@ export default function PipelinePage() {
       return true;
     });
 
-    // Filtro busca
     if (busca.trim()) {
       const q = busca.toLowerCase();
       lista = lista.filter(
@@ -804,14 +793,12 @@ export default function PipelinePage() {
       );
     }
 
-    // Filtro responsável
     if (responsavel !== "Todos") {
       lista = lista.filter((c) =>
         c.responsavel_mm?.toLowerCase().includes(responsavel.toLowerCase())
       );
     }
 
-    // Ordenação
     if (sortKey) {
       lista = [...lista].sort((a, b) => {
         const av = a[sortKey as SortKey];
@@ -835,8 +822,6 @@ export default function PipelinePage() {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   if (loading) return <PageLoading />;
 
   return (
@@ -847,18 +832,20 @@ export default function PipelinePage() {
         {/* ── Cabeçalho ── */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold mb-3 text-foreground">Pipeline de clientes</h1>
+            <h1 className="text-2xl font-bold mb-3 text-brand-900">Pipeline de clientes</h1>
             <div className="flex flex-wrap gap-2">
               <SummaryBadge label="clientes ativos" value={metrics.ativos} />
               <SummaryBadge
                 label="tarefas atrasadas"
                 value={metrics.atrasadasTotal}
                 color={metrics.atrasadasTotal > 0 ? "text-red-600" : "text-foreground"}
+                alert
               />
               <SummaryBadge
                 label="em risco"
                 value={metrics.emRisco}
                 color={metrics.emRisco > 0 ? "text-red-600" : "text-foreground"}
+                alert
               />
               <SummaryBadge
                 label="pausados"
@@ -873,81 +860,83 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          <Button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-foreground hover:bg-accent transition disabled:opacity-50 whitespace-nowrap"
-          >
-            {syncing ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
+            >
+              {syncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sincronizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
+                </>
+              )}
+            </button>
+
+            {role === "admin" && (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Sincronizando...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
+                <button
+                  onClick={handleSyncGaps}
+                  disabled={syncingGaps || syncing || cleaningGaps}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
+                >
+                  {syncingGaps ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Criando gaps...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" /> Corrigir Gaps
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
+                    if (id) handleCleanGaps(id.trim().toUpperCase());
+                  }}
+                  disabled={cleaningGaps || syncing || syncingGaps}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 border border-red-300 text-sm text-red-700 hover:bg-red-200 transition disabled:opacity-50 whitespace-nowrap"
+                >
+                  {cleaningGaps ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Limpando...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" /> Limpar Gaps
+                    </>
+                  )}
+                </button>
               </>
             )}
-          </Button>
-
-          {role === "admin" && (
-            <>
-              <Button
-                onClick={handleSyncGaps}
-                disabled={syncingGaps || syncing || cleaningGaps}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-100 border border-green-300 text-sm text-green-700 hover:bg-green-200 transition disabled:opacity-50 whitespace-nowrap"
-              >
-                {syncingGaps ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Criando gaps...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" /> Corrigir Gaps
-                  </>
-                )}
-              </Button>
-
-              <Button
-                onClick={() => {
-                  const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
-                  if (id) handleCleanGaps(id.trim().toUpperCase());
-                }}
-                disabled={cleaningGaps || syncing || syncingGaps}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 border border-red-300 text-sm text-red-700 hover:bg-red-200 transition disabled:opacity-50 whitespace-nowrap"
-              >
-                {cleaningGaps ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Limpando...
-                  </>
-                ) : (
-                  <>
-                    <X className="w-4 h-4" /> Limpar Gaps
-                  </>
-                )}
-              </Button>
-            </>
-          )}
+          </div>
         </div>
 
         {/* ── Filtros ── */}
-        <div className="bg-card border border-border rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-center shadow-sm">
+        <div className="bg-white border border-border rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-center shadow-sm">
           {/* Pills de status */}
           <div className="flex flex-wrap gap-1.5">
             {FILTROS.map((f) => (
-              <Button
+              <button
                 key={f}
                 onClick={() => setFiltro(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
                   filtro === f
-                    ? "border-primary text-primary bg-primary/10 hover:bg-primary/15"
-                    : "border-border text-muted-foreground hover:border-ring hover:text-foreground hover:bg-accent"
+                    ? "bg-brand-700 text-white shadow-sm"
+                    : "bg-transparent border border-border text-muted-foreground hover:border-brand-400 hover:text-brand-700 hover:bg-brand-50"
                 }`}
               >
                 {f}
-              </Button>
+              </button>
             ))}
           </div>
 
@@ -970,15 +959,15 @@ export default function PipelinePage() {
               placeholder="Buscar cliente..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              className="pl-8 pr-7 py-1.5 text-sm bg-input border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring w-48"
+              className="pl-8 pr-7 py-1.5 text-sm bg-white border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition w-48"
             />
             {busca && (
-              <Button
+              <button
                 onClick={() => setBusca("")}
-                className="absolute right-2 text-muted-foreground hover:text-foreground text-xs"
+                className="absolute right-2 text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3 h-3" />
-              </Button>
+              </button>
             )}
           </div>
 
@@ -986,7 +975,7 @@ export default function PipelinePage() {
           <select
             value={responsavel}
             onChange={(e) => setResponsavel(e.target.value)}
-            className="bg-input border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
+            className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-brand-400 cursor-pointer hover:border-brand-400 transition"
           >
             {RESPONSAVEIS.map((r) => (
               <option key={r} value={r}>
@@ -998,24 +987,26 @@ export default function PipelinePage() {
 
         {/* ── Tabela ── */}
         <div className="rounded-xl border border-border overflow-hidden shadow-sm">
-          <div className="bg-secondary/30 border-b border-border px-4 py-2 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
+          <div className="bg-gradient-to-r from-brand-50 to-rose-50 border-b border-brand-100 px-4 py-2 flex items-center justify-between">
+            <p className="text-xs text-brand-700">
               Clique no cabeçalho para ordenar · Clique na linha para ver tarefas
             </p>
-            <p className="text-xs text-muted-foreground">{clientesFiltrados.length} clientes</p>
+            <p className="text-xs font-semibold text-brand-700">
+              {clientesFiltrados.length} clientes
+            </p>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-secondary/30">
-                <tr>
+            <table className="w-full text-sm bg-white">
+              <thead>
+                <tr className="bg-brand-800 text-white">
                   {TABLE_COLS.map(({ key, label, center }) => (
                     <th
                       key={label}
                       onClick={() => key && handleSort(key)}
-                      className={`px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${
+                      className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${
                         center ? "text-center" : "text-left"
-                      } ${key ? "cursor-pointer hover:text-foreground select-none" : ""}`}
+                      } ${key ? "cursor-pointer hover:bg-brand-700 select-none transition-colors" : ""}`}
                     >
                       {label}
                       {key && <SortIcon active={sortKey === key} dir={sortDir} />}
@@ -1038,8 +1029,8 @@ export default function PipelinePage() {
                       <tr
                         onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                         className={`cursor-pointer border-t border-border transition-colors ${
-                          i % 2 === 0 ? "bg-card" : "bg-background"
-                        } hover:bg-accent`}
+                          i % 2 === 0 ? "bg-white" : "bg-rose-50/30"
+                        } hover:bg-brand-50`}
                       >
                         {/* ID */}
                         <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
@@ -1047,7 +1038,7 @@ export default function PipelinePage() {
                         </td>
                         {/* Cliente */}
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="font-semibold text-foreground">{c.nome_empresa}</p>
+                          <p className="font-semibold text-brand-900">{c.nome_empresa}</p>
                           {c.responsavel_mm && (
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {c.responsavel_mm}
@@ -1069,16 +1060,18 @@ export default function PipelinePage() {
                         {/* Total */}
                         <td className="px-4 py-3 text-center text-foreground">{c.total_tarefas}</td>
                         {/* Finalizadas */}
-                        <td className="px-4 py-3 text-center text-green-600 font-medium">
+                        <td className="px-4 py-3 text-center text-green-600 font-semibold">
                           {c.finalizadas}
                         </td>
                         {/* Atrasadas */}
-                        <td
-                          className={`px-4 py-3 text-center font-medium ${
-                            c.atrasadas > 0 ? "text-red-600" : "text-green-600"
-                          }`}
-                        >
-                          {c.atrasadas}
+                        <td className="px-4 py-3 text-center">
+                          {c.atrasadas > 0 ? (
+                            <span className="bg-red-100 text-red-700 font-bold text-xs px-2 py-0.5 rounded-full">
+                              {c.atrasadas}
+                            </span>
+                          ) : (
+                            <span className="text-green-600 font-semibold">{c.atrasadas}</span>
+                          )}
                         </td>
                         {/* Progresso */}
                         <td className="px-4 py-3">
@@ -1102,10 +1095,10 @@ export default function PipelinePage() {
                         <tr>
                           <td
                             colSpan={9}
-                            className="px-5 py-4 bg-secondary/20 border-t border-border"
+                            className="px-5 py-4 bg-brand-50/40 border-t border-brand-100"
                           >
                             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+                              <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
                                 Tarefas · {c.nome_empresa}
                               </p>
                               <div
@@ -1113,7 +1106,7 @@ export default function PipelinePage() {
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {c.fase_projeto && (
-                                  <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                  <span className="text-xs text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full font-medium">
                                     {c.fase_projeto}
                                   </span>
                                 )}
@@ -1121,7 +1114,7 @@ export default function PipelinePage() {
                                   {c.finalizadas}/{c.total_tarefas} concluídas
                                 </span>
                                 {c.finalizadas > 0 && (
-                                  <Button
+                                  <button
                                     onClick={() =>
                                       setMostrarFinalizadasIds((prev) => {
                                         const next = new Set(prev);
@@ -1130,24 +1123,24 @@ export default function PipelinePage() {
                                         return next;
                                       })
                                     }
-                                    className="text-xs px-2 py-0.5 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition"
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-white border border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 transition"
                                   >
                                     {mostrarFinalizadasIds.has(c.id)
                                       ? "Ocultar concluídas"
                                       : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
-                                  </Button>
+                                  </button>
                                 )}
                                 {c.status === "Ativo" && (
-                                  <Button
+                                  <button
                                     onClick={() =>
                                       setAddTarefaFor(
                                         addTarefaFor === c.id_cliente ? null : c.id_cliente
                                       )
                                     }
-                                    className="text-xs px-2.5 py-1 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition"
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition font-medium flex items-center gap-1"
                                   >
                                     <Plus className="w-3 h-3" /> Tarefa
-                                  </Button>
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -1174,13 +1167,13 @@ export default function PipelinePage() {
                               locked={c.status !== "Ativo"}
                             />
 
-                            {/* ── Formulário de nova tarefa (apenas Ativos) ── */}
+                            {/* ── Formulário de nova tarefa ── */}
                             {addTarefaFor === c.id_cliente && c.status === "Ativo" && (
                               <div
-                                className="mt-3 p-4 rounded-xl bg-secondary/30 border border-border space-y-3"
+                                className="mt-3 p-4 rounded-xl bg-white border border-brand-200 space-y-3"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+                                <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
                                   Nova tarefa
                                 </p>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1190,7 +1183,7 @@ export default function PipelinePage() {
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))
                                     }
-                                    className="bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring"
+                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
                                   />
                                   <input
                                     placeholder="O que fazer? *"
@@ -1198,14 +1191,14 @@ export default function PipelinePage() {
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))
                                     }
-                                    className="col-span-2 bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-ring"
+                                    className="col-span-2 bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
                                   />
                                   <select
                                     value={addTarefaForm.tipo}
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))
                                     }
-                                    className="bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-ring cursor-pointer"
+                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
                                   >
                                     <option>Marry Me</option>
                                     <option>Cliente</option>
@@ -1217,7 +1210,7 @@ export default function PipelinePage() {
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))
                                     }
-                                    className="bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-ring cursor-pointer"
+                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
                                   >
                                     <option value="">Quem?</option>
                                     {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => (
@@ -1231,24 +1224,24 @@ export default function PipelinePage() {
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))
                                     }
-                                    className="bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-ring"
+                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400"
                                   />
                                   <select
                                     value={addTarefaForm.status}
                                     onChange={(e) =>
                                       setAddTarefaForm((f) => ({ ...f, status: e.target.value }))
                                     }
-                                    className="bg-input border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-ring cursor-pointer"
+                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
                                   >
                                     <option>Não iniciado</option>
                                     <option>Em andamento</option>
                                     <option>Finalizado</option>
                                   </select>
                                   <div className="flex gap-2">
-                                    <Button
+                                    <button
                                       onClick={() => handleAddTarefa(c.id_cliente)}
                                       disabled={savingTarefa || !addTarefaForm.o_que.trim()}
-                                      className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium"
+                                      className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium flex items-center justify-center gap-1"
                                     >
                                       {savingTarefa ? (
                                         <>
@@ -1257,43 +1250,43 @@ export default function PipelinePage() {
                                       ) : (
                                         "Salvar"
                                       )}
-                                    </Button>
-                                    <Button
+                                    </button>
+                                    <button
                                       onClick={() => setAddTarefaFor(null)}
-                                      className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground transition"
+                                      className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-red-300 transition"
                                     >
                                       <X className="w-3 h-3" />
-                                    </Button>
+                                    </button>
                                   </div>
                                 </div>
                               </div>
                             )}
 
                             <div
-                              className="mt-4 pt-3 border-t border-border flex items-center gap-3"
+                              className="mt-4 pt-3 border-t border-border flex items-center gap-2 flex-wrap"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span className="text-xs text-muted-foreground">
                                 Status do contrato:
                               </span>
                               {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
-                                <Button
+                                <button
                                   key={s}
                                   onClick={() =>
                                     c.status !== s && handleStatusChange(c.id_cliente, s)
                                   }
-                                  className={`text-xs px-3 py-1.5 rounded-lg border transition ${
+                                  className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${
                                     c.status === s
                                       ? s === "Ativo"
-                                        ? "bg-green-100 border-green-300 text-green-700 cursor-default"
+                                        ? "bg-green-600 text-white border-green-600 cursor-default shadow-sm"
                                         : s === "Pausado"
-                                          ? "bg-amber-100 border-amber-300 text-amber-700 cursor-default"
-                                          : "bg-gray-100 border-gray-300 text-gray-600 cursor-default"
-                                      : "bg-transparent border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700"
+                                          ? "bg-amber-500 text-white border-amber-500 cursor-default shadow-sm"
+                                          : "bg-gray-500 text-white border-gray-500 cursor-default"
+                                      : "bg-transparent border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50"
                                   }`}
                                 >
-                                  {s === c.status ? `● ${s}` : s}
-                                </Button>
+                                  {s}
+                                </button>
                               ))}
                             </div>
                           </td>

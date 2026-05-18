@@ -13,7 +13,6 @@ import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
 import { Loader2, RefreshCw, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,8 +64,6 @@ const TOMORROW = (() => {
   return d.toISOString().split("T")[0];
 })();
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 // ─── Modal de tarefas ─────────────────────────────────────────────────────────
 
 function ModalTarefas({
@@ -86,87 +83,97 @@ function ModalTarefas({
   const lista = mostrarFeitas ? tarefas : pendentes;
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-brand-900/60 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl"
+        className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl shadow-brand-900/20 border border-border overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header do modal */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        {/* Header do modal — faixa brand */}
+        <div className="bg-gradient-to-r from-brand-700 to-brand-800 px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="font-bold text-foreground text-base">{cliente.nome_empresa}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="font-bold text-white text-base">{cliente.nome_empresa}</p>
+            <p className="text-xs text-brand-200 mt-0.5">
               {cliente.id_cliente} · Score {cliente.score}% · {cliente.finalizadas}/{tarefas.length}{" "}
               concluídas
             </p>
           </div>
-          {finalizadas.length > 0 && (
-            <Button
-              onClick={() => setMostrarFeitas((v) => !v)}
-              className="text-xs px-2.5 py-1 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition mr-6"
+          <div className="flex items-center gap-2">
+            {finalizadas.length > 0 && (
+              <button
+                onClick={() => setMostrarFeitas((v) => !v)}
+                className="text-xs px-3 py-1 rounded-lg bg-white/15 text-white hover:bg-white/25 transition border border-white/20"
+              >
+                {mostrarFeitas
+                  ? "Ocultar concluídas"
+                  : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-brand-200 hover:text-white p-1.5 rounded-lg hover:bg-white/15 transition"
             >
-              {mostrarFeitas
-                ? "Ocultar concluídas"
-                : `+ ${finalizadas.length} concluída${finalizadas.length > 1 ? "s" : ""}`}
-            </Button>
-          )}
-          <Button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground text-lg leading-none p-1"
-          >
-            <X className="w-4 h-4" />
-          </Button>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Lista de tarefas */}
-        <div className="overflow-y-auto flex-1 px-5 py-3 space-y-2">
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2 bg-white">
           {lista.length === 0 ? (
-            <p className="text-muted-foreground text-sm py-4">Nenhuma tarefa pendente.</p>
+            <p className="text-muted-foreground text-sm py-4 text-center">
+              Nenhuma tarefa pendente.
+            </p>
           ) : (
             lista.map((t) => {
               const vencida = t.prazo && t.prazo < TODAY && t.status !== "Finalizado";
               return (
                 <div
                   key={t.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg border ${
-                    vencida ? "border-red-200 bg-red-50" : "border-border bg-card"
-                  }`}
+                  className={`flex items-start gap-3 p-3 rounded-xl border ${
+                    vencida
+                      ? "border-red-200 bg-red-50"
+                      : "border-border bg-white hover:bg-rose-50/30"
+                  } transition-colors`}
                 >
                   <input
                     type="checkbox"
                     checked={t.check_feito}
                     onChange={(e) => onCheckChange(t.id, e.target.checked)}
-                    className="mt-0.5 w-4 h-4 accent-green-500 cursor-pointer flex-shrink-0"
+                    className="mt-0.5 w-4 h-4 accent-brand-600 cursor-pointer flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <p
-                      className={`text-sm ${t.check_feito ? "line-through text-muted-foreground" : "text-foreground"}`}
+                      className={`text-sm font-medium ${t.check_feito ? "line-through text-muted-foreground" : "text-brand-900"}`}
                     >
                       {t.o_que}
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {t.etapa && <span className="text-xs text-muted-foreground">{t.etapa}</span>}
-                      {t.quem && <span className="text-xs text-blue-600">{t.quem}</span>}
+                      {t.quem && (
+                        <span className="text-xs text-brand-600 font-medium bg-brand-50 px-1.5 py-0.5 rounded">
+                          {t.quem}
+                        </span>
+                      )}
                       {t.prazo && (
                         <span
-                          className={`text-xs ${vencida ? "text-red-600 font-bold" : "text-muted-foreground"}`}
+                          className={`text-xs font-medium ${vencida ? "text-red-600" : "text-muted-foreground"}`}
                         >
                           {formatDate(t.prazo)}
-                          {vencida ? " !" : ""}
+                          {vencida ? " ⚠" : ""}
                         </span>
                       )}
                     </div>
                   </div>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${
                       t.status === "Finalizado"
                         ? "bg-green-100 text-green-700"
                         : t.status === "Atrasado"
                           ? "bg-red-100 text-red-700"
                           : t.status === "Em andamento"
-                            ? "bg-blue-100 text-blue-700"
+                            ? "bg-brand-100 text-brand-700"
                             : "bg-gray-100 text-gray-600"
                     }`}
                   >
@@ -187,9 +194,10 @@ function ModalTarefas({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-base font-semibold text-foreground mb-3 uppercase tracking-wider text-xs">
-        {title}
-      </h2>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-0.5 h-4 rounded-full bg-brand-400 flex-shrink-0" />
+        <h2 className="text-xs font-bold text-brand-800 uppercase tracking-widest">{title}</h2>
+      </div>
       {children}
     </section>
   );
@@ -197,9 +205,36 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // ─── Card de situação ─────────────────────────────────────────────────────────
 
+type CardAccent = "red" | "amber" | "violet";
+
+const CARD_ACCENT: Record<
+  CardAccent,
+  { header: string; headerText: string; border: string; badge: string }
+> = {
+  red: {
+    header: "bg-red-50 border-b border-red-200",
+    headerText: "text-red-800",
+    border: "border-red-300",
+    badge: "bg-red-500 text-white",
+  },
+  amber: {
+    header: "bg-amber-50 border-b border-amber-200",
+    headerText: "text-amber-800",
+    border: "border-amber-300",
+    badge: "bg-amber-500 text-white",
+  },
+  violet: {
+    header: "bg-brand-50 border-b border-brand-200",
+    headerText: "text-brand-800",
+    border: "border-brand-300",
+    badge: "bg-brand-600 text-white",
+  },
+};
+
 function SituacaoCard({
   title,
-  borderColor,
+  count,
+  accent,
   children,
   empty,
   emptyMsg,
@@ -207,17 +242,22 @@ function SituacaoCard({
   footer,
 }: {
   title: string;
-  borderColor: string;
+  count: number;
+  accent: CardAccent;
   children: React.ReactNode;
   empty: boolean;
   emptyMsg: string;
   expanded?: boolean;
   footer?: React.ReactNode;
 }) {
+  const ac = CARD_ACCENT[accent];
   return (
-    <div className={`bg-card border ${borderColor} rounded-xl flex flex-col h-full shadow-sm`}>
-      <div className="px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-sm text-foreground">{title}</h3>
+    <div
+      className={`bg-white border ${ac.border} rounded-xl flex flex-col h-full shadow-sm overflow-hidden`}
+    >
+      <div className={`px-4 py-3 flex items-center justify-between ${ac.header}`}>
+        <h3 className={`font-bold text-sm ${ac.headerText}`}>{title}</h3>
+        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${ac.badge}`}>{count}</span>
       </div>
       <div
         className={`px-4 py-3 flex-1 overflow-y-auto ${expanded ? "max-h-[460px]" : "max-h-72"}`}
@@ -255,21 +295,34 @@ function TarefaCheck({
   sub?: string;
   onCheckChange: (id: string, val: boolean) => void;
 }) {
+  const isOverdue = !tarefa.check_feito && !!tarefa.prazo && tarefa.prazo < TODAY;
   return (
-    <div className="flex items-start gap-2.5 py-2 border-b border-border last:border-0">
+    <div
+      className={`flex items-start gap-2.5 py-2.5 border-b border-border last:border-0 ${
+        isOverdue ? "bg-red-50/60 -mx-1 px-1 rounded-lg" : ""
+      }`}
+    >
       <input
         type="checkbox"
         checked={tarefa.check_feito}
         onChange={(e) => onCheckChange(tarefa.id, e.target.checked)}
-        className="mt-0.5 w-3.5 h-3.5 accent-green-500 cursor-pointer flex-shrink-0"
+        className="mt-0.5 w-3.5 h-3.5 accent-brand-600 cursor-pointer flex-shrink-0"
       />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p
-          className={`text-sm leading-snug ${tarefa.check_feito ? "line-through text-muted-foreground" : "text-foreground"}`}
+          className={`text-sm leading-snug font-medium ${
+            tarefa.check_feito ? "line-through text-muted-foreground" : "text-brand-900"
+          }`}
         >
           {label}
         </p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        {sub && (
+          <p
+            className={`text-xs mt-0.5 ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}
+          >
+            {sub}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -295,7 +348,6 @@ export default function DailyPage() {
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [modalCliente, setModalCliente] = useState<ClienteComMetricas | null>(null);
-  // Atrasados: controla qual grupo está expandido
   const [atrasadosOpen, setAtrasadosOpen] = useState<Set<string>>(new Set());
   const [buscaDelay, setBuscaDelay] = useState("");
   const [atrasadosExp, setAtrasadosExp] = useState(false);
@@ -303,13 +355,11 @@ export default function DailyPage() {
   const [semanaExp, setSemanaExp] = useState(false);
   const CARD_LIMIT = 10;
 
-  // Debounce busca 300ms
   useEffect(() => {
     const t = setTimeout(() => setBuscaDelay(busca), 300);
     return () => clearTimeout(t);
   }, [busca]);
 
-  // Sync query data → local state
   useEffect(() => {
     if (rawData) {
       setClientes(dedupClientesByNome(rawData.clientes as Cliente[]));
@@ -317,12 +367,10 @@ export default function DailyPage() {
     }
   }, [rawData]);
 
-  // Redirect se não autenticado
   useEffect(() => {
     if (!userLoading && !user) router.push("/login");
   }, [user, userLoading, router]);
 
-  // ── Check toggle — atualiza Supabase + Sheets ──
   const handleCheckChange = useCallback(
     async (id: string, val: boolean) => {
       const tarefa = tarefas.find((t) => t.id === id);
@@ -333,7 +381,6 @@ export default function DailyPage() {
           ? "Atrasado"
           : "Não iniciado";
 
-      // Optimistic
       setTarefas((prev) =>
         prev.map((t) => (t.id === id ? { ...t, check_feito: val, status: newStatus } : t))
       );
@@ -355,7 +402,6 @@ export default function DailyPage() {
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro");
       } catch (err) {
-        // Revert
         setTarefas((prev) =>
           prev.map((t) => (t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t))
         );
@@ -365,7 +411,6 @@ export default function DailyPage() {
     [tarefas]
   );
 
-  // ── Sync ──
   async function handleSync() {
     setSyncing(true);
     try {
@@ -388,7 +433,6 @@ export default function DailyPage() {
     }
   }
 
-  // ── Mapa cliente por id ──
   const clienteMap = useMemo(() => {
     const m: Record<string, Cliente> = {};
     clientes.forEach((c) => {
@@ -397,15 +441,12 @@ export default function DailyPage() {
     return m;
   }, [clientes]);
 
-  // ── Helpers de status (declarados antes dos useMemo que os usam) ──
   const isAtivo = isStatusAtivo;
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
   const isAtrasado = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
 
-  // Normaliza string para comparação (remove acentos, lowercase)
   const normStr = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
-  // Ordem de prioridade: Atrasado(0) > Em andamento(1) > Não iniciado(2) > outros(3)
   const getPrioridade = (t: Tarefa): number => {
     if (isAtrasado(t)) return 0;
     if (t.status === "Em andamento") return 1;
@@ -413,11 +454,9 @@ export default function DailyPage() {
     return 3;
   };
 
-  // Filtro por quem está fazendo a tarefa
   const matchesResp = (t: TarefaComCliente): boolean =>
     filtroResp === "Todos" || (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
 
-  // ── Tarefas com cliente (deduplicadas por cliente_id+o_que+prazo) ──
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() => {
     const seen = new Set<string>();
     const result: TarefaComCliente[] = [];
@@ -432,7 +471,6 @@ export default function DailyPage() {
     return result;
   }, [tarefas, clienteMap]);
 
-  // ── Nome do usuário logado (para priorizar suas tarefas nos cards) ──
   const currentUserName = useMemo(() => {
     if (!user?.email) return null;
     const prefix = normStr(user.email.split("@")[0]);
@@ -443,7 +481,6 @@ export default function DailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, tarefasComCliente]);
 
-  // ── Opções de responsável (derivadas dos dados reais) ──
   const respOptions = useMemo(() => {
     const nomes = new Set<string>();
     tarefasComCliente.forEach((t) => {
@@ -452,7 +489,6 @@ export default function DailyPage() {
     return ["Todos", ...Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"))];
   }, [tarefasComCliente]);
 
-  // ── Atrasados agrupados por cliente ──
   const atrasados = useMemo(() => {
     const list = tarefasComCliente.filter((t) => isAtrasado(t) && matchesResp(t));
     const grupos: Record<string, { cliente: Cliente; tarefas: TarefaComCliente[] }> = {};
@@ -464,7 +500,6 @@ export default function DailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp]);
 
-  // ── Prioridades de hoje — usuário logado primeiro, depois por prioridade ──
   const prioHoje = useMemo(
     () =>
       tarefasComCliente
@@ -482,7 +517,6 @@ export default function DailyPage() {
     [tarefasComCliente, filtroResp, currentUserName]
   );
 
-  // ── Esta semana (hoje → +7 dias) agrupada por data, ordenada por prioridade ──
   const prioSemana = useMemo(() => {
     const list = tarefasComCliente.filter(
       (t) =>
@@ -494,7 +528,6 @@ export default function DailyPage() {
       if (!grupos[k]) grupos[k] = [];
       grupos[k].push(t);
     });
-    // Ordena tarefas dentro de cada dia: usuário logado primeiro, depois por prioridade
     const myNorm = currentUserName ? normStr(currentUserName) : null;
     Object.values(grupos).forEach((arr) =>
       arr.sort((a, b) => {
@@ -508,7 +541,6 @@ export default function DailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente, filtroResp, currentUserName]);
 
-  // ── Clientes com métricas (usa tarefasComCliente — já deduplicadas) ──
   const clientesComMetricas = useMemo<ClienteComMetricas[]>(
     () => {
       const q = buscaDelay.trim().toLowerCase();
@@ -527,7 +559,6 @@ export default function DailyPage() {
     [clientes, tarefasComCliente, buscaDelay]
   );
 
-  // ── Ranking: 5 piores scores (ativos) ──
   const ranking = useMemo(
     () =>
       clientesComMetricas
@@ -538,7 +569,6 @@ export default function DailyPage() {
     [clientesComMetricas]
   );
 
-  // ── Resumo por responsável (derivado dos dados reais — novos membros aparecem automaticamente) ──
   const resumoResponsavel = useMemo(() => {
     const nomes = new Set<string>();
     tarefasComCliente.forEach((t) => {
@@ -563,8 +593,6 @@ export default function DailyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tarefasComCliente]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   if (loading) return <PageLoading />;
 
   const today = new Date().toLocaleDateString("pt-BR", {
@@ -572,6 +600,9 @@ export default function DailyPage() {
     day: "2-digit",
     month: "long",
   });
+
+  const totalAtrasadas = atrasados.reduce((s, g) => s + g.tarefas.length, 0);
+  const totalSemana = prioSemana.reduce((s, [, l]) => s + l.length, 0);
 
   return (
     <div className="min-h-screen pb-24">
@@ -588,60 +619,62 @@ export default function DailyPage() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-10">
-        {/* ── Título + Filtro ── */}
+        {/* ── Título + Filtros ── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Daily Interativo</h1>
+            <h1 className="text-2xl font-bold text-brand-900">Daily Interativo</h1>
             <p className="text-sm text-muted-foreground mt-1 capitalize">{today}</p>
           </div>
 
-          {/* Busca por cliente */}
-          <div className="relative flex items-center">
-            <svg
-              className="absolute left-2.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar cliente..."
-              className="pl-8 pr-7 py-2 text-sm bg-input border border-border text-foreground rounded-lg placeholder-muted-foreground focus:outline-none focus:border-ring transition w-44"
-            />
-            {busca && (
-              <Button
-                onClick={() => setBusca("")}
-                className="absolute right-2 text-muted-foreground hover:text-foreground text-xs"
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Busca por cliente */}
+            <div className="relative flex items-center">
+              <svg
+                className="absolute left-2.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                <X className="w-3 h-3" />
-              </Button>
-            )}
-          </div>
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar cliente..."
+                className="pl-8 pr-7 py-2 text-sm bg-white border border-border text-foreground rounded-lg placeholder-muted-foreground focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition w-44"
+              />
+              {busca && (
+                <button
+                  onClick={() => setBusca("")}
+                  className="absolute right-2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
 
-          {/* Filtro por responsável */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Ver tarefas de:</span>
-            <div className="relative">
-              <select
-                value={filtroResp}
-                onChange={(e) => setFiltroResp(e.target.value)}
-                className="appearance-none bg-input border border-border text-sm text-foreground rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-ring focus:outline-none focus:border-ring transition"
-              >
-                {respOptions.map((resp) => (
-                  <option key={resp} value={resp}>
-                    {resp}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
-                ▼
-              </span>
+            {/* Filtro por responsável */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Ver de:</span>
+              <div className="relative">
+                <select
+                  value={filtroResp}
+                  onChange={(e) => setFiltroResp(e.target.value)}
+                  className="appearance-none bg-white border border-border text-sm text-foreground rounded-lg pl-3 pr-8 py-2 cursor-pointer hover:border-brand-400 focus:outline-none focus:border-brand-400 transition"
+                >
+                  {respOptions.map((resp) => (
+                    <option key={resp} value={resp}>
+                      {resp}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+                  ▼
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -651,18 +684,19 @@ export default function DailyPage() {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Situação do dia">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* ── Card Atrasados ── */}
+            {/* ── Atrasados ── */}
             <SituacaoCard
-              title={`⚠ Atrasados (${atrasados.reduce((s, g) => s + g.tarefas.length, 0)})`}
-              borderColor="border-red-200"
+              title="Atrasados"
+              count={totalAtrasadas}
+              accent="red"
               empty={atrasados.length === 0}
-              emptyMsg="Nenhum item atrasado"
+              emptyMsg="Nenhum item atrasado ✓"
               expanded={atrasadosExp}
               footer={
                 atrasados.length > CARD_LIMIT ? (
-                  <Button
+                  <button
                     onClick={() => setAtrasadosExp(!atrasadosExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-brand-700 transition"
                   >
                     {atrasadosExp ? (
                       <>
@@ -673,59 +707,64 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({atrasados.length} clientes)
                       </>
                     )}
-                  </Button>
+                  </button>
                 ) : undefined
               }
             >
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {(atrasadosExp ? atrasados : atrasados.slice(0, CARD_LIMIT)).map(
                   ({ cliente, tarefas: tList }) => {
                     const open = atrasadosOpen.has(cliente.id_cliente);
                     return (
                       <div key={cliente.id_cliente}>
-                        {/* Cabeçalho do grupo */}
-                        <Button
-                          className="w-full flex items-center justify-between py-2 text-left hover:text-foreground transition-colors"
-                          onClick={() =>
-                            setAtrasadosOpen((prev) => {
-                              const next = new Set(prev);
-                              open ? next.delete(cliente.id_cliente) : next.add(cliente.id_cliente);
-                              return next;
-                            })
-                          }
-                        >
+                        {/* Linha do cliente */}
+                        <div className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-red-50 transition-colors group">
                           <Link
                             href="/pipeline"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-sm font-medium text-red-600 hover:underline"
+                            className="text-sm font-semibold text-brand-800 hover:text-brand-600 hover:underline truncate flex-1 mr-2"
                           >
                             {cliente.nome_empresa}
                           </Link>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1.5 flex-shrink-0">
-                            <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">
+                          <button
+                            onClick={() =>
+                              setAtrasadosOpen((prev) => {
+                                const next = new Set(prev);
+                                open
+                                  ? next.delete(cliente.id_cliente)
+                                  : next.add(cliente.id_cliente);
+                                return next;
+                              })
+                            }
+                            className="flex items-center gap-1.5 flex-shrink-0"
+                          >
+                            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[22px] text-center">
                               {tList.length}
                             </span>
-                            <span>{open ? "▲" : "▼"}</span>
-                          </span>
-                        </Button>
+                            <span className="text-muted-foreground text-xs group-hover:text-foreground">
+                              {open ? "▲" : "▼"}
+                            </span>
+                          </button>
+                        </div>
 
                         {/* Tarefas expandidas */}
                         {open && (
-                          <div className="pl-3 border-l border-red-200 mb-2 space-y-1">
+                          <div className="pl-3 border-l-2 border-red-200 ml-2 mb-1.5 space-y-0.5">
                             {tList.map((t) => (
                               <div
                                 key={t.id}
-                                className="text-xs text-muted-foreground py-0.5 flex items-start gap-1.5"
+                                className="text-xs text-foreground py-0.5 flex items-start gap-1.5"
                               >
-                                <span className="text-red-600 mt-0.5 flex-shrink-0">•</span>
+                                <span className="text-red-400 mt-0.5 flex-shrink-0">•</span>
                                 <span>
                                   {t.o_que}
                                   {t.prazo && (
-                                    <span className="text-red-600 ml-1">
+                                    <span className="text-red-500 ml-1 font-medium">
                                       ({formatDate(t.prazo)})
                                     </span>
                                   )}
-                                  {t.quem && <span className="text-blue-600 ml-1">· {t.quem}</span>}
+                                  {t.quem && (
+                                    <span className="text-brand-500 ml-1">· {t.quem}</span>
+                                  )}
                                 </span>
                               </div>
                             ))}
@@ -738,18 +777,19 @@ export default function DailyPage() {
               </div>
             </SituacaoCard>
 
-            {/* ── Card Prioridades de Hoje ── */}
+            {/* ── Hoje ── */}
             <SituacaoCard
-              title={`Hoje (${prioHoje.length})`}
-              borderColor="border-amber-200"
+              title="Hoje"
+              count={prioHoje.length}
+              accent="amber"
               empty={prioHoje.length === 0}
-              emptyMsg="Nada para hoje"
+              emptyMsg="Nada para hoje ✓"
               expanded={hojeExp}
               footer={
                 prioHoje.length > CARD_LIMIT ? (
-                  <Button
+                  <button
                     onClick={() => setHojeExp(!hojeExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-brand-700 transition"
                   >
                     {hojeExp ? (
                       <>
@@ -760,7 +800,7 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({prioHoje.length} tarefas)
                       </>
                     )}
-                  </Button>
+                  </button>
                 ) : undefined
               }
             >
@@ -781,18 +821,19 @@ export default function DailyPage() {
               ))}
             </SituacaoCard>
 
-            {/* ── Card Esta Semana ── */}
+            {/* ── Esta Semana ── */}
             <SituacaoCard
-              title={`Esta semana (${prioSemana.reduce((s, [, l]) => s + l.length, 0)})`}
-              borderColor="border-blue-200"
+              title="Esta semana"
+              count={totalSemana}
+              accent="violet"
               empty={prioSemana.length === 0}
-              emptyMsg="Semana tranquila"
+              emptyMsg="Semana tranquila ✓"
               expanded={semanaExp}
               footer={
                 prioSemana.length > CARD_LIMIT ? (
-                  <Button
+                  <button
                     onClick={() => setSemanaExp(!semanaExp)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground transition"
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-brand-700 transition"
                   >
                     {semanaExp ? (
                       <>
@@ -803,25 +844,23 @@ export default function DailyPage() {
                         <span>▼</span> Ver todos ({prioSemana.length} dias)
                       </>
                     )}
-                  </Button>
+                  </button>
                 ) : undefined
               }
             >
               <div className="space-y-3">
                 {(semanaExp ? prioSemana : prioSemana.slice(0, CARD_LIMIT)).map(([data, tList]) => (
                   <div key={data}>
-                    <p className="text-xs text-blue-600 font-semibold mb-1 capitalize">
+                    <p className="text-xs text-brand-700 font-bold mb-1 capitalize flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-brand-400 inline-block" />
                       {formatDateFull(data)}
                     </p>
                     {tList.map((t) => (
-                      <div
-                        key={t.id}
-                        className="text-xs text-foreground py-0.5 flex items-start gap-1.5 pl-2"
-                      >
+                      <div key={t.id} className="text-xs py-0.5 flex items-start gap-1.5 pl-3">
                         <span
                           className={`mt-0.5 flex-shrink-0 ${
                             t.status === "Em andamento"
-                              ? "text-blue-500"
+                              ? "text-brand-400"
                               : t.status === "Atrasado"
                                 ? "text-red-500"
                                 : "text-muted-foreground"
@@ -832,8 +871,8 @@ export default function DailyPage() {
                         <span>
                           <span className="text-muted-foreground">{t.cliente.nome_empresa}</span>
                           {" — "}
-                          <span className="text-foreground">{t.o_que}</span>
-                          {t.quem && <span className="text-muted-foreground ml-1">· {t.quem}</span>}
+                          <span className="text-foreground font-medium">{t.o_que}</span>
+                          {t.quem && <span className="text-brand-500 ml-1">· {t.quem}</span>}
                         </span>
                       </div>
                     ))}
@@ -848,25 +887,25 @@ export default function DailyPage() {
         {/* SEÇÃO 2 — Ranking de saúde                                         */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <Section title="Clientes que precisam de atenção">
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
             {ranking.length === 0 ? (
               <p className="text-muted-foreground text-sm px-5 py-6">Nenhum cliente ativo.</p>
             ) : (
               ranking.map((c, i) => (
                 <div
                   key={c.id}
-                  className={`flex items-center gap-4 px-5 py-3.5 ${
+                  className={`flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-rose-50/40 ${
                     i !== 0 ? "border-t border-border" : ""
                   }`}
                 >
                   {/* Posição */}
-                  <span className="text-lg font-bold text-muted-foreground w-6 flex-shrink-0 text-center">
+                  <span className="text-base font-bold text-brand-200 w-6 flex-shrink-0 text-center">
                     {i + 1}
                   </span>
 
                   {/* Nome + ID */}
                   <div className="w-44 flex-shrink-0">
-                    <p className="font-semibold text-foreground text-sm leading-tight">
+                    <p className="font-semibold text-brand-900 text-sm leading-tight">
                       {c.nome_empresa}
                     </p>
                     <p className="text-xs text-muted-foreground">{c.id_cliente}</p>
@@ -885,18 +924,18 @@ export default function DailyPage() {
 
                   {/* Atrasadas */}
                   {c.atrasadas > 0 && (
-                    <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full flex-shrink-0">
+                    <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0">
                       {c.atrasadas} atrasada{c.atrasadas > 1 ? "s" : ""}
                     </span>
                   )}
 
                   {/* Botão ver tarefas */}
-                  <Button
+                  <button
                     onClick={() => setModalCliente(c)}
-                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition"
+                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition font-medium"
                   >
                     Ver tarefas
-                  </Button>
+                  </button>
                 </div>
               ))
             )}
@@ -911,44 +950,53 @@ export default function DailyPage() {
             {resumoResponsavel
               .filter(({ total }) => total > 0)
               .map(({ resp, total, finalizadas, atrasadas, score }) => (
-                <div key={resp} className="bg-card border border-border rounded-xl p-5 shadow-sm">
-                  {/* Nome */}
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="font-semibold text-foreground">{resp}</p>
-                    <span className="text-sm font-bold" style={{ color: getScoreColor(score) }}>
-                      {score}%
-                    </span>
-                  </div>
+                <div
+                  key={resp}
+                  className="bg-white border border-border rounded-xl overflow-hidden shadow-sm"
+                >
+                  {/* Faixa superior gradiente */}
+                  <div className="h-1.5 bg-gradient-to-r from-brand-400 via-mm-fuchsia to-mm-warm" />
+                  <div className="p-5">
+                    {/* Nome + Score */}
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="font-bold text-brand-900">{resp}</p>
+                      <span className="text-sm font-bold" style={{ color: getScoreColor(score) }}>
+                        {score}%
+                      </span>
+                    </div>
 
-                  {/* Métricas */}
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-foreground">{total}</p>
-                      <p className="text-xs text-muted-foreground">Total</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-green-600">{finalizadas}</p>
-                      <p className="text-xs text-muted-foreground">Finaliz.</p>
-                    </div>
-                    <div className="text-center">
-                      <p
-                        className={`text-lg font-bold ${atrasadas > 0 ? "text-red-600" : "text-muted-foreground"}`}
+                    {/* Métricas */}
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      <div className="text-center bg-background rounded-lg py-2">
+                        <p className="text-xl font-bold text-foreground">{total}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                      </div>
+                      <div className="text-center bg-green-50 rounded-lg py-2">
+                        <p className="text-xl font-bold text-green-600">{finalizadas}</p>
+                        <p className="text-xs text-muted-foreground">Feitas</p>
+                      </div>
+                      <div
+                        className={`text-center rounded-lg py-2 ${atrasadas > 0 ? "bg-red-50" : "bg-background"}`}
                       >
-                        {atrasadas}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Atrasadas</p>
+                        <p
+                          className={`text-xl font-bold ${atrasadas > 0 ? "text-red-600" : "text-muted-foreground"}`}
+                        >
+                          {atrasadas}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Atrasadas</p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Barra semanal */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs text-muted-foreground">Progresso geral</p>
-                      <p className="text-xs text-muted-foreground">
-                        {finalizadas}/{total}
-                      </p>
+                    {/* Barra */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs text-muted-foreground">Progresso</p>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {finalizadas}/{total}
+                        </p>
+                      </div>
+                      <ProgressBar score={score} height="h-2" />
                     </div>
-                    <ProgressBar score={score} height="h-1.5" />
                   </div>
                 </div>
               ))}
@@ -956,11 +1004,11 @@ export default function DailyPage() {
         </Section>
       </main>
 
-      {/* ── Botão flutuante ── */}
-      <Button
+      {/* ── Botão flutuante de sync ── */}
+      <button
         onClick={handleSync}
         disabled={syncing}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-card border border-border text-sm font-medium text-foreground hover:bg-accent shadow-xl transition disabled:opacity-50"
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3 rounded-full bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 shadow-xl shadow-brand-900/25 transition disabled:opacity-50"
       >
         {syncing ? (
           <>
@@ -973,7 +1021,7 @@ export default function DailyPage() {
             Atualizar dados
           </>
         )}
-      </Button>
+      </button>
     </div>
   );
 }
