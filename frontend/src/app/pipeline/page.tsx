@@ -377,28 +377,40 @@ function TabelaTarefas({
   );
 }
 
-// ─── Badge de resumo ──────────────────────────────────────────────────────────
+// ─── KPI Card ────────────────────────────────────────────────────────────────
 
-function SummaryBadge({
+function KpiCard({
   label,
   value,
-  color = "text-foreground",
-  alert = false,
+  variant = "neutral",
 }: {
   label: string;
-  value: number | string;
-  color?: string;
-  alert?: boolean;
+  value: number;
+  variant?: "neutral" | "danger" | "warning" | "muted";
 }) {
-  const hasAlert = alert && Number(value) > 0;
+  const isAlert = (variant === "danger" || variant === "warning") && value > 0;
+  const bgBorder = {
+    neutral: "bg-white border-border",
+    danger: isAlert ? "bg-red-50 border-red-200" : "bg-white border-border",
+    warning: isAlert ? "bg-amber-50 border-amber-200" : "bg-white border-border",
+    muted: "bg-white border-border",
+  }[variant];
+  const numColor = {
+    neutral: "text-brand-900",
+    danger: isAlert ? "text-red-700" : "text-foreground",
+    warning: isAlert ? "text-amber-700" : "text-foreground",
+    muted: "text-muted-foreground",
+  }[variant];
+  const labelColor = {
+    neutral: "text-muted-foreground",
+    danger: isAlert ? "text-red-500" : "text-muted-foreground",
+    warning: isAlert ? "text-amber-600" : "text-muted-foreground",
+    muted: "text-muted-foreground",
+  }[variant];
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 shadow-sm border transition ${
-        hasAlert ? "bg-red-50 border-red-200 shadow-red-100" : "bg-white border-border"
-      }`}
-    >
-      <span className={`text-base font-bold ${color}`}>{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className={`flex flex-col rounded-xl border px-5 py-4 shadow-sm transition ${bgBorder}`}>
+      <span className={`text-3xl font-bold leading-none ${numColor}`}>{value}</span>
+      <span className={`text-xs mt-2 font-medium ${labelColor}`}>{label}</span>
     </div>
   );
 }
@@ -830,94 +842,76 @@ export default function PipelinePage() {
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* ── Cabeçalho ── */}
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold mb-3 text-brand-900">Pipeline de clientes</h1>
-            <div className="flex flex-wrap gap-2">
-              <SummaryBadge label="clientes ativos" value={metrics.ativos} />
-              <SummaryBadge
-                label="tarefas atrasadas"
-                value={metrics.atrasadasTotal}
-                color={metrics.atrasadasTotal > 0 ? "text-red-600" : "text-foreground"}
-                alert
-              />
-              <SummaryBadge
-                label="em risco"
-                value={metrics.emRisco}
-                color={metrics.emRisco > 0 ? "text-red-600" : "text-foreground"}
-                alert
-              />
-              <SummaryBadge
-                label="pausados"
-                value={metrics.pausados}
-                color="text-muted-foreground"
-              />
-              <SummaryBadge
-                label="encerrados"
-                value={metrics.encerrados}
-                color="text-muted-foreground"
-              />
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold text-brand-900">Pipeline de clientes</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sincronizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
+                  </>
+                )}
+              </button>
+
+              {role === "admin" && (
+                <>
+                  <button
+                    onClick={handleSyncGaps}
+                    disabled={syncingGaps || syncing || cleaningGaps}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
+                  >
+                    {syncingGaps ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Criando gaps...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" /> Corrigir Gaps
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
+                      if (id) handleCleanGaps(id.trim().toUpperCase());
+                    }}
+                    disabled={cleaningGaps || syncing || syncingGaps}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 border border-red-300 text-sm text-red-700 hover:bg-red-200 transition disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {cleaningGaps ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Limpando...
+                      </>
+                    ) : (
+                      <>
+                        <X className="w-4 h-4" /> Limpar Gaps
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-700 text-white text-sm font-medium hover:bg-brand-800 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sincronizando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" /> Sincronizar Sheets
-                </>
-              )}
-            </button>
-
-            {role === "admin" && (
-              <>
-                <button
-                  onClick={handleSyncGaps}
-                  disabled={syncingGaps || syncing || cleaningGaps}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
-                >
-                  {syncingGaps ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Criando gaps...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" /> Corrigir Gaps
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
-                    if (id) handleCleanGaps(id.trim().toUpperCase());
-                  }}
-                  disabled={cleaningGaps || syncing || syncingGaps}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 border border-red-300 text-sm text-red-700 hover:bg-red-200 transition disabled:opacity-50 whitespace-nowrap"
-                >
-                  {cleaningGaps ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Limpando...
-                    </>
-                  ) : (
-                    <>
-                      <X className="w-4 h-4" /> Limpar Gaps
-                    </>
-                  )}
-                </button>
-              </>
-            )}
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <KpiCard label="Clientes ativos" value={metrics.ativos} variant="neutral" />
+            <KpiCard label="Tarefas atrasadas" value={metrics.atrasadasTotal} variant="danger" />
+            <KpiCard label="Em risco" value={metrics.emRisco} variant="danger" />
+            <KpiCard label="Pausados" value={metrics.pausados} variant="warning" />
           </div>
         </div>
 
@@ -1153,6 +1147,85 @@ export default function PipelinePage() {
                                 </span>
                               </p>
                             )}
+
+                            {/* ── Tarefas atrasadas ── */}
+                            {(() => {
+                              const hoje2 = new Date().toISOString().split("T")[0];
+                              const atrasadasLista = c.tarefas.filter(
+                                (t) =>
+                                  !t.check_feito &&
+                                  t.status !== "Finalizado" &&
+                                  t.status !== "Cancelado" &&
+                                  (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje2))
+                              );
+                              return (
+                                <div
+                                  className={`mb-3 rounded-xl border p-3 ${
+                                    atrasadasLista.length === 0
+                                      ? "bg-green-50 border-green-200"
+                                      : "bg-red-50 border-red-200"
+                                  }`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <span
+                                      className={`text-xs font-bold uppercase tracking-wider ${
+                                        atrasadasLista.length === 0
+                                          ? "text-green-700"
+                                          : "text-red-700"
+                                      }`}
+                                    >
+                                      Tarefas Atrasadas
+                                    </span>
+                                    {atrasadasLista.length > 0 && (
+                                      <span className="text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold leading-none">
+                                        {atrasadasLista.length}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {atrasadasLista.length === 0 ? (
+                                    <p className="text-xs text-green-600 flex items-center gap-1">
+                                      <span>✓</span> Nenhuma tarefa atrasada
+                                    </p>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {atrasadasLista.map((t) => {
+                                        const days = t.prazo
+                                          ? Math.floor(
+                                              (Date.now() -
+                                                new Date(t.prazo + "T00:00:00").getTime()) /
+                                                86400000
+                                            )
+                                          : 0;
+                                        return (
+                                          <div
+                                            key={t.id}
+                                            className="flex items-center justify-between gap-2 text-xs"
+                                          >
+                                            <span className="text-red-800 font-medium truncate flex-1">
+                                              {t.o_que}
+                                            </span>
+                                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                              {t.prazo && (
+                                                <span className="text-red-600">
+                                                  {formatDate(t.prazo)}
+                                                </span>
+                                              )}
+                                              {days > 0 && (
+                                                <span className="bg-red-200 text-red-800 rounded-full px-2 py-0.5 font-bold">
+                                                  {days}d
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             <TabelaTarefas
                               tarefas={
                                 mostrarFinalizadasIds.has(c.id)
