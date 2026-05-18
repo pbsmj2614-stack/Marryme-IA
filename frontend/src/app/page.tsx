@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import PrestadorCard from "@/components/PrestadorCard";
 import AtualizarTodosButton from "@/components/AtualizarTodosButton";
 import SearchInput from "@/components/SearchInput";
+import PainelDrillDown from "@/components/PainelDrillDown";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { Button } from "@/components/ui/button";
 
@@ -82,6 +83,19 @@ export default async function DashboardPage({
   // Apenas ativos (exclui Pausado/Churn) — inativos só aparecem na Pipeline
   const listaAtiva = lista.filter(isAtivo);
 
+  // Dados para o painel de drill-down (health score por prestador ativo)
+  const drillDownData = listaAtiva.map((p) => {
+    const ultimoRelatorio = [...(p.relatorios_campanha ?? [])].sort(
+      (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()
+    )[0];
+    return {
+      id: p.id,
+      nome: p.nome_artistico,
+      categoria: p.categoria,
+      healthScore: ultimoRelatorio?.health_score ?? null,
+    };
+  });
+
   const contagens = {
     todos: listaAtiva.length,
     validados: listaAtiva.filter((p) => getStatus(p).aprovados > 0).length,
@@ -122,6 +136,9 @@ export default async function DashboardPage({
             </Button>
           </div>
         </div>
+
+        {/* Painel de drill-down — health score por prestador */}
+        <PainelDrillDown prestadores={drillDownData} />
 
         {/* Abas */}
         <div className="flex gap-1 border-b border-gray-200 mb-6">
