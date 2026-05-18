@@ -3,10 +3,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { Prestador, Roteiro } from "@/lib/types";
 import Header from "@/components/Header";
-import PrestadorCard from "@/components/PrestadorCard";
 import AtualizarTodosButton from "@/components/AtualizarTodosButton";
 import SearchInput from "@/components/SearchInput";
 import PainelDrillDown from "@/components/PainelDrillDown";
+import PrestadoresGrid from "@/components/PrestadoresGrid";
+import type { PrestadorCardData } from "@/components/PrestadoresGrid";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { Button } from "@/components/ui/button";
 
@@ -152,13 +153,15 @@ export default async function DashboardPage({
                 className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition whitespace-nowrap ${
                   ativo
                     ? "border-brand-600 text-brand-700"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    : `border-transparent text-gray-500 hover:text-gray-700 ${count === 0 ? "opacity-50" : ""}`
                 }`}
               >
                 {label}
                 <span
                   className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full ${
-                    ativo ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
+                    ativo
+                      ? "bg-brand-100 text-brand-700 font-semibold"
+                      : "bg-gray-100 text-gray-500"
                   }`}
                 >
                   {count}
@@ -168,63 +171,39 @@ export default async function DashboardPage({
           })}
         </div>
 
-        {filtrada.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <p className="text-lg">Nenhum prestador nesta categoria.</p>
-            {tab === "todos" && (
-              <Link
-                href="/novo"
-                className="mt-3 inline-block text-brand-600 hover:underline text-sm"
-              >
-                Adicionar o primeiro
-              </Link>
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtrada.map((p) => {
-              const { total, aprovados } = getStatus(p);
-              const roteirosOrdenados = [...(p.roteiros ?? [])].sort(
-                (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-              );
-              const ultimoRoteiro = roteirosOrdenados[0];
-
-              const nivelMercado = ultimoRoteiro?.analise_estrategica?.nivel_mercado ?? null;
-
-              const ultimaEntrevista = [...(p.entrevistas ?? [])].sort(
-                (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
-              )[0];
-              const plano = ultimaEntrevista?.dados_json?.plano ?? null;
-              const faseProjeto = ultimaEntrevista?.dados_json?.fase_projeto ?? null;
-              const mmId = ultimaEntrevista?.dados_json?.mm_id ?? null;
-
-              const ultimoRelatorio = [...(p.relatorios_campanha ?? [])].sort(
-                (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()
-              )[0];
-              const healthScore = ultimoRelatorio?.health_score ?? null;
-
-              return (
-                <PrestadorCard
-                  key={p.id}
-                  prestadorId={p.id}
-                  nome={p.nome_artistico}
-                  categoria={p.categoria}
-                  cidadeBase={p.cidade_base}
-                  whatsapp={p.whatsapp}
-                  nivelMercado={nivelMercado}
-                  plano={plano}
-                  faseProjeto={faseProjeto}
-                  mmId={mmId}
-                  total={total}
-                  aprovados={aprovados}
-                  ultimoRoteiroId={ultimoRoteiro?.id}
-                  ultimoRoteiroAprovado={ultimoRoteiro?.aprovado}
-                  healthScore={healthScore}
-                />
-              );
-            })}
-          </div>
-        )}
+        <PrestadoresGrid
+          prestadores={filtrada.map((p): PrestadorCardData => {
+            const { total, aprovados } = getStatus(p);
+            const roteirosOrdenados = [...(p.roteiros ?? [])].sort(
+              (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+            );
+            const ultimoRoteiro = roteirosOrdenados[0];
+            const ultimaEntrevista = [...(p.entrevistas ?? [])].sort(
+              (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
+            )[0];
+            const ultimoRelatorio = [...(p.relatorios_campanha ?? [])].sort(
+              (a, b) => new Date(b.gerado_em).getTime() - new Date(a.gerado_em).getTime()
+            )[0];
+            return {
+              prestadorId: p.id,
+              nome: p.nome_artistico,
+              categoria: p.categoria,
+              cidadeBase: p.cidade_base,
+              whatsapp: p.whatsapp,
+              nivelMercado: ultimoRoteiro?.analise_estrategica?.nivel_mercado ?? null,
+              plano: ultimaEntrevista?.dados_json?.plano ?? null,
+              faseProjeto: ultimaEntrevista?.dados_json?.fase_projeto ?? null,
+              mmId: ultimaEntrevista?.dados_json?.mm_id ?? null,
+              total,
+              aprovados,
+              ultimoRoteiroId: ultimoRoteiro?.id,
+              ultimoRoteiroAprovado: ultimoRoteiro?.aprovado,
+              healthScore: ultimoRelatorio?.health_score ?? null,
+            };
+          })}
+          searchQuery={q}
+          tab={tab}
+        />
       </main>
     </div>
   );

@@ -2,29 +2,44 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Loader2, MoreVertical, Check, Pencil, Copy, Trash2 } from "lucide-react";
+import {
+  Loader2,
+  MoreVertical,
+  Check,
+  Pencil,
+  Copy,
+  Trash2,
+  LayoutDashboard,
+  Phone,
+  ArrowRight,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import ExportarButton from "@/components/ExportarButton";
 import { ConfirmDialog } from "@/components/ui";
-import { Button } from "@/components/ui/button";
 import type { Categoria } from "@/lib/types";
 import { formatarTelefone } from "@/lib/utils";
+// Destaca termo de busca no texto
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
 
-const FASES = [
-  "Onboarding",
-  "Planejamento de Metas",
-  "Voo de Cruzeiro",
-  "Renovação",
-  "Pausado",
-  "Churn",
-];
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
 const PLANO_COLORS: Record<string, string> = {
   essencial: "bg-pink-50 text-pink-700 border-pink-100",
   growth: "bg-violet-50 text-violet-700 border-violet-100",
   enterprise: "bg-amber-50 text-amber-700 border-amber-100",
-  // legado — exibe mas não aparece nos novos cadastros
   premium: "bg-purple-50 text-purple-700 border-purple-100",
   trial: "bg-gray-100 text-gray-500 border-gray-200",
 };
@@ -37,15 +52,55 @@ const PLANO_LABEL: Record<string, string> = {
   trial: "Trial",
 };
 
-// Cores da borda + texto do select de fase por etapa
-const FASE_COLORS: Record<string, string> = {
-  Onboarding: "border-green-400 text-green-700",
-  "Planejamento de Metas": "border-sky-400 text-sky-700",
-  "Voo de Cruzeiro": "border-violet-400 text-violet-700",
-  Renovação: "border-amber-400 text-amber-700",
-  Pausado: "border-pink-400 text-pink-700",
-  Churn: "border-zinc-500 text-zinc-500",
+const FASE_TEXT_COLORS: Record<string, string> = {
+  Onboarding: "text-green-700",
+  "Planejamento de Metas": "text-sky-700",
+  "Voo de Cruzeiro": "text-violet-700",
+  Renovação: "text-amber-700",
+  Pausado: "text-pink-600",
+  Churn: "text-zinc-500",
 };
+
+const CATEGORIA_LABEL: Record<string, string> = {
+  musico: "Músico",
+  fotografo: "Fotógrafo",
+  celebrante: "Celebrante",
+  dj: "DJ",
+  outro: "Outro",
+};
+
+// ─── Health Score pill ────────────────────────────────────────────────────────
+
+function HsPill({ score }: { score: number | null | undefined }) {
+  if (score === null || score === undefined) {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-400 border-gray-200">
+        Sem dados
+      </span>
+    );
+  }
+  if (score >= 70) {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-green-50 text-green-700 border-green-200">
+        HS {score} · Saudável
+      </span>
+    );
+  }
+  if (score >= 50) {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+        HS {score} · Em atenção
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-red-50 text-red-600 border-red-200">
+      HS {score} · Em risco
+    </span>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
   prestadorId: string;
@@ -62,15 +117,11 @@ interface Props {
   ultimoRoteiroId?: string;
   ultimoRoteiroAprovado?: boolean;
   healthScore?: number | null;
+  highlightQuery?: string;
+  onOpenModal?: () => void;
 }
 
-const CATEGORIA_LABEL: Record<string, string> = {
-  musico: "Músico",
-  fotografo: "Fotógrafo",
-  celebrante: "Celebrante",
-  dj: "DJ",
-  outro: "Outro",
-};
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function PrestadorCard({
   prestadorId,
@@ -87,23 +138,20 @@ export default function PrestadorCard({
   ultimoRoteiroId,
   ultimoRoteiroAprovado,
   healthScore,
+  highlightQuery = "",
+  onOpenModal,
 }: Props) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loadingAcao, setLoadingAcao] = useState<string | null>(null);
-  const [fase, setFase] = useState(faseProjeto ?? "Onboarding");
-  const [savingFase, setSavingFase] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   type DialogState = { type: "none" } | { type: "rename" } | { type: "delete" };
   const [dialog, setDialog] = useState<DialogState>({ type: "none" });
 
   const temRoteiro = total > 0;
-
-  // Extrai só a primeira cidade (antes de " (", " -" ou ",")
   const cidadeCurta = cidadeBase ? cidadeBase.split(/\s*[\(\-,]/)[0].trim() : null;
-
-  // Extrai só o resumo do nível (antes do primeiro ".", "," ou " com")
   const nivelCurto = nivelMercado ? nivelMercado.split(/[.,]|\s+com\s/)[0].trim() : null;
 
   useEffect(() => {
@@ -115,10 +163,6 @@ export default function PrestadorCard({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  function navegarParaPrestador() {
-    router.push(`/prestador/${prestadorId}`);
-  }
 
   async function handleAprovar() {
     if (!ultimoRoteiroId) return;
@@ -155,13 +199,11 @@ export default function PrestadorCard({
     setMenuOpen(false);
     setLoadingAcao("duplicar");
     const supabase = createClient();
-
     const { data: prestador } = await supabase
       .from("prestadores")
       .select("*")
       .eq("id", prestadorId)
       .single();
-
     const { data: entrevista } = await supabase
       .from("entrevistas")
       .select("dados_json")
@@ -169,12 +211,10 @@ export default function PrestadorCard({
       .order("criado_em", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (!prestador) {
       setLoadingAcao(null);
       return;
     }
-
     const { data: novo } = await supabase
       .from("prestadores")
       .insert({
@@ -187,19 +227,15 @@ export default function PrestadorCard({
       })
       .select()
       .single();
-
     if (!novo) {
       setLoadingAcao(null);
       return;
     }
-
     if (entrevista?.dados_json) {
-      await supabase.from("entrevistas").insert({
-        prestador_id: novo.id,
-        dados_json: entrevista.dados_json,
-      });
+      await supabase
+        .from("entrevistas")
+        .insert({ prestador_id: novo.id, dados_json: entrevista.dados_json });
     }
-
     router.push(`/prestador/${novo.id}`);
   }
 
@@ -217,39 +253,27 @@ export default function PrestadorCard({
     setLoadingAcao(null);
   }
 
-  const carregando = loadingAcao !== null;
-
-  async function handleFaseChange(novaFase: string) {
-    setFase(novaFase);
-    setSavingFase(true);
-    const supabase = createClient();
-    // Busca última entrevista e atualiza dados_json.fase_projeto
-    const { data: ent } = await supabase
-      .from("entrevistas")
-      .select("id, dados_json")
-      .eq("prestador_id", prestadorId)
-      .order("criado_em", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (ent) {
-      await supabase
-        .from("entrevistas")
-        .update({ dados_json: { ...(ent.dados_json as object), fase_projeto: novaFase } })
-        .eq("id", ent.id);
-    }
-    setSavingFase(false);
-    router.refresh();
+  function handleCopiarWhatsApp() {
+    if (!whatsapp) return;
+    setMenuOpen(false);
+    navigator.clipboard.writeText(whatsapp).then(() => {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    });
   }
+
+  const carregando = loadingAcao !== null;
+  const faseColor = FASE_TEXT_COLORS[faseProjeto ?? "Onboarding"] ?? "text-gray-500";
 
   return (
     <div
       className={`relative bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md hover:border-brand-300 transition group cursor-pointer ${carregando ? "opacity-60 pointer-events-none" : ""}`}
-      onClick={navegarParaPrestador}
+      onClick={() => (onOpenModal ? onOpenModal() : router.push(`/prestador/${prestadorId}`))}
     >
-      {/* Linha 1: nome + badge status */}
+      {/* Linha 1: nome + badge status roteiro */}
       <div className="flex items-start justify-between gap-2 pr-6">
         <h3 className="font-semibold text-gray-900 group-hover:text-brand-700 transition leading-snug">
-          {nome}
+          <HighlightText text={nome} query={highlightQuery} />
         </h3>
         <span
           className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
@@ -268,7 +292,7 @@ export default function PrestadorCard({
         </span>
       </div>
 
-      {/* Linha 2: tags de tipo, plano, classificação e mmId */}
+      {/* Linha 2: categoria, plano, nível, mmId */}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span className="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full font-medium">
           {CATEGORIA_LABEL[categoria] ?? categoria}
@@ -297,28 +321,13 @@ export default function PrestadorCard({
         )}
       </div>
 
-      {/* Fase do projeto — sempre editável inline, cor muda por etapa */}
-      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <span className="text-xs text-gray-400 shrink-0">Fase:</span>
-        <div className="relative">
-          <select
-            value={fase}
-            onChange={(e) => handleFaseChange(e.target.value)}
-            disabled={savingFase || carregando}
-            className={`text-xs bg-transparent border rounded-md pl-2 pr-5 py-0.5 appearance-none cursor-pointer focus:outline-none transition disabled:opacity-50 font-medium ${FASE_COLORS[fase] ?? "border-gray-200 text-gray-600"}`}
-          >
-            {FASES.map((f) => (
-              <option key={f}>{f}</option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 text-[9px]">
-            ▼
-          </span>
-        </div>
-        {savingFase && <Loader2 className="animate-spin h-3 w-3 text-brand-500 shrink-0" />}
+      {/* Fase como texto simples (editável só no modal) */}
+      <div className="mt-2">
+        <span className="text-xs text-gray-400">Fase: </span>
+        <span className={`text-xs font-medium ${faseColor}`}>{faseProjeto ?? "Onboarding"}</span>
       </div>
 
-      {/* Linha 3: telefone e cidade */}
+      {/* Contatos */}
       <div className="mt-3 space-y-1.5">
         {whatsapp && (
           <div className="flex items-center gap-1.5 text-sm text-gray-600">
@@ -359,97 +368,136 @@ export default function PrestadorCard({
         )}
       </div>
 
-      {/* Linha 4: contagem + health score + botão download */}
+      {/* Footer: roteiros + health score + export */}
       <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs text-gray-400 truncate">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <span className="text-xs text-gray-400 shrink-0">
             {total === 0 ? "Sem roteiro" : `${total} roteiro${total !== 1 ? "s" : ""}`}
           </span>
-          {healthScore !== null && healthScore !== undefined && (
-            <Link
-              href={`/prestador/${prestadorId}?tab=campanha#campanha`}
-              onClick={(e) => e.stopPropagation()}
-              className={`shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full border transition hover:opacity-80 ${
-                healthScore >= 70
-                  ? "bg-green-50 text-green-700 border-green-200"
-                  : healthScore >= 40
-                    ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                    : "bg-red-50 text-red-600 border-red-200"
-              }`}
-              title="Health Score Meta Ads"
-            >
-              HS {healthScore}
-            </Link>
-          )}
+          <span onClick={(e) => e.stopPropagation()}>
+            <HsPill score={healthScore} />
+          </span>
         </div>
         {ultimoRoteiroAprovado && ultimoRoteiroId && (
-          <ExportarButton
-            tipo="completo"
-            variant="icon"
-            prestador={{ nome_artistico: nome, categoria: categoria as Categoria }}
-            roteiroId={ultimoRoteiroId}
-          />
+          <span onClick={(e) => e.stopPropagation()}>
+            <ExportarButton
+              tipo="completo"
+              variant="icon"
+              prestador={{ nome_artistico: nome, categoria: categoria as Categoria }}
+              roteiroId={ultimoRoteiroId}
+            />
+          </span>
         )}
       </div>
 
+      {/* Feedback de cópia */}
+      {copyFeedback && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 bg-brand-800 text-white text-xs px-3 py-1 rounded-full shadow whitespace-nowrap">
+          WhatsApp copiado!
+        </div>
+      )}
+
       {/* Botão 3 pontos */}
       <div ref={menuRef} className="absolute top-3 right-3" onClick={(e) => e.stopPropagation()}>
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="h-7 w-7 text-gray-400 hover:text-gray-600"
+          className="h-7 w-7 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
           title="Opções"
         >
           <MoreVertical className="w-4 h-4" />
-        </Button>
+        </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-44">
-            {/* Aprovar */}
-            <Button
-              variant="ghost"
-              onClick={handleAprovar}
-              disabled={!ultimoRoteiroId}
-              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50 disabled:opacity-40"
-            >
-              <Check className="w-4 h-4 text-green-500" />
-              <span className="text-gray-700">
-                {ultimoRoteiroAprovado ? "Desaprovar" : "Aprovar"}
-              </span>
-            </Button>
+          <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-48">
+            {/* Ver dashboard */}
+            {onOpenModal && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenModal();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-brand-50 transition rounded-none"
+              >
+                <LayoutDashboard className="w-4 h-4 text-brand-500" />
+                Ver dashboard
+              </button>
+            )}
 
-            {/* Renomear */}
-            <Button
-              variant="ghost"
-              onClick={handleRenomear}
-              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50"
+            {/* Editar cadastro */}
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/prestador/${prestadorId}/editar`);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
             >
               <Pencil className="w-4 h-4 text-blue-500" />
-              <span className="text-gray-700">Renomear</span>
-            </Button>
+              Editar cadastro
+            </button>
 
-            {/* Duplicar */}
-            <Button
-              variant="ghost"
-              onClick={handleDuplicar}
-              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-gray-50"
+            {/* Ver no pipeline */}
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push("/pipeline");
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+            >
+              <ArrowRight className="w-4 h-4 text-violet-500" />
+              Ver no pipeline
+            </button>
+
+            {/* Copiar WhatsApp */}
+            {whatsapp && (
+              <button
+                onClick={handleCopiarWhatsApp}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+              >
+                <Phone className="w-4 h-4 text-green-500" />
+                Copiar WhatsApp
+              </button>
+            )}
+
+            <div className="my-1 border-t border-gray-100" />
+
+            {/* Aprovar roteiro */}
+            <button
+              onClick={handleAprovar}
+              disabled={!ultimoRoteiroId}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-40"
+            >
+              <Check className="w-4 h-4 text-green-500" />
+              {ultimoRoteiroAprovado ? "Desaprovar roteiro" : "Aprovar roteiro"}
+            </button>
+
+            {/* Renomear */}
+            <button
+              onClick={handleRenomear}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
             >
               <Copy className="w-4 h-4 text-brand-500" />
-              <span className="text-gray-700">Duplicar</span>
-            </Button>
+              Renomear
+            </button>
+
+            {/* Duplicar */}
+            <button
+              onClick={handleDuplicar}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+            >
+              <Copy className="w-4 h-4 text-brand-500" />
+              Duplicar
+            </button>
 
             <div className="my-1 border-t border-gray-100" />
 
             {/* Excluir */}
-            <Button
-              variant="ghost"
+            <button
               onClick={handleExcluir}
-              className="w-full justify-start gap-2.5 px-3 py-2 h-auto text-sm font-normal rounded-none hover:bg-red-50"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-red-50 transition"
             >
               <Trash2 className="w-4 h-4 text-red-500" />
               <span className="text-red-600 font-medium">Excluir</span>
-            </Button>
+            </button>
           </div>
         )}
       </div>
