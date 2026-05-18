@@ -84,6 +84,13 @@ const FILTROS: FiltroStatus[] = [
 ];
 const RESPONSAVEIS = ["Todos", ...RESPONSAVEIS_BASE] as const;
 
+const FASES_ATIVAS = [
+  "Onboarding",
+  "Planejamento de Metas",
+  "Voo de Cruzeiro",
+  "Renovação",
+] as const;
+
 // ─── Status badges ────────────────────────────────────────────────────────────
 
 function ClienteStatusBadge({
@@ -141,9 +148,21 @@ function TarefaStatusBadge({ status }: { status: string }) {
 
 // ─── Progresso bar ────────────────────────────────────────────────────────────
 
-function ProgressBar({ score }: { score: number }) {
+function ProgressBar({
+  score,
+  finalizadas,
+  total,
+}: {
+  score: number;
+  finalizadas?: number;
+  total?: number;
+}) {
+  const tooltip =
+    finalizadas !== undefined && total !== undefined
+      ? `${finalizadas} de ${total} tarefas concluídas (${score}%)`
+      : `${score}%`;
   return (
-    <div className="flex items-center gap-2 min-w-[130px]">
+    <div className="flex items-center gap-2 min-w-[130px]" title={tooltip}>
       <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
@@ -747,6 +766,26 @@ export default function PipelinePage() {
     }
   }
 
+  async function handleAvancarFase(idCliente: string, novaFase: string) {
+    setClientes((prev) =>
+      prev.map((c) => (c.id_cliente === idCliente ? { ...c, fase_projeto: novaFase } : c))
+    );
+    try {
+      const res = await fetch("/api/sheets/update-cliente-fase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_cliente: idCliente, fase_projeto: novaFase }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar fase");
+      toast.success(`Etapa avançada: ${novaFase}`);
+    } catch (err) {
+      // Reverte em caso de erro
+      await invalidatePipeline();
+      toast.error(err instanceof Error ? err.message : "Erro ao avançar etapa");
+    }
+  }
+
   async function handleAddTarefa(idCliente: string) {
     if (!addTarefaForm.o_que.trim()) return;
     setSavingTarefa(true);
@@ -1069,14 +1108,28 @@ export default function PipelinePage() {
                         </td>
                         {/* Progresso */}
                         <td className="px-4 py-3">
-                          <ProgressBar score={c.score} />
+                          <ProgressBar
+                            score={c.score}
+                            finalizadas={c.finalizadas}
+                            total={c.total_tarefas}
+                          />
                         </td>
                         {/* Score */}
-                        <td
-                          className="px-4 py-3 text-center font-bold text-lg"
-                          style={{ color: getScoreColor(c.score) }}
-                        >
-                          {c.score}
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className="font-bold text-lg leading-none"
+                            style={{ color: getScoreColor(c.score) }}
+                          >
+                            {c.score}
+                          </span>
+                          {c.status === "Ativo" && (
+                            <p
+                              className="text-[10px] font-semibold mt-0.5 leading-none"
+                              style={{ color: getScoreColor(c.score) }}
+                            >
+                              {c.statusScore}
+                            </p>
+                          )}
                         </td>
                         {/* Status */}
                         <td className="px-4 py-3">
@@ -1332,6 +1385,67 @@ export default function PipelinePage() {
                                     </button>
                                   </div>
                                 </div>
+                              </div>
+                            )}
+
+                            {/* ── Funil de etapas ── */}
+                            {c.status === "Ativo" && (
+                              <div
+                                className="mt-3 p-3 rounded-xl bg-brand-50/60 border border-brand-100"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <p className="text-xs font-bold text-brand-800 uppercase tracking-wider mb-2">
+                                  Etapa do Projeto
+                                </p>
+                                <div className="flex items-center gap-1 flex-wrap mb-2.5">
+                                  {FASES_ATIVAS.map((fase, idx) => {
+                                    const faseIdx = FASES_ATIVAS.indexOf(
+                                      (c.fase_projeto as (typeof FASES_ATIVAS)[number]) ??
+                                        "Onboarding"
+                                    );
+                                    const isCurrent = c.fase_projeto === fase;
+                                    const isPast = idx < faseIdx;
+                                    return (
+                                      <React.Fragment key={fase}>
+                                        <span
+                                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition ${
+                                            isCurrent
+                                              ? "bg-brand-700 text-white shadow-sm"
+                                              : isPast
+                                                ? "bg-brand-200 text-brand-700 line-through opacity-60"
+                                                : "bg-white border border-border text-muted-foreground"
+                                          }`}
+                                        >
+                                          {fase}
+                                        </span>
+                                        {idx < FASES_ATIVAS.length - 1 && (
+                                          <span className="text-muted-foreground text-xs">→</span>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </div>
+                                {(() => {
+                                  const faseIdx = FASES_ATIVAS.indexOf(
+                                    c.fase_projeto as (typeof FASES_ATIVAS)[number]
+                                  );
+                                  const proxFase =
+                                    faseIdx >= 0 && faseIdx < FASES_ATIVAS.length - 1
+                                      ? FASES_ATIVAS[faseIdx + 1]
+                                      : null;
+                                  return proxFase ? (
+                                    <button
+                                      onClick={() => handleAvancarFase(c.id_cliente, proxFase)}
+                                      className="text-xs px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition shadow-sm"
+                                    >
+                                      Avançar para {proxFase} →
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                      <span>✓</span> Etapa final atingida
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             )}
 
