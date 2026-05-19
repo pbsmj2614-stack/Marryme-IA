@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { useRole } from "@/hooks/useRole";
 import type { User } from "@supabase/supabase-js";
@@ -25,13 +25,6 @@ const ROLE_COLOR: Record<string, string> = {
   viewer: "bg-white/5 text-white/40",
 };
 
-const NAV_LINKS = [
-  { href: "/", label: "Prestadores" },
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/pipeline", label: "Pipeline" },
-  { href: "/daily", label: "Daily" },
-];
-
 function UserAvatar({ email }: { email: string }) {
   const initials = email.charAt(0).toUpperCase();
   return (
@@ -46,7 +39,6 @@ function UserAvatar({ email }: { email: string }) {
 
 export default function Header({ user }: HeaderProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const { role } = useRole();
 
   async function handleLogout() {
@@ -58,77 +50,44 @@ export default function Header({ user }: HeaderProps) {
 
   return (
     <header className="bg-brand-800 border-b border-brand-700 sticky top-0 z-10">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="font-bold text-white text-lg tracking-tight">
-          MarryMe
-        </Link>
-
-        <nav className="flex items-center gap-1">
-          {NAV_LINKS.map(({ href, label }) => {
-            const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`text-sm px-3 py-1.5 rounded-lg transition ${
-                  active
-                    ? "bg-white/10 text-brand-400 font-medium"
-                    : "text-white/70 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {label}
-              </Link>
-            );
-          })}
-
-          <Button
-            asChild
-            size="sm"
-            className="ml-1 bg-mm-fuchsia text-white hover:bg-mm-lilac hover:text-brand-900 border-0"
-          >
-            <Link href="/novo">+ Novo</Link>
-          </Button>
-        </nav>
-
-        <div className="flex items-center gap-3">
-          {user && (
-            <>
-              <div className="flex items-center gap-2">
-                <UserAvatar email={user.email ?? "?"} />
-                <span className="text-xs text-white/60 hidden sm:block max-w-[140px] truncate">
-                  {user.email}
-                </span>
-                {role && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium hidden sm:inline-block ${
-                      ROLE_COLOR[role] ?? ROLE_COLOR.cs_junior
-                    }`}
-                  >
-                    {ROLE_LABEL[role] ?? role}
-                  </span>
-                )}
-              </div>
-
-              {role === "admin" && (
-                <Link
-                  href="/admin/logs"
-                  className="text-xs text-white/40 hover:text-white/80 transition hidden sm:block"
+      <div className="px-4 h-12 flex items-center justify-end gap-3">
+        {user && (
+          <>
+            <div className="flex items-center gap-2">
+              <UserAvatar email={user.email ?? "?"} />
+              <span className="text-xs text-white/60 hidden sm:block max-w-[160px] truncate">
+                {user.email}
+              </span>
+              {role && (
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium hidden sm:inline-block ${
+                    ROLE_COLOR[role] ?? ROLE_COLOR.cs_junior
+                  }`}
                 >
-                  Admin
-                </Link>
+                  {ROLE_LABEL[role] ?? role}
+                </span>
               )}
+            </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="text-white/70 hover:text-white hover:bg-white/10"
+            {role === "admin" && (
+              <Link
+                href="/admin/logs"
+                className="text-xs text-white/40 hover:text-white/80 transition hidden sm:block"
               >
-                Sair
-              </Button>
-            </>
-          )}
-        </div>
+                Admin
+              </Link>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-white/70 hover:text-white hover:bg-white/10"
+            >
+              Sair
+            </Button>
+          </>
+        )}
       </div>
     </header>
   );

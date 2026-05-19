@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Toaster } from "sonner";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { QueryProvider } from "@/components/QueryProvider";
+import Sidebar from "@/components/Sidebar";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -34,9 +35,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             priority={false}
           />
         </div>
-        <div className="relative z-10">
+        <div className="relative z-10 flex min-h-screen">
           <QueryProvider>
-            <PostHogProvider>{children}</PostHogProvider>
+            <PostHogProvider>
+              <Sidebar />
+              <div className="flex-1 min-w-0">{children}</div>
+            </PostHogProvider>
           </QueryProvider>
         </div>
         <Toaster position="top-right" richColors closeButton duration={4000} />

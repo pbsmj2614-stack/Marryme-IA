@@ -20,7 +20,7 @@ import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
-import { Loader2, RefreshCw, X, Plus } from "lucide-react";
+import { Loader2, RefreshCw, X, Plus, List, LayoutGrid } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -434,6 +434,111 @@ function KpiCard({
   );
 }
 
+// ─── Kanban ───────────────────────────────────────────────────────────────────
+
+const KANBAN_COLS = [
+  "Onboarding",
+  "Planejamento de Metas",
+  "Voo de Cruzeiro",
+  "Renovação",
+  "Pausado",
+] as const;
+
+const KANBAN_COL_LABEL: Record<string, string> = {
+  Onboarding: "Onboarding",
+  "Planejamento de Metas": "Planejamento",
+  "Voo de Cruzeiro": "Voo de Cruzeiro",
+  Renovação: "Renovação",
+  Pausado: "Pausado",
+};
+
+function KanbanCard({ c }: { c: ClienteComMetricas }) {
+  const scoreColor = getScoreColor(c.score);
+  const locked = c.status !== "Ativo";
+  return (
+    <div
+      className={`bg-white rounded-xl border border-border p-3 shadow-sm space-y-2.5 ${
+        locked ? "opacity-60" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-semibold text-brand-900 text-sm leading-tight">{c.nome_empresa}</p>
+        <span
+          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
+          style={{ backgroundColor: scoreColor }}
+        >
+          {c.score}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {c.plano && (
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
+          >
+            {planoLabel(c.plano)}
+          </span>
+        )}
+        {c.responsavel_mm && (
+          <span className="text-xs text-muted-foreground">{c.responsavel_mm}</span>
+        )}
+      </div>
+      {c.atrasadas > 0 && (
+        <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block flex-shrink-0" />
+          {c.atrasadas} tarefa{c.atrasadas > 1 ? "s" : ""} atrasada{c.atrasadas > 1 ? "s" : ""}
+        </p>
+      )}
+      <ProgressBar score={c.score} finalizadas={c.finalizadas} total={c.total_tarefas} />
+    </div>
+  );
+}
+
+function PipelineKanban({ clientes }: { clientes: ClienteComMetricas[] }) {
+  const grouped = KANBAN_COLS.reduce<Record<string, ClienteComMetricas[]>>((acc, col) => {
+    if (col === "Pausado") {
+      acc[col] = clientes.filter((c) => /paus|encerr/i.test(c.status ?? ""));
+    } else {
+      acc[col] = clientes.filter(
+        (c) =>
+          !/paus|encerr/i.test(c.status ?? "") &&
+          (c.fase_projeto === col || (!c.fase_projeto && col === "Onboarding"))
+      );
+    }
+    return acc;
+  }, {});
+
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="flex gap-3 min-w-max">
+        {KANBAN_COLS.map((col) => {
+          const cards = grouped[col] ?? [];
+          return (
+            <div key={col} className="w-52 flex flex-col gap-2">
+              <div className="flex items-center justify-between px-1 mb-1">
+                <span className="text-xs font-bold text-brand-800 uppercase tracking-wider">
+                  {KANBAN_COL_LABEL[col]}
+                </span>
+                <span className="text-xs text-muted-foreground bg-border/60 rounded-full px-2 py-0.5 font-semibold">
+                  {cards.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {cards.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                    Nenhum cliente
+                  </div>
+                ) : (
+                  cards.map((c) => <KanbanCard key={c.id} c={c} />)
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
@@ -503,6 +608,7 @@ export default function PipelinePage() {
   const [syncingGaps, setSyncingGaps] = useState(false);
   const [cleaningGaps, setCleaningGaps] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "kanban">("list");
   const [mostrarFinalizadasIds, setMostrarFinalizadasIds] = useState<Set<string>>(new Set());
   const [addTarefaFor, setAddTarefaFor] = useState<string | null>(null);
   const [addTarefaForm, setAddTarefaForm] = useState({
@@ -942,6 +1048,32 @@ export default function PipelinePage() {
                   </button>
                 </>
               )}
+
+              {/* Toggle lista / kanban */}
+              <div className="flex items-center border border-border rounded-lg overflow-hidden bg-white">
+                <button
+                  onClick={() => setView("list")}
+                  title="Visualização em lista"
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${
+                    view === "list"
+                      ? "bg-brand-700 text-white"
+                      : "text-muted-foreground hover:bg-brand-50"
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" /> Lista
+                </button>
+                <button
+                  onClick={() => setView("kanban")}
+                  title="Visualização kanban"
+                  className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition border-l border-border ${
+                    view === "kanban"
+                      ? "bg-brand-700 text-white"
+                      : "text-muted-foreground hover:bg-brand-50"
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1018,474 +1150,481 @@ export default function PipelinePage() {
           </select>
         </div>
 
-        {/* ── Tabela ── */}
-        <div className="rounded-xl border border-border overflow-hidden shadow-sm">
-          <div className="bg-gradient-to-r from-brand-50 to-rose-50 border-b border-brand-100 px-4 py-2 flex items-center justify-between">
-            <p className="text-xs text-brand-700">
-              Clique no cabeçalho para ordenar · Clique na linha para ver tarefas
-            </p>
-            <p className="text-xs font-semibold text-brand-700">
-              {clientesFiltrados.length} clientes
-            </p>
-          </div>
+        {/* ── Tabela / Kanban ── */}
+        {view === "kanban" ? (
+          <PipelineKanban clientes={clientesFiltrados} />
+        ) : (
+          <div className="rounded-xl border border-border overflow-hidden shadow-sm">
+            <div className="bg-gradient-to-r from-brand-50 to-rose-50 border-b border-brand-100 px-4 py-2 flex items-center justify-between">
+              <p className="text-xs text-brand-700">
+                Clique no cabeçalho para ordenar · Clique na linha para ver tarefas
+              </p>
+              <p className="text-xs font-semibold text-brand-700">
+                {clientesFiltrados.length} clientes
+              </p>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm bg-white">
-              <thead>
-                <tr className="bg-brand-800 text-white">
-                  {TABLE_COLS.map(({ key, label, center }) => (
-                    <th
-                      key={label}
-                      onClick={() => key && handleSort(key)}
-                      className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${
-                        center ? "text-center" : "text-left"
-                      } ${key ? "cursor-pointer hover:bg-brand-700 select-none transition-colors" : ""}`}
-                    >
-                      {label}
-                      {key && <SortIcon active={sortKey === key} dir={sortDir} />}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                {clientesFiltrados.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-16 text-muted-foreground">
-                      Nenhum cliente encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  clientesFiltrados.map((c, i) => (
-                    <React.Fragment key={c.id}>
-                      {/* ── Linha do cliente ── */}
-                      <tr
-                        onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                        className={`cursor-pointer border-t border-border transition-colors ${
-                          i % 2 === 0 ? "bg-white" : "bg-rose-50/30"
-                        } hover:bg-brand-50`}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm bg-white">
+                <thead>
+                  <tr className="bg-brand-800 text-white">
+                    {TABLE_COLS.map(({ key, label, center }) => (
+                      <th
+                        key={label}
+                        onClick={() => key && handleSort(key)}
+                        className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap ${
+                          center ? "text-center" : "text-left"
+                        } ${key ? "cursor-pointer hover:bg-brand-700 select-none transition-colors" : ""}`}
                       >
-                        {/* ID */}
-                        <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
-                          {c.id_cliente}
-                        </td>
-                        {/* Cliente */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="font-semibold text-brand-900">{c.nome_empresa}</p>
-                          {c.responsavel_mm && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {c.responsavel_mm}
-                            </p>
-                          )}
-                        </td>
-                        {/* Plano */}
-                        <td className="px-4 py-3">
-                          {c.plano ? (
+                        {label}
+                        {key && <SortIcon active={sortKey === key} dir={sortDir} />}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {clientesFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-16 text-muted-foreground">
+                        Nenhum cliente encontrado
+                      </td>
+                    </tr>
+                  ) : (
+                    clientesFiltrados.map((c, i) => (
+                      <React.Fragment key={c.id}>
+                        {/* ── Linha do cliente ── */}
+                        <tr
+                          onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                          className={`cursor-pointer border-t border-border transition-colors ${
+                            i % 2 === 0 ? "bg-white" : "bg-rose-50/30"
+                          } hover:bg-brand-50`}
+                        >
+                          {/* ID */}
+                          <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
+                            {c.id_cliente}
+                          </td>
+                          {/* Cliente */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <p className="font-semibold text-brand-900">{c.nome_empresa}</p>
+                            {c.responsavel_mm && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {c.responsavel_mm}
+                              </p>
+                            )}
+                          </td>
+                          {/* Plano */}
+                          <td className="px-4 py-3">
+                            {c.plano ? (
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
+                              >
+                                {planoLabel(c.plano)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </td>
+                          {/* Total */}
+                          <td className="px-4 py-3 text-center text-foreground">
+                            {c.total_tarefas}
+                          </td>
+                          {/* Finalizadas */}
+                          <td className="px-4 py-3 text-center text-green-600 font-semibold">
+                            {c.finalizadas}
+                          </td>
+                          {/* Atrasadas */}
+                          <td className="px-4 py-3 text-center">
+                            {c.atrasadas > 0 ? (
+                              <span className="bg-red-100 text-red-700 font-bold text-xs px-2 py-0.5 rounded-full">
+                                {c.atrasadas}
+                              </span>
+                            ) : (
+                              <span className="text-green-600 font-semibold">{c.atrasadas}</span>
+                            )}
+                          </td>
+                          {/* Progresso */}
+                          <td className="px-4 py-3">
+                            <ProgressBar
+                              score={c.score}
+                              finalizadas={c.finalizadas}
+                              total={c.total_tarefas}
+                            />
+                          </td>
+                          {/* Score */}
+                          <td className="px-4 py-3 text-center">
                             <span
-                              className={`px-2.5 py-1 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
-                            >
-                              {planoLabel(c.plano)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </td>
-                        {/* Total */}
-                        <td className="px-4 py-3 text-center text-foreground">{c.total_tarefas}</td>
-                        {/* Finalizadas */}
-                        <td className="px-4 py-3 text-center text-green-600 font-semibold">
-                          {c.finalizadas}
-                        </td>
-                        {/* Atrasadas */}
-                        <td className="px-4 py-3 text-center">
-                          {c.atrasadas > 0 ? (
-                            <span className="bg-red-100 text-red-700 font-bold text-xs px-2 py-0.5 rounded-full">
-                              {c.atrasadas}
-                            </span>
-                          ) : (
-                            <span className="text-green-600 font-semibold">{c.atrasadas}</span>
-                          )}
-                        </td>
-                        {/* Progresso */}
-                        <td className="px-4 py-3">
-                          <ProgressBar
-                            score={c.score}
-                            finalizadas={c.finalizadas}
-                            total={c.total_tarefas}
-                          />
-                        </td>
-                        {/* Score */}
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className="font-bold text-lg leading-none"
-                            style={{ color: getScoreColor(c.score) }}
-                          >
-                            {c.score}
-                          </span>
-                          {c.status === "Ativo" && (
-                            <p
-                              className="text-[10px] font-semibold mt-0.5 leading-none"
+                              className="font-bold text-lg leading-none"
                               style={{ color: getScoreColor(c.score) }}
                             >
-                              {c.statusScore}
-                            </p>
-                          )}
-                        </td>
-                        {/* Status */}
-                        <td className="px-4 py-3">
-                          <ClienteStatusBadge score={c.score} clienteStatus={c.status} />
-                        </td>
-                      </tr>
-
-                      {/* ── Linha expandida — tarefas ── */}
-                      {expandedId === c.id && (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="px-5 py-4 bg-brand-50/40 border-t border-brand-100"
-                          >
-                            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                              <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
-                                Tarefas · {c.nome_empresa}
-                              </p>
-                              <div
-                                className="flex items-center gap-2"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {c.fase_projeto && (
-                                  <span className="text-xs text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full font-medium">
-                                    {c.fase_projeto}
-                                  </span>
-                                )}
-                                <span className="text-xs text-muted-foreground">
-                                  {c.finalizadas}/{c.total_tarefas} concluídas
-                                </span>
-                                {c.finalizadas > 0 && (
-                                  <button
-                                    onClick={() =>
-                                      setMostrarFinalizadasIds((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(c.id)) next.delete(c.id);
-                                        else next.add(c.id);
-                                        return next;
-                                      })
-                                    }
-                                    className="text-xs px-2.5 py-1 rounded-lg bg-white border border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 transition"
-                                  >
-                                    {mostrarFinalizadasIds.has(c.id)
-                                      ? "Ocultar concluídas"
-                                      : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
-                                  </button>
-                                )}
-                                {c.status === "Ativo" && (
-                                  <button
-                                    onClick={() =>
-                                      setAddTarefaFor(
-                                        addTarefaFor === c.id_cliente ? null : c.id_cliente
-                                      )
-                                    }
-                                    className="text-xs px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition font-medium flex items-center gap-1"
-                                  >
-                                    <Plus className="w-3 h-3" /> Tarefa
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {c.status !== "Ativo" && (
-                              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
-                                <span>🔒</span>
-                                <span>
-                                  Cliente {c.status.toLowerCase()} — tarefas somente leitura.
-                                  Reative para editar.
-                                </span>
-                              </p>
-                            )}
-
-                            {/* ── Tarefas atrasadas ── */}
-                            {(() => {
-                              const hoje2 = new Date().toISOString().split("T")[0];
-                              const atrasadasLista = c.tarefas.filter(
-                                (t) =>
-                                  !t.check_feito &&
-                                  t.status !== "Finalizado" &&
-                                  t.status !== "Cancelado" &&
-                                  (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje2))
-                              );
-                              return (
-                                <div
-                                  className={`mb-3 rounded-xl border p-3 ${
-                                    atrasadasLista.length === 0
-                                      ? "bg-green-50 border-green-200"
-                                      : "bg-red-50 border-red-200"
-                                  }`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div className="flex items-center gap-2 mb-1.5">
-                                    <span
-                                      className={`text-xs font-bold uppercase tracking-wider ${
-                                        atrasadasLista.length === 0
-                                          ? "text-green-700"
-                                          : "text-red-700"
-                                      }`}
-                                    >
-                                      Tarefas Atrasadas
-                                    </span>
-                                    {atrasadasLista.length > 0 && (
-                                      <span className="text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold leading-none">
-                                        {atrasadasLista.length}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {atrasadasLista.length === 0 ? (
-                                    <p className="text-xs text-green-600 flex items-center gap-1">
-                                      <span>✓</span> Nenhuma tarefa atrasada
-                                    </p>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      {atrasadasLista.map((t) => {
-                                        const days = t.prazo
-                                          ? Math.floor(
-                                              (Date.now() -
-                                                new Date(t.prazo + "T00:00:00").getTime()) /
-                                                86400000
-                                            )
-                                          : 0;
-                                        return (
-                                          <div
-                                            key={t.id}
-                                            className="flex items-center justify-between gap-2 text-xs"
-                                          >
-                                            <span className="text-red-800 font-medium truncate flex-1">
-                                              {t.o_que}
-                                            </span>
-                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                              {t.prazo && (
-                                                <span className="text-red-600">
-                                                  {formatDate(t.prazo)}
-                                                </span>
-                                              )}
-                                              {days > 0 && (
-                                                <span className="bg-red-200 text-red-800 rounded-full px-2 py-0.5 font-bold">
-                                                  {days}d
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            <TabelaTarefas
-                              tarefas={
-                                mostrarFinalizadasIds.has(c.id)
-                                  ? c.tarefas
-                                  : c.tarefas.filter(
-                                      (t) => !t.check_feito && t.status !== "Finalizado"
-                                    )
-                              }
-                              clienteId={c.id_cliente}
-                              onCheckChange={handleCheckChange}
-                              onUpdate={handleUpdateTarefa}
-                              locked={c.status !== "Ativo"}
-                            />
-
-                            {/* ── Formulário de nova tarefa ── */}
-                            {addTarefaFor === c.id_cliente && c.status === "Ativo" && (
-                              <div
-                                className="mt-3 p-4 rounded-xl bg-white border border-brand-200 space-y-3"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
-                                  Nova tarefa
-                                </p>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                  <input
-                                    placeholder="Etapa"
-                                    value={addTarefaForm.etapa}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))
-                                    }
-                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
-                                  />
-                                  <input
-                                    placeholder="O que fazer? *"
-                                    value={addTarefaForm.o_que}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))
-                                    }
-                                    className="col-span-2 bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
-                                  />
-                                  <select
-                                    value={addTarefaForm.tipo}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))
-                                    }
-                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
-                                  >
-                                    <option>Marry Me</option>
-                                    <option>Cliente</option>
-                                  </select>
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                  <select
-                                    value={addTarefaForm.quem}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))
-                                    }
-                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
-                                  >
-                                    <option value="">Quem?</option>
-                                    {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => (
-                                      <option key={r}>{r}</option>
-                                    ))}
-                                    <option>Cliente</option>
-                                  </select>
-                                  <input
-                                    type="date"
-                                    value={addTarefaForm.prazo}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))
-                                    }
-                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400"
-                                  />
-                                  <select
-                                    value={addTarefaForm.status}
-                                    onChange={(e) =>
-                                      setAddTarefaForm((f) => ({ ...f, status: e.target.value }))
-                                    }
-                                    className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
-                                  >
-                                    <option>Não iniciado</option>
-                                    <option>Em andamento</option>
-                                    <option>Finalizado</option>
-                                  </select>
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => handleAddTarefa(c.id_cliente)}
-                                      disabled={savingTarefa || !addTarefaForm.o_que.trim()}
-                                      className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium flex items-center justify-center gap-1"
-                                    >
-                                      {savingTarefa ? (
-                                        <>
-                                          <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
-                                        </>
-                                      ) : (
-                                        "Salvar"
-                                      )}
-                                    </button>
-                                    <button
-                                      onClick={() => setAddTarefaFor(null)}
-                                      className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-red-300 transition"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ── Funil de etapas ── */}
+                              {c.score}
+                            </span>
                             {c.status === "Ativo" && (
-                              <div
-                                className="mt-3 p-3 rounded-xl bg-brand-50/60 border border-brand-100"
-                                onClick={(e) => e.stopPropagation()}
+                              <p
+                                className="text-[10px] font-semibold mt-0.5 leading-none"
+                                style={{ color: getScoreColor(c.score) }}
                               >
-                                <p className="text-xs font-bold text-brand-800 uppercase tracking-wider mb-2">
-                                  Etapa do Projeto
-                                </p>
-                                <div className="flex items-center gap-1 flex-wrap mb-2.5">
-                                  {FASES_ATIVAS.map((fase, idx) => {
-                                    const faseIdx = FASES_ATIVAS.indexOf(
-                                      (c.fase_projeto as (typeof FASES_ATIVAS)[number]) ??
-                                        "Onboarding"
-                                    );
-                                    const isCurrent = c.fase_projeto === fase;
-                                    const isPast = idx < faseIdx;
-                                    return (
-                                      <React.Fragment key={fase}>
-                                        <span
-                                          className={`text-xs px-2.5 py-1 rounded-full font-medium transition ${
-                                            isCurrent
-                                              ? "bg-brand-700 text-white shadow-sm"
-                                              : isPast
-                                                ? "bg-brand-200 text-brand-700 line-through opacity-60"
-                                                : "bg-white border border-border text-muted-foreground"
-                                          }`}
-                                        >
-                                          {fase}
-                                        </span>
-                                        {idx < FASES_ATIVAS.length - 1 && (
-                                          <span className="text-muted-foreground text-xs">→</span>
-                                        )}
-                                      </React.Fragment>
-                                    );
-                                  })}
-                                </div>
-                                {(() => {
-                                  const faseIdx = FASES_ATIVAS.indexOf(
-                                    c.fase_projeto as (typeof FASES_ATIVAS)[number]
-                                  );
-                                  const proxFase =
-                                    faseIdx >= 0 && faseIdx < FASES_ATIVAS.length - 1
-                                      ? FASES_ATIVAS[faseIdx + 1]
-                                      : null;
-                                  return proxFase ? (
-                                    <button
-                                      onClick={() => handleAvancarFase(c.id_cliente, proxFase)}
-                                      className="text-xs px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition shadow-sm"
-                                    >
-                                      Avançar para {proxFase} →
-                                    </button>
-                                  ) : (
-                                    <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                      <span>✓</span> Etapa final atingida
-                                    </span>
-                                  );
-                                })()}
-                              </div>
+                                {c.statusScore}
+                              </p>
                             )}
-
-                            <div
-                              className="mt-4 pt-3 border-t border-border flex items-center gap-2 flex-wrap"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <span className="text-xs text-muted-foreground">
-                                Status do contrato:
-                              </span>
-                              {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
-                                <button
-                                  key={s}
-                                  onClick={() =>
-                                    c.status !== s && handleStatusChange(c.id_cliente, s)
-                                  }
-                                  className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${
-                                    c.status === s
-                                      ? s === "Ativo"
-                                        ? "bg-green-600 text-white border-green-600 cursor-default shadow-sm"
-                                        : s === "Pausado"
-                                          ? "bg-amber-500 text-white border-amber-500 cursor-default shadow-sm"
-                                          : "bg-gray-500 text-white border-gray-500 cursor-default"
-                                      : "bg-transparent border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50"
-                                  }`}
-                                >
-                                  {s}
-                                </button>
-                              ))}
-                            </div>
+                          </td>
+                          {/* Status */}
+                          <td className="px-4 py-3">
+                            <ClienteStatusBadge score={c.score} clienteStatus={c.status} />
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))
-                )}
-              </tbody>
-            </table>
+
+                        {/* ── Linha expandida — tarefas ── */}
+                        {expandedId === c.id && (
+                          <tr>
+                            <td
+                              colSpan={9}
+                              className="px-5 py-4 bg-brand-50/40 border-t border-brand-100"
+                            >
+                              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                                <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
+                                  Tarefas · {c.nome_empresa}
+                                </p>
+                                <div
+                                  className="flex items-center gap-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {c.fase_projeto && (
+                                    <span className="text-xs text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full font-medium">
+                                      {c.fase_projeto}
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-muted-foreground">
+                                    {c.finalizadas}/{c.total_tarefas} concluídas
+                                  </span>
+                                  {c.finalizadas > 0 && (
+                                    <button
+                                      onClick={() =>
+                                        setMostrarFinalizadasIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(c.id)) next.delete(c.id);
+                                          else next.add(c.id);
+                                          return next;
+                                        })
+                                      }
+                                      className="text-xs px-2.5 py-1 rounded-lg bg-white border border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 transition"
+                                    >
+                                      {mostrarFinalizadasIds.has(c.id)
+                                        ? "Ocultar concluídas"
+                                        : `+ ${c.finalizadas} concluída${c.finalizadas > 1 ? "s" : ""}`}
+                                    </button>
+                                  )}
+                                  {c.status === "Ativo" && (
+                                    <button
+                                      onClick={() =>
+                                        setAddTarefaFor(
+                                          addTarefaFor === c.id_cliente ? null : c.id_cliente
+                                        )
+                                      }
+                                      className="text-xs px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition font-medium flex items-center gap-1"
+                                    >
+                                      <Plus className="w-3 h-3" /> Tarefa
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {c.status !== "Ativo" && (
+                                <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                                  <span>🔒</span>
+                                  <span>
+                                    Cliente {c.status.toLowerCase()} — tarefas somente leitura.
+                                    Reative para editar.
+                                  </span>
+                                </p>
+                              )}
+
+                              {/* ── Tarefas atrasadas ── */}
+                              {(() => {
+                                const hoje2 = new Date().toISOString().split("T")[0];
+                                const atrasadasLista = c.tarefas.filter(
+                                  (t) =>
+                                    !t.check_feito &&
+                                    t.status !== "Finalizado" &&
+                                    t.status !== "Cancelado" &&
+                                    (t.status === "Atrasado" ||
+                                      (t.prazo != null && t.prazo < hoje2))
+                                );
+                                return (
+                                  <div
+                                    className={`mb-3 rounded-xl border p-3 ${
+                                      atrasadasLista.length === 0
+                                        ? "bg-green-50 border-green-200"
+                                        : "bg-red-50 border-red-200"
+                                    }`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <span
+                                        className={`text-xs font-bold uppercase tracking-wider ${
+                                          atrasadasLista.length === 0
+                                            ? "text-green-700"
+                                            : "text-red-700"
+                                        }`}
+                                      >
+                                        Tarefas Atrasadas
+                                      </span>
+                                      {atrasadasLista.length > 0 && (
+                                        <span className="text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold leading-none">
+                                          {atrasadasLista.length}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {atrasadasLista.length === 0 ? (
+                                      <p className="text-xs text-green-600 flex items-center gap-1">
+                                        <span>✓</span> Nenhuma tarefa atrasada
+                                      </p>
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {atrasadasLista.map((t) => {
+                                          const days = t.prazo
+                                            ? Math.floor(
+                                                (Date.now() -
+                                                  new Date(t.prazo + "T00:00:00").getTime()) /
+                                                  86400000
+                                              )
+                                            : 0;
+                                          return (
+                                            <div
+                                              key={t.id}
+                                              className="flex items-center justify-between gap-2 text-xs"
+                                            >
+                                              <span className="text-red-800 font-medium truncate flex-1">
+                                                {t.o_que}
+                                              </span>
+                                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                {t.prazo && (
+                                                  <span className="text-red-600">
+                                                    {formatDate(t.prazo)}
+                                                  </span>
+                                                )}
+                                                {days > 0 && (
+                                                  <span className="bg-red-200 text-red-800 rounded-full px-2 py-0.5 font-bold">
+                                                    {days}d
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              <TabelaTarefas
+                                tarefas={
+                                  mostrarFinalizadasIds.has(c.id)
+                                    ? c.tarefas
+                                    : c.tarefas.filter(
+                                        (t) => !t.check_feito && t.status !== "Finalizado"
+                                      )
+                                }
+                                clienteId={c.id_cliente}
+                                onCheckChange={handleCheckChange}
+                                onUpdate={handleUpdateTarefa}
+                                locked={c.status !== "Ativo"}
+                              />
+
+                              {/* ── Formulário de nova tarefa ── */}
+                              {addTarefaFor === c.id_cliente && c.status === "Ativo" && (
+                                <div
+                                  className="mt-3 p-4 rounded-xl bg-white border border-brand-200 space-y-3"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <p className="text-xs text-brand-700 font-bold uppercase tracking-wider">
+                                    Nova tarefa
+                                  </p>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <input
+                                      placeholder="Etapa"
+                                      value={addTarefaForm.etapa}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, etapa: e.target.value }))
+                                      }
+                                      className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
+                                    />
+                                    <input
+                                      placeholder="O que fazer? *"
+                                      value={addTarefaForm.o_que}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, o_que: e.target.value }))
+                                      }
+                                      className="col-span-2 bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:border-brand-400"
+                                    />
+                                    <select
+                                      value={addTarefaForm.tipo}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, tipo: e.target.value }))
+                                      }
+                                      className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
+                                    >
+                                      <option>Marry Me</option>
+                                      <option>Cliente</option>
+                                    </select>
+                                  </div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <select
+                                      value={addTarefaForm.quem}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, quem: e.target.value }))
+                                      }
+                                      className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
+                                    >
+                                      <option value="">Quem?</option>
+                                      {RESPONSAVEIS.filter((r) => r !== "Todos").map((r) => (
+                                        <option key={r}>{r}</option>
+                                      ))}
+                                      <option>Cliente</option>
+                                    </select>
+                                    <input
+                                      type="date"
+                                      value={addTarefaForm.prazo}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, prazo: e.target.value }))
+                                      }
+                                      className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400"
+                                    />
+                                    <select
+                                      value={addTarefaForm.status}
+                                      onChange={(e) =>
+                                        setAddTarefaForm((f) => ({ ...f, status: e.target.value }))
+                                      }
+                                      className="bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-brand-400 cursor-pointer"
+                                    >
+                                      <option>Não iniciado</option>
+                                      <option>Em andamento</option>
+                                      <option>Finalizado</option>
+                                    </select>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => handleAddTarefa(c.id_cliente)}
+                                        disabled={savingTarefa || !addTarefaForm.o_que.trim()}
+                                        className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-xs px-3 py-1.5 rounded-lg transition font-medium flex items-center justify-center gap-1"
+                                      >
+                                        {savingTarefa ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                                          </>
+                                        ) : (
+                                          "Salvar"
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={() => setAddTarefaFor(null)}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-red-300 transition"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* ── Funil de etapas ── */}
+                              {c.status === "Ativo" && (
+                                <div
+                                  className="mt-3 p-3 rounded-xl bg-brand-50/60 border border-brand-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <p className="text-xs font-bold text-brand-800 uppercase tracking-wider mb-2">
+                                    Etapa do Projeto
+                                  </p>
+                                  <div className="flex items-center gap-1 flex-wrap mb-2.5">
+                                    {FASES_ATIVAS.map((fase, idx) => {
+                                      const faseIdx = FASES_ATIVAS.indexOf(
+                                        (c.fase_projeto as (typeof FASES_ATIVAS)[number]) ??
+                                          "Onboarding"
+                                      );
+                                      const isCurrent = c.fase_projeto === fase;
+                                      const isPast = idx < faseIdx;
+                                      return (
+                                        <React.Fragment key={fase}>
+                                          <span
+                                            className={`text-xs px-2.5 py-1 rounded-full font-medium transition ${
+                                              isCurrent
+                                                ? "bg-brand-700 text-white shadow-sm"
+                                                : isPast
+                                                  ? "bg-brand-200 text-brand-700 line-through opacity-60"
+                                                  : "bg-white border border-border text-muted-foreground"
+                                            }`}
+                                          >
+                                            {fase}
+                                          </span>
+                                          {idx < FASES_ATIVAS.length - 1 && (
+                                            <span className="text-muted-foreground text-xs">→</span>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </div>
+                                  {(() => {
+                                    const faseIdx = FASES_ATIVAS.indexOf(
+                                      c.fase_projeto as (typeof FASES_ATIVAS)[number]
+                                    );
+                                    const proxFase =
+                                      faseIdx >= 0 && faseIdx < FASES_ATIVAS.length - 1
+                                        ? FASES_ATIVAS[faseIdx + 1]
+                                        : null;
+                                    return proxFase ? (
+                                      <button
+                                        onClick={() => handleAvancarFase(c.id_cliente, proxFase)}
+                                        className="text-xs px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium transition shadow-sm"
+                                      >
+                                        Avançar para {proxFase} →
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                        <span>✓</span> Etapa final atingida
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
+                              <div
+                                className="mt-4 pt-3 border-t border-border flex items-center gap-2 flex-wrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-xs text-muted-foreground">
+                                  Status do contrato:
+                                </span>
+                                {(["Ativo", "Pausado", "Encerrado"] as StatusCliente[]).map((s) => (
+                                  <button
+                                    key={s}
+                                    onClick={() =>
+                                      c.status !== s && handleStatusChange(c.id_cliente, s)
+                                    }
+                                    className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${
+                                      c.status === s
+                                        ? s === "Ativo"
+                                          ? "bg-green-600 text-white border-green-600 cursor-default shadow-sm"
+                                          : s === "Pausado"
+                                            ? "bg-amber-500 text-white border-amber-500 cursor-default shadow-sm"
+                                            : "bg-gray-500 text-white border-gray-500 cursor-default"
+                                        : "bg-transparent border-border text-muted-foreground hover:border-brand-300 hover:text-brand-700 hover:bg-brand-50"
+                                    }`}
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
