@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, RefreshCw, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, RefreshCw, X, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
 import Header from "@/components/Header";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDashboardRaw, useInvalidateDashboard } from "@/hooks/useClientes";
@@ -322,12 +322,21 @@ function ExpandedRow({
         <p className="text-sm text-muted-foreground">
           Conta Meta Ads não configurada para este cliente.
         </p>
-        <Link
-          href={`/prestador/${prestador.id}/configurar`}
-          className="text-xs px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
-        >
-          Configurar conta
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/prestador/${prestador.id}?tab=roteiro`}
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-100 text-brand-700 hover:bg-brand-200 transition flex items-center gap-1.5"
+          >
+            <MessageSquare className="w-3 h-3" />
+            Chat IA
+          </Link>
+          <Link
+            href={`/prestador/${prestador.id}/configurar`}
+            className="text-xs px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+          >
+            Configurar conta
+          </Link>
+        </div>
       </div>
     );
   }
@@ -336,25 +345,34 @@ function ExpandedRow({
     return (
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-muted-foreground">Nenhum relatório gerado ainda.</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onSincronizar(prestador.id!)}
-          disabled={sincronizando}
-          className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5"
-        >
-          {sincronizando ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Sincronizando...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-3 h-3" />
-              Buscar dados
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/prestador/${prestador.id}?tab=roteiro`}
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-100 text-brand-700 hover:bg-brand-200 transition flex items-center gap-1.5"
+          >
+            <MessageSquare className="w-3 h-3" />
+            Chat IA
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onSincronizar(prestador.id!)}
+            disabled={sincronizando}
+            className="text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5"
+          >
+            {sincronizando ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Sincronizando...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Gerar relatório
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -394,10 +412,17 @@ function ExpandedRow({
             ) : (
               <>
                 <RefreshCw className="w-3 h-3" />
-                Atualizar
+                Gerar relatório
               </>
             )}
           </Button>
+          <Link
+            href={`/prestador/${prestador.id}?tab=roteiro`}
+            className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition flex items-center gap-1.5"
+          >
+            <MessageSquare className="w-3 h-3" />
+            Chat IA
+          </Link>
           <Link
             href={`/prestador/${prestador.id}?tab=campanha#campanha`}
             className="text-xs px-3 py-1.5 rounded-lg bg-brand-100 text-brand-700 hover:bg-brand-200 transition"
