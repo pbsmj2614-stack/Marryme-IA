@@ -164,7 +164,10 @@ function MiniGauge({ score }: { score: number | null }) {
   const pct = score ?? 0;
   const dash = (pct / 100) * circ;
   return (
-    <div className="relative w-16 h-16 shrink-0">
+    <div
+      className="relative w-16 h-16 shrink-0 animate-in zoom-in-95 fade-in duration-300 ease-out fill-mode-both"
+      style={{ animationDelay: "120ms" }}
+    >
       <svg className="w-full h-full -rotate-90" viewBox="0 0 72 72">
         <circle cx="36" cy="36" r={r} fill="none" stroke="#e5e7eb" strokeWidth="8" />
         <circle
@@ -204,14 +207,21 @@ function KpiGrid({ kpis, conta }: { kpis: KPIsCampanha; conta?: ContaMeta | null
   ];
   return (
     <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-5 gap-3">
-      {items.map(({ label, value }) => (
-        <div key={label} className="bg-secondary/40 rounded-lg px-3 py-2.5 border border-border">
+      {items.map(({ label, value }, i) => (
+        <div
+          key={label}
+          className="bg-secondary/40 rounded-lg px-3 py-2.5 border border-border animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out fill-mode-both"
+          style={{ animationDelay: `${i * 40 + 80}ms` }}
+        >
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
           <p className="text-sm font-bold text-foreground">{value}</p>
         </div>
       ))}
       {conta?.metodo != null || conta?.saldo != null ? (
-        <div className="bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200">
+        <div
+          className="bg-blue-50 rounded-lg px-3 py-2.5 border border-blue-200 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out fill-mode-both"
+          style={{ animationDelay: `${9 * 40 + 80}ms` }}
+        >
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Saldo</p>
           {conta?.metodo === "cartao" ? (
             <p className="text-sm font-bold text-blue-700">Cartão</p>
@@ -1077,28 +1087,30 @@ export default function DashboardBIPage() {
                           <tr>
                             <td
                               colSpan={9}
-                              className="px-6 py-5 bg-secondary/20 border-t border-border"
+                              className="px-6 py-5 bg-secondary/20 border-t border-border overflow-hidden"
                             >
-                              <div className="flex items-center justify-between mb-4">
-                                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                                  Campanha Meta Ads · {p.nome}
-                                </p>
-                                {p.fase_projeto && (
-                                  <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                                    {p.fase_projeto}
-                                  </span>
-                                )}
+                              <div className="animate-in fade-in slide-in-from-top-3 duration-200 ease-out">
+                                <div className="flex items-center justify-between mb-4">
+                                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+                                    Campanha Meta Ads · {p.nome}
+                                  </p>
+                                  {p.fase_projeto && (
+                                    <span className="text-xs text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                      {p.fase_projeto}
+                                    </span>
+                                  )}
+                                </div>
+                                <ExpandedRow
+                                  prestador={p}
+                                  onSincronizar={handleSincronizar}
+                                  sincronizando={!!p.id && sincronizandoId === p.id}
+                                  todosPrestadores={todosPrestadores}
+                                  onVinculado={() => {
+                                    setExpandedId(null);
+                                    invalidateDashboard();
+                                  }}
+                                />
                               </div>
-                              <ExpandedRow
-                                prestador={p}
-                                onSincronizar={handleSincronizar}
-                                sincronizando={!!p.id && sincronizandoId === p.id}
-                                todosPrestadores={todosPrestadores}
-                                onVinculado={() => {
-                                  setExpandedId(null);
-                                  invalidateDashboard();
-                                }}
-                              />
                             </td>
                           </tr>
                         )}
@@ -1199,7 +1211,12 @@ export default function DashboardBIPage() {
                       );
                     }}
                   />
-                  <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                  <Bar
+                    dataKey="score"
+                    radius={[0, 4, 4, 0]}
+                    animationBegin={0}
+                    animationDuration={600}
+                  >
                     {chartData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}

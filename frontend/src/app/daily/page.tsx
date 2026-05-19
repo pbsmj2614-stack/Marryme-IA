@@ -1095,7 +1095,8 @@ export default function DailyPage() {
                       dataKey={r.key}
                       stackId="s"
                       fill={r.color}
-                      isAnimationActive={false}
+                      animationBegin={0}
+                      animationDuration={500}
                       radius={i === RESP_CHART.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
                     />
                   ))}
