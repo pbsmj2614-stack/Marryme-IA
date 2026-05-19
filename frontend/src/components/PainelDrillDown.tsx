@@ -48,7 +48,7 @@ export default function PainelDrillDown({ prestadores }: { prestadores: Prestado
   // Piores → melhores → sem dados; duplicar para loop sem emenda
   const items = [...comScore, ...semScore];
   const doubled = [...items, ...items];
-  const duration = Math.max(items.length * 2.8, 20); // segundos
+  const duration = Math.max(items.length * 1.7, 15); // segundos
 
   return (
     <div className="mb-6 rounded-xl overflow-hidden border border-slate-800 shadow-lg">
