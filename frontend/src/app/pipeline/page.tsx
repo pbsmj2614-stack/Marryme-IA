@@ -452,12 +452,13 @@ const KANBAN_COL_LABEL: Record<string, string> = {
   Pausado: "Pausado",
 };
 
-function KanbanCard({ c }: { c: ClienteComMetricas }) {
+function KanbanCard({ c, onExpand }: { c: ClienteComMetricas; onExpand: (id: string) => void }) {
   const scoreColor = getScoreColor(c.score);
   const locked = c.status !== "Ativo";
   return (
     <div
-      className={`bg-white rounded-xl border border-border p-3 shadow-sm space-y-2.5 ${
+      onClick={() => onExpand(c.id)}
+      className={`bg-white rounded-xl border border-border p-3 shadow-sm space-y-2.5 cursor-pointer hover:border-brand-300 hover:shadow-md transition-shadow ${
         locked ? "opacity-60" : ""
       }`}
     >
@@ -493,7 +494,13 @@ function KanbanCard({ c }: { c: ClienteComMetricas }) {
   );
 }
 
-function PipelineKanban({ clientes }: { clientes: ClienteComMetricas[] }) {
+function PipelineKanban({
+  clientes,
+  onExpand,
+}: {
+  clientes: ClienteComMetricas[];
+  onExpand: (id: string) => void;
+}) {
   const grouped = KANBAN_COLS.reduce<Record<string, ClienteComMetricas[]>>((acc, col) => {
     if (col === "Pausado") {
       acc[col] = clientes.filter((c) => /paus|encerr/i.test(c.status ?? ""));
@@ -528,7 +535,7 @@ function PipelineKanban({ clientes }: { clientes: ClienteComMetricas[] }) {
                     Nenhum cliente
                   </div>
                 ) : (
-                  cards.map((c) => <KanbanCard key={c.id} c={c} />)
+                  cards.map((c) => <KanbanCard key={c.id} c={c} onExpand={onExpand} />)
                 )}
               </div>
             </div>
@@ -1152,7 +1159,13 @@ export default function PipelinePage() {
 
         {/* ── Tabela / Kanban ── */}
         {view === "kanban" ? (
-          <PipelineKanban clientes={clientesFiltrados} />
+          <PipelineKanban
+            clientes={clientesFiltrados}
+            onExpand={(id) => {
+              setView("list");
+              setExpandedId(id);
+            }}
+          />
         ) : (
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">
             <div className="bg-gradient-to-r from-brand-50 to-rose-50 border-b border-brand-100 px-4 py-2 flex items-center justify-between">

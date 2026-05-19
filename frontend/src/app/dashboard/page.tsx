@@ -304,11 +304,14 @@ function ExpandedRow({
     return (
       <div className="flex items-center gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">
-          Cliente não cadastrado no sistema de roteiros.
+          Nenhum prestador vinculado a este cliente.
+          <span className="block text-xs mt-0.5 text-muted-foreground/70">
+            Cadastre o prestador com o ID {prestador.id_cliente} para habilitar Chat IA e Meta Ads.
+          </span>
         </p>
         <Link
           href="/novo"
-          className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition"
+          className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition whitespace-nowrap"
         >
           + Cadastrar prestador
         </Link>
