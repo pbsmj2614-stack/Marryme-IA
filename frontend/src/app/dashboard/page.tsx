@@ -290,31 +290,81 @@ function ExpandedRow({
   prestador,
   onSincronizar,
   sincronizando,
+  todosPrestadores,
+  onVinculado,
 }: {
   prestador: PrestadorRow;
   onSincronizar: (id: string) => void;
   sincronizando: boolean;
+  todosPrestadores: { id: string; nome: string }[];
+  onVinculado: () => void;
 }) {
   const rel = prestador.relatorio;
   const kpis = rel?.dados_json?.kpis ?? null;
   const camps = rel?.dados_json?.campanhas ?? [];
   const conta = rel?.dados_json?.conta ?? null;
 
+  const [selectedPrestId, setSelectedPrestId] = useState("");
+  const [vinculando, setVinculando] = useState(false);
+  const [vinculoErro, setVinculoErro] = useState("");
+
+  async function handleVincular() {
+    if (!selectedPrestId) return;
+    setVinculando(true);
+    setVinculoErro("");
+    try {
+      const res = await fetch("/api/prestadores/vincular-cliente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prestador_id: selectedPrestId, id_cliente: prestador.id_cliente }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao vincular");
+      onVinculado();
+    } catch (err) {
+      setVinculoErro(err instanceof Error ? err.message : "Erro ao vincular");
+    } finally {
+      setVinculando(false);
+    }
+  }
+
   if (!prestador.id) {
     return (
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Nenhum prestador vinculado a este cliente.
           <span className="block text-xs mt-0.5 text-muted-foreground/70">
-            Cadastre o prestador com o ID {prestador.id_cliente} para habilitar Chat IA e Meta Ads.
+            Selecione um prestador existente ou cadastre um novo.
           </span>
         </p>
-        <Link
-          href="/novo"
-          className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition whitespace-nowrap"
-        >
-          + Cadastrar prestador
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={selectedPrestId}
+            onChange={(e) => setSelectedPrestId(e.target.value)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:border-brand-400 min-w-[200px]"
+          >
+            <option value="">— Selecionar prestador —</option>
+            {todosPrestadores.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleVincular}
+            disabled={!selectedPrestId || vinculando}
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-700 text-white hover:bg-brand-800 transition disabled:opacity-40 whitespace-nowrap"
+          >
+            {vinculando ? "Vinculando..." : "Vincular"}
+          </button>
+          <Link
+            href="/novo"
+            className="text-xs px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition whitespace-nowrap"
+          >
+            + Cadastrar novo
+          </Link>
+        </div>
+        {vinculoErro && <p className="text-xs text-red-600">{vinculoErro}</p>}
       </div>
     );
   }
@@ -607,6 +657,14 @@ export default function DashboardBIPage() {
   const [tableExpanded, setTableExpanded] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const TABLE_LIMIT = 8;
+
+  const todosPrestadores = useMemo(
+    () =>
+      (rawData?.prestadores ?? [])
+        .map((p) => ({ id: p.id, nome: p.nome_artistico }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [rawData]
+  );
 
   useEffect(() => {
     if (rawData) setPrestadores(buildDashboardRows(rawData));
@@ -1035,6 +1093,11 @@ export default function DashboardBIPage() {
                                 prestador={p}
                                 onSincronizar={handleSincronizar}
                                 sincronizando={sincronizandoId === p.id}
+                                todosPrestadores={todosPrestadores}
+                                onVinculado={() => {
+                                  setExpandedId(null);
+                                  invalidateDashboard();
+                                }}
                               />
                             </td>
                           </tr>
