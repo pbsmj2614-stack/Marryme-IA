@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { X, ArrowRight, Loader2 } from "lucide-react";
+import { X, ArrowRight, Loader2, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { getScoreColor, getStatusFromScore } from "@/lib/healthScore";
 import { fmtBRL, fmtPct } from "@/lib/formatters";
@@ -431,14 +431,20 @@ export default function PrestadorModal({
         {/* ── Footer fixo ── */}
         <div className="border-t border-border p-4 flex gap-2 flex-shrink-0">
           <Link
-            href={`/prestador/${prestadorId}/editar`}
-            className="flex-1 flex items-center justify-center gap-2 bg-brand-700 hover:bg-brand-800 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition"
+            href={`/prestador/${prestadorId}?tab=roteiro`}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 text-white text-sm font-medium px-3 py-2.5 rounded-xl transition"
           >
-            Editar cadastro
+            <MessageSquare className="w-4 h-4" /> Chat IA
+          </Link>
+          <Link
+            href={`/prestador/${prestadorId}/editar`}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-white hover:bg-rose-50 text-brand-700 border border-brand-200 text-sm font-medium px-3 py-2.5 rounded-xl transition"
+          >
+            Editar
           </Link>
           <Link
             href="/pipeline"
-            className="flex items-center gap-1.5 bg-white hover:bg-rose-50 text-brand-700 border border-brand-200 text-sm font-medium px-4 py-2.5 rounded-xl transition whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-white hover:bg-rose-50 text-brand-700 border border-brand-200 text-sm font-medium px-3 py-2.5 rounded-xl transition whitespace-nowrap"
           >
             Pipeline <ArrowRight className="w-4 h-4" />
           </Link>

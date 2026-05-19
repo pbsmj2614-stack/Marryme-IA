@@ -13,6 +13,7 @@ import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
 import { Loader2, RefreshCw, X } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,24 @@ interface ClienteComMetricas extends Cliente {
   finalizadas: number;
   atrasadas: number;
 }
+
+// ─── Chart de produtividade ───────────────────────────────────────────────────
+
+interface RespDef {
+  key: string;
+  label: string;
+  color: string;
+  match: (q: string) => boolean;
+}
+
+const RESP_CHART: RespDef[] = [
+  { key: "Paulo", label: "Paulo", color: "#f43f5e", match: (q) => /^paulo$/i.test(q.trim()) },
+  { key: "PauloM", label: "Paulo M", color: "#8b5cf6", match: (q) => /paulo\s*m/i.test(q.trim()) },
+  { key: "Consolo", label: "Consolo", color: "#f59e0b", match: (q) => /consolo/i.test(q.trim()) },
+  { key: "Kauê", label: "Kauê", color: "#06b6d4", match: (q) => /kau[eê]/i.test(q.trim()) },
+  { key: "Cristal", label: "Cristal", color: "#10b981", match: (q) => /cristal/i.test(q.trim()) },
+  { key: "Outros", label: "Outros", color: "#cbd5e1", match: () => true },
+];
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -350,6 +369,7 @@ export default function DailyPage() {
   const [modalCliente, setModalCliente] = useState<ClienteComMetricas | null>(null);
   const [atrasadosOpen, setAtrasadosOpen] = useState<Set<string>>(new Set());
   const [buscaDelay, setBuscaDelay] = useState("");
+  const [chartDias, setChartDias] = useState<7 | 14 | 30>(7);
   const [atrasadosExp, setAtrasadosExp] = useState(false);
   const [hojeExp, setHojeExp] = useState(false);
   const [semanaExp, setSemanaExp] = useState(false);
@@ -569,29 +589,61 @@ export default function DailyPage() {
     [clientesComMetricas]
   );
 
-  const resumoResponsavel = useMemo(() => {
-    const nomes = new Set<string>();
-    tarefasComCliente.forEach((t) => {
-      if (t.quem?.trim()) nomes.add(t.quem.trim());
-      if (t.cliente.responsavel_mm?.trim()) nomes.add(t.cliente.responsavel_mm.trim());
+  const chartData = useMemo(() => {
+    // Gera todos os dias do período
+    const inicio = (() => {
+      const d = new Date(TODAY + "T12:00:00");
+      d.setDate(d.getDate() - (chartDias - 1));
+      return d.toISOString().split("T")[0];
+    })();
+    const days: string[] = [];
+    const cur = new Date(inicio + "T12:00:00");
+    const fim = new Date(TODAY + "T12:00:00");
+    while (cur <= fim) {
+      days.push(cur.toISOString().split("T")[0]);
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // Tarefas concluídas com prazo dentro do período (inclui clientes pausados/encerrados)
+    const concluidas = tarefas.filter(
+      (t) =>
+        (t.check_feito || t.status === "Finalizado") &&
+        t.prazo != null &&
+        t.prazo >= inicio &&
+        t.prazo <= TODAY
+    );
+
+    return days.map((date) => {
+      const doDay = concluidas.filter((t) => t.prazo === date);
+      const row: Record<string, unknown> = {
+        date,
+        label: new Date(date + "T12:00:00").toLocaleDateString("pt-BR", {
+          weekday: "short",
+          day: "2-digit",
+          month: "2-digit",
+        }),
+        total: doDay.length,
+      };
+      // Zera todos os responsáveis
+      for (const r of RESP_CHART) row[r.key] = 0;
+      // Conta por responsável
+      for (const t of doDay) {
+        const quem = t.quem?.trim() ?? "";
+        let matched = false;
+        for (const r of RESP_CHART.slice(0, -1)) {
+          if (r.match(quem)) {
+            row[r.key] as number;
+            row[r.key] = ((row[r.key] as number) || 0) + 1;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) row["Outros"] = ((row["Outros"] as number) || 0) + 1;
+      }
+      return row as Record<string, unknown> & { label: string; total: number };
     });
-    return Array.from(nomes)
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((resp) => {
-        const meus = tarefasComCliente.filter(
-          (t) =>
-            t.quem?.toLowerCase().includes(resp.toLowerCase()) ||
-            t.cliente.responsavel_mm?.toLowerCase().includes(resp.toLowerCase())
-        );
-        const total = meus.length;
-        const finalizadas = meus.filter(isFinalizado).length;
-        const atrasadas = meus.filter(isAtrasado).length;
-        const totalAtivo = meus.filter((t) => t.status !== "Cancelado").length;
-        const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
-        return { resp, total, finalizadas, atrasadas, score };
-      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tarefasComCliente]);
+  }, [tarefas, chartDias]);
 
   if (loading) return <PageLoading />;
 
@@ -943,63 +995,104 @@ export default function DailyPage() {
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* SEÇÃO 3 — Resumo por responsável                                   */}
+        {/* SEÇÃO 3 — Produtividade por período                                */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <Section title="Resumo por responsável">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {resumoResponsavel
-              .filter(({ total }) => total > 0)
-              .map(({ resp, total, finalizadas, atrasadas, score }) => (
-                <div
-                  key={resp}
-                  className="bg-white border border-border rounded-xl overflow-hidden shadow-sm"
+        <Section title="Tarefas concluídas por período">
+          {/* Filtro de período */}
+          <div className="flex items-center gap-2 mb-5">
+            {([7, 14, 30] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setChartDias(d)}
+                className={`text-xs px-3.5 py-1.5 rounded-full font-medium transition ${
+                  chartDias === d
+                    ? "bg-brand-700 text-white shadow-sm"
+                    : "bg-white border border-border text-muted-foreground hover:border-brand-400 hover:text-brand-700"
+                }`}
+              >
+                {d === 7 ? "7 dias" : d === 14 ? "14 dias" : "30 dias"}
+              </button>
+            ))}
+            <span className="text-xs text-muted-foreground ml-2">
+              Tarefas finalizadas por data de prazo
+            </span>
+          </div>
+
+          {/* Legenda */}
+          <div className="flex flex-wrap gap-4 mb-4">
+            {RESP_CHART.filter((r) =>
+              r.key === "Outros" ? chartData.some((d) => (d[r.key] as number) > 0) : true
+            ).map((r) => (
+              <div key={r.key} className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-3 rounded-sm flex-shrink-0"
+                  style={{ backgroundColor: r.color }}
+                />
+                <span className="text-xs text-muted-foreground font-medium">{r.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
+            {chartData.every((d) => d.total === 0) ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Nenhuma tarefa concluída neste período.
+              </p>
+            ) : (
+              <ResponsiveContainer
+                width="100%"
+                height={chartDias === 7 ? 340 : chartDias === 14 ? 520 : 860}
+              >
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 4, right: 48, left: 84, bottom: 4 }}
+                  barCategoryGap="28%"
                 >
-                  {/* Faixa superior gradiente */}
-                  <div className="h-1.5 bg-gradient-to-r from-brand-400 via-mm-fuchsia to-mm-warm" />
-                  <div className="p-5">
-                    {/* Nome + Score */}
-                    <div className="flex items-center justify-between mb-4">
-                      <p className="font-bold text-brand-900">{resp}</p>
-                      <span className="text-sm font-bold" style={{ color: getScoreColor(score) }}>
-                        {score}%
-                      </span>
-                    </div>
-
-                    {/* Métricas */}
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      <div className="text-center bg-background rounded-lg py-2">
-                        <p className="text-xl font-bold text-foreground">{total}</p>
-                        <p className="text-xs text-muted-foreground">Total</p>
-                      </div>
-                      <div className="text-center bg-green-50 rounded-lg py-2">
-                        <p className="text-xl font-bold text-green-600">{finalizadas}</p>
-                        <p className="text-xs text-muted-foreground">Feitas</p>
-                      </div>
-                      <div
-                        className={`text-center rounded-lg py-2 ${atrasadas > 0 ? "bg-red-50" : "bg-background"}`}
-                      >
-                        <p
-                          className={`text-xl font-bold ${atrasadas > 0 ? "text-red-600" : "text-muted-foreground"}`}
-                        >
-                          {atrasadas}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Atrasadas</p>
-                      </div>
-                    </div>
-
-                    {/* Barra */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs text-muted-foreground">Progresso</p>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          {finalizadas}/{total}
-                        </p>
-                      </div>
-                      <ProgressBar score={score} height="h-2" />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="label"
+                    width={80}
+                    tick={{ fontSize: 11, fill: "#64748b" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#f8fafc" }}
+                    contentStyle={{
+                      fontSize: 12,
+                      borderRadius: 8,
+                      border: "1px solid #e2e8f0",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                    }}
+                    formatter={(value, name) =>
+                      [
+                        value as number,
+                        RESP_CHART.find((r) => r.key === String(name))?.label ?? String(name),
+                      ] as [number, string]
+                    }
+                    labelFormatter={(label: unknown) => `${label}`}
+                  />
+                  {RESP_CHART.map((r, i) => (
+                    <Bar
+                      key={r.key}
+                      dataKey={r.key}
+                      stackId="s"
+                      fill={r.color}
+                      radius={i === RESP_CHART.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Section>
       </main>
