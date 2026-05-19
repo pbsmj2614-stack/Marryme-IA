@@ -45,7 +45,11 @@ export async function POST(req: NextRequest) {
       try {
         const res = await fetch(`${baseUrl}/api/meta/sincronizar`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Propaga o cookie de sessão para que getAuthUser() funcione na sub-chamada
+            Cookie: req.headers.get("cookie") ?? "",
+          },
           body: JSON.stringify({ prestador_id: p.id }),
         });
         const data = (await res.json()) as { ok?: boolean; health_score?: number; error?: string };

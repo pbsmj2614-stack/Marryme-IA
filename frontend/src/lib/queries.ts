@@ -86,11 +86,11 @@ export async function fetchPipelineRaw(): Promise<PipelineRaw> {
         "id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba"
       )
       .order("id_cliente")
-      .limit(500),
+      .limit(1000),
     supabase
       .from("mm_tarefas")
       .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
-      .limit(2000),
+      .limit(5000),
   ]);
   if (e1) throw new Error(e1.message);
   if (e2) throw new Error(e2.message);

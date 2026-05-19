@@ -1092,7 +1092,7 @@ export default function DashboardBIPage() {
                               <ExpandedRow
                                 prestador={p}
                                 onSincronizar={handleSincronizar}
-                                sincronizando={sincronizandoId === p.id}
+                                sincronizando={!!p.id && sincronizandoId === p.id}
                                 todosPrestadores={todosPrestadores}
                                 onVinculado={() => {
                                   setExpandedId(null);

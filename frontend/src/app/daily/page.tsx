@@ -632,7 +632,6 @@ export default function DailyPage() {
         let matched = false;
         for (const r of RESP_CHART.slice(0, -1)) {
           if (r.match(quem)) {
-            row[r.key] as number;
             row[r.key] = ((row[r.key] as number) || 0) + 1;
             matched = true;
             break;
