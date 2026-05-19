@@ -60,6 +60,16 @@ interface RespDef {
   match: (q: string) => boolean;
 }
 
+const DAY_ABBR: Record<number, string> = {
+  0: "Dom.",
+  1: "Seg.",
+  2: "Ter.",
+  3: "Qua.",
+  4: "Qui.",
+  5: "Sex.",
+  6: "Sáb.",
+};
+
 const RESP_CHART: RespDef[] = [
   { key: "Paulo", label: "Paulo", color: "#f43f5e", match: (q) => /^paulo$/i.test(q.trim()) },
   { key: "PauloM", label: "Paulo M", color: "#8b5cf6", match: (q) => /paulo\s*m/i.test(q.trim()) },
@@ -600,7 +610,8 @@ export default function DailyPage() {
     const cur = new Date(inicio + "T12:00:00");
     const fim = new Date(TODAY + "T12:00:00");
     while (cur <= fim) {
-      days.push(cur.toISOString().split("T")[0]);
+      const dow = cur.getDay();
+      if (dow !== 0 && dow !== 6) days.push(cur.toISOString().split("T")[0]);
       cur.setDate(cur.getDate() + 1);
     }
 
@@ -617,11 +628,12 @@ export default function DailyPage() {
       const doDay = concluidas.filter((t) => t.prazo === date);
       const row: Record<string, unknown> = {
         date,
-        label: new Date(date + "T12:00:00").toLocaleDateString("pt-BR", {
-          weekday: "short",
-          day: "2-digit",
-          month: "2-digit",
-        }),
+        label: (() => {
+          const d = new Date(date + "T12:00:00");
+          const dd = d.getDate().toString().padStart(2, "0");
+          const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+          return `${DAY_ABBR[d.getDay()]} ${dd}/${mm}`;
+        })(),
         total: doDay.length,
       };
       // Zera todos os responsáveis
@@ -1038,17 +1050,14 @@ export default function DailyPage() {
                 Nenhuma tarefa concluída neste período.
               </p>
             ) : (
-              <ResponsiveContainer
-                width="100%"
-                height={chartDias === 7 ? 340 : chartDias === 14 ? 520 : 860}
-              >
+              <ResponsiveContainer width="100%" height={Math.max(chartData.length * 46 + 24, 120)}>
                 <BarChart
                   data={chartData}
                   layout="vertical"
                   margin={{ top: 4, right: 48, left: 84, bottom: 4 }}
                   barCategoryGap="28%"
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" />
                   <XAxis
                     type="number"
                     allowDecimals={false}
@@ -1086,6 +1095,7 @@ export default function DailyPage() {
                       dataKey={r.key}
                       stackId="s"
                       fill={r.color}
+                      isAnimationActive={false}
                       radius={i === RESP_CHART.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
                     />
                   ))}
