@@ -781,8 +781,8 @@ export default function DashboardBIPage() {
           av = a.plano ?? "";
           bv = b.plano ?? "";
         } else if (sortKey === "health_score") {
-          av = a.relatorio?.health_score ?? -1;
-          bv = b.relatorio?.health_score ?? -1;
+          av = a.relatorio?.health_score ?? (sortDir === "asc" ? 999 : -1);
+          bv = b.relatorio?.health_score ?? (sortDir === "asc" ? 999 : -1);
         } else if (sortKey === "ctr") {
           av = a.relatorio?.dados_json?.kpis?.link_ctr ?? -1;
           bv = b.relatorio?.dados_json?.kpis?.link_ctr ?? -1;
