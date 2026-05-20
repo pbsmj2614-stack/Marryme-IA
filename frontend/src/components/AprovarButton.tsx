@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,8 @@ export default function AprovarButton({ roteiroId, aprovadoAtual }: AprovarButto
     if (!error) {
       setAprovado((v) => !v);
       router.refresh();
+    } else {
+      toast.error("Erro ao atualizar aprovação. Tente novamente.");
     }
 
     setLoading(false);

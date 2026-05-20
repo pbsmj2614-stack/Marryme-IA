@@ -30,6 +30,14 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
   { value: "outro", label: "Outro" },
 ];
 
+const CATEGORIA_TO_SEGMENTO: Record<Categoria, string> = {
+  musico: "Músico/Banda",
+  fotografo: "Fotógrafo",
+  celebrante: "Celebrante",
+  dj: "DJ",
+  outro: "Outro",
+};
+
 const PLANOS = ["Essencial", "Growth", "Enterprise"];
 const FASES = [
   "Onboarding",
@@ -279,7 +287,11 @@ export default function EditarEntrevistaForm({
               <SelectField
                 label="Categoria"
                 value={dados.categoria}
-                onChange={(v) => set("categoria", v as Categoria)}
+                onChange={(v) => {
+                  const cat = v as Categoria;
+                  set("categoria", cat);
+                  set("segmento", CATEGORIA_TO_SEGMENTO[cat] ?? cat);
+                }}
                 options={CATEGORIAS}
                 required
                 disabled={saving}
