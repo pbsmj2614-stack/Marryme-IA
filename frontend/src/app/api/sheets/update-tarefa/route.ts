@@ -94,6 +94,16 @@ async function sUpdate(token: string, range: string, values: string[][]): Promis
   if (!res.ok) throw new Error(`Sheets UPDATE ${range}: ${res.status} — ${await res.text()}`);
 }
 
+async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
+}
+
 /** YYYY-MM-DD → DD/MM/YYYY */
 function toDateBR(iso: string): string {
   const [y, m, d] = iso.split("-");
@@ -142,8 +152,10 @@ export async function POST(req: NextRequest) {
 
     if (errUpdate) throw new Error(`Supabase update falhou: ${errUpdate.message}`);
 
+    const { data: tarefaAtual } = await supabase.from("mm_tarefas").select("*").eq("id", id).single();
+
     // ── 3. Atualiza linha no Sheets ──────────────────────────────────────────────
-    if (cliente?.sheets_aba && oQueOrigStr) {
+    if (cliente?.sheets_aba && oQueOrigStr && tarefaAtual) {
       const token = await googleToken();
       const rows = await sRead(token, `${cliente.sheets_aba}!A:H`);
 
@@ -172,31 +184,26 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      const buildRow = (existing: string[]) => [
+        tarefaAtual.check_feito ? "TRUE" : "FALSE",
+        tarefaAtual.etapa?.trim() ?? existing[1] ?? "",
+        tarefaAtual.o_que,
+        tarefaAtual.tipo?.trim() || existing[3] || "Marry Me",
+        tarefaAtual.quem?.trim() ?? existing[4] ?? "",
+        tarefaAtual.prazo ? toDateBR(tarefaAtual.prazo) : existing[5] ?? "",
+        tarefaAtual.status?.trim() || existing[6] || "Não iniciado",
+        tarefaAtual.observacoes?.trim() ?? existing[7] ?? "",
+      ];
+
       if (rowIndex >= 0) {
         const existing = rows[rowIndex] ?? [];
-
-        // Mescla: usa novo valor se fornecido, senão mantém o existente
-        const newRow = [
-          campos.check_feito !== undefined
-            ? campos.check_feito
-              ? "TRUE"
-              : "FALSE"
-            : (existing[0] ?? "FALSE"),
-          campos.etapa !== undefined ? String(campos.etapa).trim() : (existing[1] ?? ""),
-          existing[2] ?? "", // o_que — não alterar (é a chave de busca)
-          campos.tipo !== undefined ? String(campos.tipo).trim() : (existing[3] ?? "Marry Me"),
-          campos.quem !== undefined ? String(campos.quem).trim() : (existing[4] ?? ""),
-          campos.prazo !== undefined ? toDateBR(String(campos.prazo)) : (existing[5] ?? ""),
-          campos.status !== undefined ? String(campos.status).trim() : (existing[6] ?? ""),
-          campos.observacoes !== undefined
-            ? String(campos.observacoes).trim()
-            : (existing[7] ?? ""),
-        ];
-
-        const sheetRow = rowIndex + 1; // 1-indexed
-        await sUpdate(token, `${cliente.sheets_aba}!A${sheetRow}:H${sheetRow}`, [newRow]);
+        const sheetRow = rowIndex + 1;
+        await sUpdate(token, `${cliente.sheets_aba}!A${sheetRow}:H${sheetRow}`, [
+          buildRow(existing),
+        ]);
+      } else {
+        await sAppend(token, `${cliente.sheets_aba}!A:H`, [buildRow([])]);
       }
-      // Se a linha não foi encontrada: Supabase já foi atualizado — degradação graciosa
     }
 
     return NextResponse.json({ ok: true });

@@ -192,8 +192,12 @@ export default function PrestadorModal({
 
   // Busca dados extras ao abrir
   useEffect(() => {
+    setRelatorio(null);
+    setTarefas(null);
+    setLoadingData(true);
+    setFase(faseProjeto ?? "Onboarding");
+
     async function fetchData() {
-      setLoadingData(true);
       const supabase = createClient();
 
       const [tarefasResult, relatorioResult] = await Promise.all([
@@ -231,17 +235,21 @@ export default function PrestadorModal({
           atrasadas: atr,
           score: totalAtivo > 0 ? Math.round((fin / totalAtivo) * 100) : 0,
         });
+      } else {
+        setTarefas(null);
       }
 
       if (relatorioResult.data) {
         setRelatorio(relatorioResult.data as RelatorioCampanhaDetalhe);
+      } else {
+        setRelatorio(null);
       }
 
       setLoadingData(false);
     }
 
     void fetchData();
-  }, [prestadorId, mmId]);
+  }, [prestadorId, mmId, faseProjeto]);
 
   function handleClose() {
     setVisible(false);
@@ -443,7 +451,7 @@ export default function PrestadorModal({
             Editar
           </Link>
           <Link
-            href="/pipeline"
+            href={mmId ? `/pipeline?cliente=${encodeURIComponent(mmId)}` : "/pipeline"}
             className="flex items-center gap-1.5 bg-white hover:bg-rose-50 text-brand-700 border border-brand-200 text-sm font-medium px-3 py-2.5 rounded-xl transition whitespace-nowrap"
           >
             Pipeline <ArrowRight className="w-4 h-4" />

@@ -1,9 +1,9 @@
 /* eslint-disable no-console */
 /**
  * POST /api/analise/gerar
- * Body: { prestador_id: string }
+ * Body: { prestador_id: string, relatorio_id?: string }
  *
- * Gera análise inteligente do último relatório de campanha Meta Ads via Claude API.
+ * Gera análise inteligente do relatório de campanha Meta Ads via Claude API.
  * Retorna Server-Sent Events (stream) com o JSON da análise sendo gerado.
  * Ao final, salva em analises_ia no Supabase.
  */
@@ -12,16 +12,48 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import type { KPIsCampanha, CampanhaInsight } from "@/lib/types";
+import type { KPIsCampanha, CampanhaInsight, ContaMeta, ConfigCampanha } from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { analiseGerarSchema } from "@/lib/schemas";
+
+const SYSTEM_PROMPT = `Você é analista sênior de tráfego pago da MarryMe, agência especializada em prestadores de casamento no Brasil.
+
+REGRAS OBRIGATÓRIAS:
+1. Clientes MarryMe usam campanhas de Mensagens com CTA WhatsApp por padrão — isso já está configurado.
+2. NÃO recomende auditar objetivo da campanha, mudar para Mensagens, ou verificar botão WhatsApp UNLESS os dados indicarem claramente problema (ex: zero conversas com gasto relevante E configuração marcada como incorreta).
+3. Hook rate zerado em campanha de Mensagens é LIMITAÇÃO da API Meta (ThruPlay), não necessariamente problema de criativo — use avaliacao "sem_dados" no hook_rate quando aplicável.
+4. Cada recomendação e item de pauta_reuniao DEVE citar qual KPI ou dado concreto justifica a ação (CTR, CPM, frequência, CPL/mensagem, volume de conversas, campanha pausada).
+5. NÃO inclua checklist genérico de setup (objetivo, WhatsApp, pixel) se a configuração já estiver correta nos dados.
+6. A nota_geral (0-10) deve ser coerente com o health score automático do sistema quando fornecido.
+7. pauta_reuniao: foco em mudanças acionáveis baseadas nos KPIs — máximo 6 itens, sem repetir verificações de setup já confirmadas.
+8. Responda APENAS em português do Brasil.
+
+Benchmarks nicho casamentos (referência):
+- CTR link: >= 1% bom | 0,5-1% atenção | < 0,5% crítico
+- CPM: <= R$ 15 bom | R$ 15-30 atenção | > R$ 30 crítico
+- Frequência: <= 1,5x bom | 1,5-3x atenção | > 3x crítico
+- Custo por mensagem: <= R$ 8 bom | R$ 8-15 atenção | > R$ 15 crítico`;
 
 function fmtBRL(n: number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 function fmtN(n: number, dec = 0) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function deriveObjetivoLabel(
+  config: ConfigCampanha | undefined,
+  campanhas: CampanhaInsight[]
+): string {
+  if (config?.todas_mensagens) {
+    return "Mensagens / WhatsApp (configuração padrão MarryMe — já ativa)";
+  }
+  if (config?.objetivo_principal && config.objetivo_principal !== "desconhecido") {
+    return config.objetivo_principal;
+  }
+  const first = campanhas.find((c) => c.objective)?.objective;
+  return first ?? "não identificado na Meta API";
 }
 
 function buildPrompt(
@@ -32,29 +64,54 @@ function buildPrompt(
   periodo: string,
   faseProjeto: string | null,
   plano: string | null,
-  objetivo: string | null
+  objetivo: string,
+  healthScore: number | null,
+  conta: ContaMeta | undefined,
+  config: ConfigCampanha | undefined
 ): string {
+  const resultLabel =
+    config?.todas_mensagens || kpis.results > 0 ? "Conversas/mensagens iniciadas" : "Resultados";
+  const costLabel = config?.todas_mensagens ? "Custo por conversa" : "Custo por resultado";
+
+  const configBlock = config
+    ? `- Objetivo principal detectado: ${config.objetivo_principal}
+- Todas campanhas em objetivo Mensagens/Engajamento: ${config.todas_mensagens ? "Sim" : "Não"}
+- Campanhas pausadas/inativas: ${config.campanhas_pausadas.length > 0 ? config.campanhas_pausadas.join(", ") : "Nenhuma"}`
+    : "- Configuração de campanha: não disponível (sync antigo)";
+
+  const contaBlock = conta
+    ? `- Método pagamento: ${conta.metodo ?? "—"}${conta.saldo != null ? ` | Saldo/teto restante: ${fmtBRL(conta.saldo)}` : ""}`
+    : "- Conta Meta: saldo não disponível";
+
   const campanhasTexto = campanhas
     .map(
       (c) => `
-  - "${c.campaign_name}" (${c.status})
+  - "${c.campaign_name}" (status: ${c.effective_status ?? c.status}${c.objective ? ` | objetivo: ${c.objective}` : ""})
     Impressões: ${fmtN(c.impressions)} | Alcance: ${fmtN(c.reach)} | Freq: ${fmtN(c.frequency, 2)}x
     CTR: ${fmtN(c.link_ctr || c.ctr, 2)}% | CPC: ${c.cpc > 0 ? fmtBRL(c.cpc) : "—"} | CPM: ${fmtBRL(c.cpm)}
-    Mensagens: ${fmtN(c.results)} | Custo/mensagem: ${c.cost_per_result > 0 ? fmtBRL(c.cost_per_result) : "—"}
-    Hook Rate: ${c.hook_rate > 0 ? fmtN(c.hook_rate, 1) + "%" : "—"} | ThruPlay: ${c.thruplay > 0 ? fmtN(c.thruplay) : "—"}
+    ${resultLabel}: ${fmtN(c.results)} | ${costLabel}: ${c.cost_per_result > 0 ? fmtBRL(c.cost_per_result) : "—"}
+    Hook Rate: ${c.hook_rate > 0 ? fmtN(c.hook_rate, 1) + "%" : "sem dados (normal em Mensagens)"} | ThruPlay: ${c.thruplay > 0 ? fmtN(c.thruplay) : "—"}
     Gasto: ${fmtBRL(c.spend)}`
     )
     .join("\n");
 
-  return `Você é analista sênior de tráfego pago especializado no mercado de casamentos no Brasil.
-Analise os dados abaixo e gere um diagnóstico completo e recomendações práticas.
+  return `Analise os dados abaixo e gere um diagnóstico completo e recomendações práticas.
 
 # Cliente
 Nome: ${prestadorNome}
 Categoria: ${categoria}
 Fase do projeto: ${faseProjeto ?? "não informado"}
 Plano: ${plano ?? "não informado"}
-Objetivo de campanha: ${objetivo ?? "mensagens via WhatsApp"}
+Objetivo de campanha: ${objetivo}
+
+# Health Score automático do sistema
+${healthScore != null ? `${healthScore}/100 (use como referência para nota_geral)` : "Não calculado"}
+
+# Configuração real da campanha (Meta API)
+${configBlock}
+
+# Conta Meta
+${contaBlock}
 
 # Período Analisado
 ${periodo}
@@ -67,11 +124,11 @@ ${periodo}
 - CTR do link: ${fmtN(kpis.link_ctr || kpis.ctr, 2)}%
 - Cliques no link: ${fmtN(kpis.link_clicks || kpis.clicks)}
 - CPC: ${kpis.cpc > 0 ? fmtBRL(kpis.cpc) : "—"}
-- Mensagens iniciadas: ${fmtN(kpis.results)}
-- Custo por mensagem: ${kpis.cost_per_result > 0 ? fmtBRL(kpis.cost_per_result) : "—"}
+- ${resultLabel}: ${fmtN(kpis.results)}
+- ${costLabel}: ${kpis.cost_per_result > 0 ? fmtBRL(kpis.cost_per_result) : "—"}
 - Gasto total: ${fmtBRL(kpis.spend)}
 - ThruPlay: ${kpis.thruplay > 0 ? fmtN(kpis.thruplay) : "—"}
-- Hook Rate: ${kpis.hook_rate > 0 ? fmtN(kpis.hook_rate, 1) + "%" : "—"}
+- Hook Rate: ${kpis.hook_rate > 0 ? fmtN(kpis.hook_rate, 1) + "%" : "sem dados (normal em campanhas de Mensagens)"}
 
 # Campanhas Individuais (${campanhas.length} campanha${campanhas.length !== 1 ? "s" : ""})
 ${campanhasTexto || "Nenhum dado por campanha disponível."}
@@ -133,11 +190,10 @@ export async function POST(req: NextRequest) {
         { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
         { status: 400 }
       );
-    const { prestador_id } = parsed.data;
+    const { prestador_id, relatorio_id: relatorioIdParam } = parsed.data;
 
     const supabase = supabaseAdmin();
 
-    // Busca dados do prestador
     const { data: prestador } = await supabase
       .from("prestadores")
       .select("nome_artistico, categoria")
@@ -148,23 +204,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prestador não encontrado" }, { status: 404 });
     }
 
-    // Busca último relatório
-    const { data: relatorio } = await supabase
+    let relatorioQuery = supabase
       .from("relatorios_campanha")
       .select("*")
-      .eq("prestador_id", prestador_id)
-      .order("gerado_em", { ascending: false })
-      .limit(1)
-      .single();
+      .eq("prestador_id", prestador_id);
+
+    if (relatorioIdParam) {
+      relatorioQuery = relatorioQuery.eq("id", relatorioIdParam);
+    } else {
+      relatorioQuery = relatorioQuery.order("gerado_em", { ascending: false }).limit(1);
+    }
+
+    const { data: relatorio } = await relatorioQuery.single();
 
     if (!relatorio) {
       return NextResponse.json(
-        { error: "Nenhum relatório de campanha encontrado. Sincronize os dados primeiro." },
+        {
+          error: relatorioIdParam
+            ? "Relatório não encontrado para este prestador."
+            : "Nenhum relatório de campanha encontrado. Sincronize os dados primeiro.",
+        },
         { status: 404 }
       );
     }
 
-    // Busca dados da entrevista (fase, plano)
     const { data: entrevista } = await supabase
       .from("entrevistas")
       .select("dados_json")
@@ -177,8 +240,17 @@ export async function POST(req: NextRequest) {
     const faseProjeto = dadosEntrevista?.fase_projeto ?? null;
     const plano = dadosEntrevista?.plano ?? null;
 
-    const kpis = relatorio.dados_json?.kpis as KPIsCampanha;
-    const campanhas = (relatorio.dados_json?.campanhas ?? []) as CampanhaInsight[];
+    const dadosJson = relatorio.dados_json as {
+      kpis?: KPIsCampanha;
+      campanhas?: CampanhaInsight[];
+      conta?: ContaMeta;
+      config_campanha?: ConfigCampanha;
+    };
+    const kpis = dadosJson?.kpis as KPIsCampanha;
+    const campanhas = (dadosJson?.campanhas ?? []) as CampanhaInsight[];
+    const conta = dadosJson?.conta;
+    const config = dadosJson?.config_campanha;
+    const objetivo = deriveObjetivoLabel(config, campanhas);
     const periodo = `${new Date(relatorio.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")} a ${new Date(relatorio.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}`;
 
     const prompt = buildPrompt(
@@ -189,18 +261,19 @@ export async function POST(req: NextRequest) {
       periodo,
       faseProjeto,
       plano,
-      null
+      objetivo,
+      relatorio.health_score,
+      conta,
+      config
     );
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Stream de volta para o cliente
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         let fullText = "";
 
-        // Keepalive: evita timeout em proxies/conexões lentas (a cada 20s)
         const heartbeatId = setInterval(() => {
           try {
             controller.enqueue(encoder.encode(": heartbeat\n\n"));
@@ -213,6 +286,7 @@ export async function POST(req: NextRequest) {
           const claudeStream = anthropic.messages.stream({
             model: "claude-sonnet-4-6",
             max_tokens: 8192,
+            system: SYSTEM_PROMPT,
             messages: [{ role: "user", content: prompt }],
           });
 
@@ -225,7 +299,6 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Tenta parsear — remove markdown code fences se existirem
           console.log(
             `[analise/gerar] fullText length: ${fullText.length}, preview: ${fullText.slice(0, 120)}`
           );

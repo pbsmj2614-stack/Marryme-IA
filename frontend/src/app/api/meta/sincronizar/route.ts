@@ -16,7 +16,13 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import type { CampanhaInsight, KPIsCampanha, DadosRelatorio, ContaMeta } from "@/lib/types";
+import type {
+  CampanhaInsight,
+  KPIsCampanha,
+  DadosRelatorio,
+  ContaMeta,
+  ConfigCampanha,
+} from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { metaSincronizarSchema } from "@/lib/schemas";
@@ -193,6 +199,33 @@ function calcHealthScore(kpis: KPIsCampanha): number {
   }
 
   return Math.min(100, Math.max(0, score));
+}
+
+const MESSAGE_OBJECTIVE_PATTERNS = ["MESSAGE", "ENGAGEMENT", "CONVERSATION", "WHATSAPP"];
+
+function isMessageObjective(objective: string | null | undefined): boolean {
+  if (!objective) return false;
+  const upper = objective.toUpperCase();
+  return MESSAGE_OBJECTIVE_PATTERNS.some((p) => upper.includes(p));
+}
+
+function buildConfigCampanha(campanhas: CampanhaInsight[]): ConfigCampanha {
+  const withObjective = campanhas.filter((c) => c.objective);
+  const objetivoPrincipal = withObjective[0]?.objective ?? "desconhecido";
+  const todasMensagens =
+    campanhas.length > 0 &&
+    campanhas.every((c) => !c.objective || isMessageObjective(c.objective));
+  const campanhasPausadas = campanhas
+    .filter((c) => {
+      const st = (c.effective_status ?? c.status ?? "").toUpperCase();
+      return st && st !== "ACTIVE";
+    })
+    .map((c) => c.campaign_name);
+  return {
+    objetivo_principal: objetivoPrincipal,
+    todas_mensagens: todasMensagens,
+    campanhas_pausadas: campanhasPausadas,
+  };
 }
 
 // ─── Meta API helpers ─────────────────────────────────────────────────────────
@@ -396,6 +429,35 @@ export async function POST(req: NextRequest) {
       })) as { data?: Array<Record<string, unknown>> };
     }
 
+    const campaignMetaMap: Record<
+      string,
+      { objective?: string; effective_status?: string; name?: string }
+    > = {};
+    try {
+      const listRaw = (await metaGet(activeToken, `/act_${accountId}/campaigns`, {
+        fields: "id,name,objective,effective_status,status",
+        limit: "100",
+      })) as { data?: Array<Record<string, unknown>> };
+      for (const item of listRaw.data ?? []) {
+        const row = item as {
+          id?: string;
+          objective?: string;
+          effective_status?: string;
+          status?: string;
+          name?: string;
+        };
+        if (row.id) {
+          campaignMetaMap[row.id] = {
+            objective: row.objective,
+            effective_status: row.effective_status ?? row.status,
+            name: row.name,
+          };
+        }
+      }
+    } catch (campErr) {
+      console.warn("[meta/sincronizar] campaigns metadata indisponível:", campErr);
+    }
+
     const campanhas: CampanhaInsight[] = (campanhasRaw.data ?? []).map((c) => {
       const cImpressions = parseFloat(String(c.impressions ?? "0"));
       const cSpend = parseFloat(String(c.spend ?? "0"));
@@ -403,10 +465,15 @@ export async function POST(req: NextRequest) {
       const cVideo3s = extractAction(c.actions, ["video_view"]);
       const cResults = extractAction(c.actions, MESSAGE_TYPES);
       const cCostPerResult = extractAction(c.cost_per_action_type, MESSAGE_TYPES);
+      const campaignId = String(c.campaign_id ?? "");
+      const meta = campaignMetaMap[campaignId];
+      const effectiveStatus = meta?.effective_status ?? "UNKNOWN";
       return {
-        campaign_id: String(c.campaign_id ?? ""),
-        campaign_name: String(c.campaign_name ?? ""),
-        status: "ACTIVE",
+        campaign_id: campaignId,
+        campaign_name: String(c.campaign_name ?? meta?.name ?? ""),
+        status: effectiveStatus,
+        objective: meta?.objective ?? null,
+        effective_status: effectiveStatus,
         impressions: cImpressions,
         reach: parseFloat(String(c.reach ?? "0")),
         frequency: parseFloat(String(c.frequency ?? "0")),
@@ -672,12 +739,15 @@ export async function POST(req: NextRequest) {
       console.warn("[meta/sincronizar] conta indisponível:", debugContaErro);
     }
 
+    const configCampanha = buildConfigCampanha(campanhas);
+
     const dadosJson: DadosRelatorio = {
       kpis,
       campanhas,
       periodo_inicio: inicio,
       periodo_fim: fim,
       conta,
+      config_campanha: configCampanha,
     };
 
     // ── 5. Salvar relatório ───────────────────────────────────────────────────

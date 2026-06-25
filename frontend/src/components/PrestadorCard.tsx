@@ -439,7 +439,9 @@ export default function PrestadorCard({
             <button
               onClick={() => {
                 setMenuOpen(false);
-                router.push("/pipeline");
+                router.push(
+                  mmId ? `/pipeline?cliente=${encodeURIComponent(mmId)}` : "/pipeline"
+                );
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
             >

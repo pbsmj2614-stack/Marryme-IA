@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { Zap, RefreshCw, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -145,9 +145,15 @@ interface Props {
   prestadorId: string;
   ultimaAnalise?: AnaliseData | null;
   ultimaAnaliseEm?: string | null;
+  relatorioId?: string | null;
 }
 
-export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm }: Props) {
+export default function AnaliseIA({
+  prestadorId,
+  ultimaAnalise,
+  ultimaAnaliseEm,
+  relatorioId,
+}: Props) {
   const [gerando, setGerando] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0]);
   const [analise, setAnalise] = useState<AnaliseData | null>(ultimaAnalise ?? null);
@@ -156,6 +162,15 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
   const [tab, setTab] = useState<TabId>("resumo");
   const [copiado, setCopiado] = useState(false);
   const [passosFe, setPassosFe] = useState<boolean[]>([]);
+
+  useEffect(() => {
+    setAnalise(ultimaAnalise ?? null);
+    setAnaliseEm(ultimaAnaliseEm ?? null);
+    setErroGeração(null);
+    setTab("resumo");
+    setPassosFe([]);
+    setCopiado(false);
+  }, [prestadorId, ultimaAnalise, ultimaAnaliseEm]);
 
   const gerarAnalise = useCallback(async () => {
     setGerando(true);
@@ -173,7 +188,10 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
       const res = await fetch("/api/analise/gerar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prestador_id: prestadorId }),
+        body: JSON.stringify({
+          prestador_id: prestadorId,
+          ...(relatorioId ? { relatorio_id: relatorioId } : {}),
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -218,7 +236,7 @@ export default function AnaliseIA({ prestadorId, ultimaAnalise, ultimaAnaliseEm 
       clearInterval(interval);
       setGerando(false);
     }
-  }, [prestadorId]);
+  }, [prestadorId, relatorioId]);
 
   function copiarPauta() {
     if (!analise?.pauta_reuniao) return;

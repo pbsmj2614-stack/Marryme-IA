@@ -153,7 +153,15 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (errInsert) throw new Error(`Erro ao salvar no Supabase: ${errInsert.message}`);
+    if (errInsert) {
+      console.error(
+        "[add-tarefa] Inconsistência: linha adicionada no Sheets mas falhou no Supabase",
+        errInsert.message
+      );
+      throw new Error(
+        `Tarefa salva na planilha, mas falhou no sistema: ${errInsert.message}. Sincronize Sheets para corrigir.`
+      );
+    }
 
     return NextResponse.json({ ok: true, tarefa: novaTarefa });
   } catch (err) {

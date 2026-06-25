@@ -598,15 +598,15 @@ const TABLE_COLS: { key: SortKey | null; label: string }[] = [
 
 function buildDashboardRows(raw: import("@/lib/queries").DashboardRaw): PrestadorRow[] {
   const mmIdMap = new Map<string, import("@/lib/queries").DashboardPrestadorRaw>();
-  const nomeMap = new Map<string, import("@/lib/queries").DashboardPrestadorRaw>();
   for (const p of raw.prestadores) {
     const ents = (p.entrevistas ?? []).sort(
       (a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()
     );
     const mmId = ents[0]?.dados_json?.mm_id;
-    if (mmId) mmIdMap.set(mmId.toUpperCase().trim(), p);
-    const nomeKey = p.nome_artistico.toLowerCase().trim();
-    if (!nomeMap.has(nomeKey)) nomeMap.set(nomeKey, p);
+    if (!mmId) continue;
+    const key = mmId.toUpperCase().trim();
+    if (mmIdMap.has(key)) continue;
+    mmIdMap.set(key, p);
   }
 
   const seenNomes = new Map<string, import("@/lib/queries").DashboardClienteRaw>();
@@ -623,10 +623,7 @@ function buildDashboardRows(raw: import("@/lib/queries").DashboardRaw): Prestado
   }
 
   return Array.from(seenNomes.values()).map((c) => {
-    const prest =
-      mmIdMap.get(c.id_cliente.toUpperCase().trim()) ??
-      nomeMap.get(c.nome_empresa.toLowerCase().trim()) ??
-      null;
+    const prest = mmIdMap.get(c.id_cliente.toUpperCase().trim()) ?? null;
     const relatorios = (prest?.relatorios_campanha ?? []) as RelatorioRow[];
     const ultimoRel =
       relatorios.sort(
@@ -990,9 +987,16 @@ export default function DashboardBIPage() {
                         >
                           {/* Cliente */}
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-foreground whitespace-nowrap">
-                              {p.nome}
-                            </p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-foreground whitespace-nowrap">
+                                {p.nome}
+                              </p>
+                              {!p.id && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                  Sem vínculo
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               {p.id_cliente}
                               {p.categoria

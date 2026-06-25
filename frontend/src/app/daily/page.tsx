@@ -431,6 +431,7 @@ export default function DailyPage() {
         });
         const data = (await res.json()) as { ok?: boolean; error?: string };
         if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro");
+        await invalidatePipeline();
       } catch (err) {
         setTarefas((prev) =>
           prev.map((t) => (t.id === id ? { ...t, check_feito: !val, status: tarefa.status } : t))
@@ -438,7 +439,7 @@ export default function DailyPage() {
         toast.error(err instanceof Error ? err.message : "Erro ao salvar");
       }
     },
-    [tarefas]
+    [tarefas, invalidatePipeline]
   );
 
   async function handleSync() {
@@ -473,7 +474,8 @@ export default function DailyPage() {
 
   const isAtivo = isStatusAtivo;
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
-  const isAtrasado = (t: Tarefa) => !isFinalizado(t) && !!t.prazo && t.prazo < TODAY;
+  const isAtrasado = (t: Tarefa) =>
+    !isFinalizado(t) && (t.status === "Atrasado" || (!!t.prazo && t.prazo < TODAY));
 
   const normStr = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
@@ -675,7 +677,7 @@ export default function DailyPage() {
       {modalCliente && (
         <ModalTarefas
           cliente={modalCliente}
-          tarefas={modalCliente.tarefas}
+          tarefas={tarefas.filter((t) => t.cliente_id === modalCliente.id_cliente)}
           onClose={() => setModalCliente(null)}
           onCheckChange={handleCheckChange}
         />
@@ -783,7 +785,7 @@ export default function DailyPage() {
                         {/* Linha do cliente */}
                         <div className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-red-50 transition-colors group">
                           <Link
-                            href="/pipeline"
+                            href={`/pipeline?expand=${cliente.id}`}
                             className="text-sm font-semibold text-brand-800 hover:text-brand-600 hover:underline truncate flex-1 mr-2"
                           >
                             {cliente.nome_empresa}
@@ -811,25 +813,15 @@ export default function DailyPage() {
 
                         {/* Tarefas expandidas */}
                         {open && (
-                          <div className="pl-3 border-l-2 border-red-200 ml-2 mb-1.5 space-y-0.5">
+                          <div className="pl-3 border-l-2 border-red-200 ml-2 mb-1.5">
                             {tList.map((t) => (
-                              <div
+                              <TarefaCheck
                                 key={t.id}
-                                className="text-xs text-foreground py-0.5 flex items-start gap-1.5"
-                              >
-                                <span className="text-red-400 mt-0.5 flex-shrink-0">•</span>
-                                <span>
-                                  {t.o_que}
-                                  {t.prazo && (
-                                    <span className="text-red-500 ml-1 font-medium">
-                                      ({formatDate(t.prazo)})
-                                    </span>
-                                  )}
-                                  {t.quem && (
-                                    <span className="text-brand-500 ml-1">· {t.quem}</span>
-                                  )}
-                                </span>
-                              </div>
+                                tarefa={t}
+                                label={t.o_que}
+                                sub={`${t.cliente.id_cliente}${t.prazo ? ` · ${formatDate(t.prazo)}` : ""}${t.quem ? ` · ${t.quem}` : ""}`}
+                                onCheckChange={handleCheckChange}
+                              />
                             ))}
                           </div>
                         )}

@@ -105,10 +105,25 @@ export default async function PrestadorPage({
   const dados = entrevista?.dados_json as DadosEntrevista | undefined;
   const historicoRelatorios = (relatorios ?? []) as RelatorioCampanha[];
   const ultimoRelatorio = historicoRelatorios[0] ?? null;
-  const ultimaAnalise = analises?.[0]?.dados_json ?? null;
-  const ultimaAnaliseEm = analises?.[0]?.gerado_em
+
+  let ultimaAnalise = analises?.[0]?.dados_json ?? null;
+  let ultimaAnaliseEm = analises?.[0]?.gerado_em
     ? new Date(analises[0].gerado_em).toLocaleString("pt-BR")
     : null;
+
+  if (ultimoRelatorio?.id) {
+    const { data: analiseRel } = await supabase
+      .from("analises_ia")
+      .select("dados_json, gerado_em")
+      .eq("relatorio_id", ultimoRelatorio.id)
+      .order("gerado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (analiseRel) {
+      ultimaAnalise = analiseRel.dados_json;
+      ultimaAnaliseEm = new Date(analiseRel.gerado_em).toLocaleString("pt-BR");
+    }
+  }
 
   const isChatAtivo = tab !== "campanha" && tab !== "aprovacoes";
 
@@ -383,6 +398,7 @@ export default async function PrestadorPage({
       {tab === "campanha" && (
         <main id="campanha" className="max-w-5xl mx-auto px-4 pb-8 w-full">
           <CampanhaTab
+            key={p.id}
             prestadorId={p.id}
             prestadorNome={p.nome_artistico}
             metaAccountId={p.meta_ad_account_id}

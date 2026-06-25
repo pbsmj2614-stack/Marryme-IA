@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Header from "@/components/Header";
 import { importarPlanilha } from "@/lib/importSheets";
@@ -20,7 +20,17 @@ import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
-import { Loader2, RefreshCw, X, Plus, List, LayoutGrid } from "lucide-react";
+import { Loader2, RefreshCw, X, Plus, List, LayoutGrid, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -452,44 +462,117 @@ const KANBAN_COL_LABEL: Record<string, string> = {
   Pausado: "Pausado",
 };
 
+function KanbanDroppableColumn({
+  col,
+  cards,
+  onExpand,
+}: {
+  col: string;
+  cards: ClienteComMetricas[];
+  onExpand: (id: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col });
+  return (
+    <div ref={setNodeRef} className="w-52 flex flex-col gap-2">
+      <div className="flex items-center justify-between px-1 mb-1">
+        <span className="text-xs font-bold text-brand-800 uppercase tracking-wider">
+          {KANBAN_COL_LABEL[col]}
+        </span>
+        <span className="text-xs text-muted-foreground bg-border/60 rounded-full px-2 py-0.5 font-semibold">
+          {cards.length}
+        </span>
+      </div>
+      <div
+        className={`space-y-2 min-h-[120px] rounded-xl p-1 transition-colors ${
+          isOver ? "bg-brand-50 ring-2 ring-brand-300 ring-inset" : ""
+        }`}
+      >
+        {cards.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+            Nenhum cliente
+          </div>
+        ) : (
+          cards.map((c) => <KanbanCard key={c.id} c={c} onExpand={onExpand} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
 function KanbanCard({ c, onExpand }: { c: ClienteComMetricas; onExpand: (id: string) => void }) {
   const scoreColor = getScoreColor(c.score);
   const locked = c.status !== "Ativo";
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: c.id,
+    data: { clienteId: c.id_cliente, status: c.status, fase: c.fase_projeto },
+    disabled: locked,
+  });
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform), zIndex: isDragging ? 50 : undefined }
+    : undefined;
+
   return (
     <div
-      onClick={() => onExpand(c.id)}
-      className={`bg-white rounded-xl border border-border p-3 shadow-sm space-y-2.5 cursor-pointer hover:border-brand-300 hover:shadow-md transition-shadow ${
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white rounded-xl border border-border p-3 shadow-sm space-y-2.5 hover:border-brand-300 hover:shadow-md transition-shadow ${
         locked ? "opacity-60" : ""
-      }`}
+      } ${isDragging ? "opacity-70 shadow-lg ring-2 ring-brand-400" : ""}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-brand-900 text-sm leading-tight">{c.nome_empresa}</p>
-        <span
-          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
-          style={{ backgroundColor: scoreColor }}
-        >
-          {c.score}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {c.plano && (
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
+      <div className="flex items-start gap-1.5">
+        {!locked && (
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 p-0.5 rounded text-muted-foreground hover:text-brand-700 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none"
+            aria-label="Arrastar cliente"
           >
-            {planoLabel(c.plano)}
-          </span>
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
         )}
-        {c.responsavel_mm && (
-          <span className="text-xs text-muted-foreground">{c.responsavel_mm}</span>
-        )}
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => onExpand(c.id)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") onExpand(c.id);
+          }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-brand-900 text-sm leading-tight">{c.nome_empresa}</p>
+            <span
+              className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm"
+              style={{ backgroundColor: scoreColor }}
+            >
+              {c.score}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 items-center mt-2">
+            {c.plano && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${planoBadgeClass(c.plano)}`}
+              >
+                {planoLabel(c.plano)}
+              </span>
+            )}
+            {c.responsavel_mm && (
+              <span className="text-xs text-muted-foreground">{c.responsavel_mm}</span>
+            )}
+          </div>
+          {c.atrasadas > 0 && (
+            <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block flex-shrink-0" />
+              {c.atrasadas} tarefa{c.atrasadas > 1 ? "s" : ""} atrasada{c.atrasadas > 1 ? "s" : ""}
+            </p>
+          )}
+          <div className="mt-2">
+            <ProgressBar score={c.score} finalizadas={c.finalizadas} total={c.total_tarefas} />
+          </div>
+        </div>
       </div>
-      {c.atrasadas > 0 && (
-        <p className="text-xs text-red-600 font-medium flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block flex-shrink-0" />
-          {c.atrasadas} tarefa{c.atrasadas > 1 ? "s" : ""} atrasada{c.atrasadas > 1 ? "s" : ""}
-        </p>
-      )}
-      <ProgressBar score={c.score} finalizadas={c.finalizadas} total={c.total_tarefas} />
     </div>
   );
 }
@@ -497,10 +580,16 @@ function KanbanCard({ c, onExpand }: { c: ClienteComMetricas; onExpand: (id: str
 function PipelineKanban({
   clientes,
   onExpand,
+  onMoveToColumn,
 }: {
   clientes: ClienteComMetricas[];
   onExpand: (id: string) => void;
+  onMoveToColumn: (cliente: ClienteComMetricas, column: string) => void;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
   const grouped = KANBAN_COLS.reduce<Record<string, ClienteComMetricas[]>>((acc, col) => {
     if (col === "Pausado") {
       acc[col] = clientes.filter((c) => /paus|encerr/i.test(c.status ?? ""));
@@ -514,35 +603,31 @@ function PipelineKanban({
     return acc;
   }, {});
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const cliente = clientes.find((c) => c.id === active.id);
+    if (!cliente) return;
+    const targetCol = String(over.id);
+    if (!KANBAN_COLS.includes(targetCol as (typeof KANBAN_COLS)[number])) return;
+    onMoveToColumn(cliente, targetCol);
+  }
+
   return (
-    <div className="overflow-x-auto pb-4">
-      <div className="flex gap-3 min-w-max">
-        {KANBAN_COLS.map((col) => {
-          const cards = grouped[col] ?? [];
-          return (
-            <div key={col} className="w-52 flex flex-col gap-2">
-              <div className="flex items-center justify-between px-1 mb-1">
-                <span className="text-xs font-bold text-brand-800 uppercase tracking-wider">
-                  {KANBAN_COL_LABEL[col]}
-                </span>
-                <span className="text-xs text-muted-foreground bg-border/60 rounded-full px-2 py-0.5 font-semibold">
-                  {cards.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {cards.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                    Nenhum cliente
-                  </div>
-                ) : (
-                  cards.map((c) => <KanbanCard key={c.id} c={c} onExpand={onExpand} />)
-                )}
-              </div>
-            </div>
-          );
-        })}
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="overflow-x-auto pb-4">
+        <div className="flex gap-3 min-w-max">
+          {KANBAN_COLS.map((col) => (
+            <KanbanDroppableColumn
+              key={col}
+              col={col}
+              cards={grouped[col] ?? []}
+              onExpand={onExpand}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }
 
@@ -560,37 +645,42 @@ const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
   { key: "statusScore", label: "Status" },
 ];
 
+function recalcClienteMetrics(c: ClienteComMetricas, tCliente: Tarefa[]): ClienteComMetricas {
+  const hoje = new Date().toISOString().split("T")[0];
+  const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+  const atrasadas = tCliente.filter(
+    (t) =>
+      !t.check_feito &&
+      t.status !== "Finalizado" &&
+      t.status !== "Cancelado" &&
+      (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
+  ).length;
+  const total = tCliente.length;
+  const totalAtivo = tCliente.filter((t) => t.status !== "Cancelado").length;
+  const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
+  return {
+    ...c,
+    total_tarefas: total,
+    finalizadas,
+    atrasadas,
+    score,
+    statusScore: getStatusFromScore(score) as StatusScore,
+    tarefas: tCliente,
+  };
+}
+
 function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteComMetricas[] {
   const tarefas = dedupTarefas(rawTarefas);
   const clientesDedup = dedupClientesByNome(rawClientes);
-  const hoje = new Date().toISOString().split("T")[0];
   return clientesDedup.map((c) => {
     const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
-    const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
-    const atrasadas = tCliente.filter(
-      (t) =>
-        !t.check_feito &&
-        t.status !== "Finalizado" &&
-        t.status !== "Cancelado" &&
-        (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
-    ).length;
-    const total = tCliente.length;
-    const totalAtivo = tCliente.filter((t) => t.status !== "Cancelado").length;
-    const score = totalAtivo > 0 ? Math.round((finalizadas / totalAtivo) * 100) : 0;
-    return {
-      ...c,
-      total_tarefas: total,
-      finalizadas,
-      atrasadas,
-      score,
-      statusScore: getStatusFromScore(score) as StatusScore,
-      tarefas: tCliente,
-    };
+    return recalcClienteMetrics({ ...c, tarefas: tCliente } as ClienteComMetricas, tCliente);
   });
 }
 
 export default function PipelinePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: userLoading } = useCurrentUser();
   const { role } = useRole();
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
@@ -628,6 +718,39 @@ export default function PipelinePage() {
     observacoes: "",
   });
   const [savingTarefa, setSavingTarefa] = useState(false);
+  const deepLinkHandled = useRef(false);
+
+  const openCliente = useCallback(
+    (id: string) => {
+      setView("list");
+      setExpandedId(id);
+      router.replace(`/pipeline?expand=${id}`, { scroll: false });
+      requestAnimationFrame(() => {
+        document.getElementById(`pipeline-row-${id}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (!clientes.length || deepLinkHandled.current) return;
+    const expandUuid = searchParams.get("expand");
+    const expandCliente = searchParams.get("cliente");
+    let targetId: string | null = expandUuid;
+    if (!targetId && expandCliente) {
+      const found = clientes.find(
+        (c) => c.id_cliente.toUpperCase().trim() === expandCliente.toUpperCase().trim()
+      );
+      targetId = found?.id ?? null;
+    }
+    if (targetId && clientes.some((c) => c.id === targetId)) {
+      deepLinkHandled.current = true;
+      openCliente(targetId);
+    }
+  }, [clientes, searchParams, openCliente]);
 
   useEffect(() => {
     if (rawData)
@@ -766,12 +889,13 @@ export default function PipelinePage() {
         : "Não iniciado";
 
     setClientes((prev) =>
-      prev.map((c) => ({
-        ...c,
-        tarefas: c.tarefas.map((t) =>
+      prev.map((c) => {
+        if (!c.tarefas.some((t) => t.id === tarefa.id)) return c;
+        const newTarefas = c.tarefas.map((t) =>
           t.id === tarefa.id ? { ...t, check_feito: checked, status: newStatus } : t
-        ),
-      }))
+        );
+        return recalcClienteMetrics(c, newTarefas);
+      })
     );
 
     try {
@@ -790,14 +914,16 @@ export default function PipelinePage() {
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar");
+      await invalidatePipeline();
     } catch (err) {
       setClientes((prev) =>
-        prev.map((c) => ({
-          ...c,
-          tarefas: c.tarefas.map((t) =>
+        prev.map((c) => {
+          if (!c.tarefas.some((t) => t.id === tarefa.id)) return c;
+          const reverted = c.tarefas.map((t) =>
             t.id === tarefa.id ? { ...t, check_feito: !checked, status: tarefa.status } : t
-          ),
-        }))
+          );
+          return recalcClienteMetrics(c, reverted);
+        })
       );
       toast.error(err instanceof Error ? err.message : "Erro ao salvar");
     }
@@ -892,11 +1018,53 @@ export default function PipelinePage() {
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar fase");
       toast.success(`Etapa avançada: ${novaFase}`);
+      await invalidatePipeline();
     } catch (err) {
-      // Reverte em caso de erro
       await invalidatePipeline();
       toast.error(err instanceof Error ? err.message : "Erro ao avançar etapa");
     }
+  }
+
+  async function handleKanbanMove(cliente: ClienteComMetricas, column: string) {
+    if (column === "Pausado") {
+      if (/paus/i.test(cliente.status ?? "")) return;
+      setClientes((prev) =>
+        prev.map((c) =>
+          c.id === cliente.id ? { ...c, status: "Pausado" as StatusCliente } : c
+        )
+      );
+      await handleStatusChange(cliente.id_cliente, "Pausado");
+      return;
+    }
+
+    const faseCols = ["Onboarding", "Planejamento de Metas", "Voo de Cruzeiro", "Renovação"];
+    if (!faseCols.includes(column)) return;
+    if (cliente.fase_projeto === column && cliente.status === "Ativo") return;
+
+    if (/paus|encerr/i.test(cliente.status ?? "")) {
+      setClientes((prev) =>
+        prev.map((c) =>
+          c.id === cliente.id
+            ? { ...c, status: "Ativo" as StatusCliente, fase_projeto: column }
+            : c
+        )
+      );
+      try {
+        const res = await fetch("/api/sheets/update-cliente-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_cliente: cliente.id_cliente, status: "Ativo" }),
+        });
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao reativar cliente");
+      } catch (err) {
+        await invalidatePipeline();
+        toast.error(err instanceof Error ? err.message : "Erro ao reativar cliente");
+        return;
+      }
+    }
+
+    await handleAvancarFase(cliente.id_cliente, column);
   }
 
   async function handleAddTarefa(idCliente: string) {
@@ -908,8 +1076,15 @@ export default function PipelinePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_cliente: idCliente, ...addTarefaForm }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error ?? "Erro ao salvar");
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        if (res.status === 422) {
+          throw new Error(
+            'Cliente sem aba no Sheets. Use "Corrigir Gaps" e sincronize antes de adicionar tarefas.'
+          );
+        }
+        throw new Error(data.error ?? "Erro ao salvar");
+      }
       toast.success("Tarefa adicionada na planilha e no sistema");
       setAddTarefaFor(null);
       setAddTarefaForm({
@@ -1161,10 +1336,8 @@ export default function PipelinePage() {
         {view === "kanban" ? (
           <PipelineKanban
             clientes={clientesFiltrados}
-            onExpand={(id) => {
-              setView("list");
-              setExpandedId(id);
-            }}
+            onExpand={openCliente}
+            onMoveToColumn={handleKanbanMove}
           />
         ) : (
           <div className="rounded-xl border border-border overflow-hidden shadow-sm">
@@ -1208,6 +1381,7 @@ export default function PipelinePage() {
                       <React.Fragment key={c.id}>
                         {/* ── Linha do cliente ── */}
                         <tr
+                          id={`pipeline-row-${c.id}`}
                           onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
                           className={`cursor-pointer border-t border-border transition-colors ${
                             i % 2 === 0 ? "bg-white" : "bg-rose-50/30"
@@ -1334,7 +1508,13 @@ export default function PipelinePage() {
                                           addTarefaFor === c.id_cliente ? null : c.id_cliente
                                         )
                                       }
-                                      className="text-xs px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition font-medium flex items-center gap-1"
+                                      disabled={!c.sheets_aba}
+                                      title={
+                                        !c.sheets_aba
+                                          ? 'Cliente sem aba no Sheets — use "Corrigir Gaps"'
+                                          : undefined
+                                      }
+                                      className="text-xs px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition font-medium flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                       <Plus className="w-3 h-3" /> Tarefa
                                     </button>

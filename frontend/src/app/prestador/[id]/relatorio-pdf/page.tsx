@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import type { PrestadorMeta, RelatorioCampanha, CampanhaInsight } from "@/lib/types";
+import type { PrestadorMeta, RelatorioCampanha, CampanhaInsight, ContaMeta } from "@/lib/types";
 import PrintButton from "./PrintButton";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
 
@@ -100,8 +100,15 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function RelatorioPdfPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RelatorioPdfPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ relatorio_id?: string }>;
+}) {
   const { id } = await params;
+  const { relatorio_id: relatorioIdParam } = await searchParams;
   const supabase = await createSupabaseServer();
 
   const {
@@ -112,30 +119,39 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
   const { data: prestador } = await supabase.from("prestadores").select("*").eq("id", id).single();
   if (!prestador) notFound();
 
-  const [{ data: relatorios }, { data: analises }] = await Promise.all([
-    supabase
-      .from("relatorios_campanha")
-      .select("*")
-      .eq("prestador_id", id)
-      .order("gerado_em", { ascending: false })
-      .limit(1),
-    supabase
-      .from("analises_ia")
-      .select("dados_json, gerado_em")
-      .eq("prestador_id", id)
-      .order("gerado_em", { ascending: false })
-      .limit(1),
-  ]);
+  let relQuery = supabase.from("relatorios_campanha").select("*").eq("prestador_id", id);
+  if (relatorioIdParam) {
+    relQuery = relQuery.eq("id", relatorioIdParam);
+  } else {
+    relQuery = relQuery.order("gerado_em", { ascending: false }).limit(1);
+  }
+  const { data: relatorioRow } = await relQuery.maybeSingle();
+
+  const rel = (relatorioRow ?? null) as RelatorioCampanha | null;
+
+  let analiseQuery = supabase
+    .from("analises_ia")
+    .select("dados_json, gerado_em")
+    .eq("prestador_id", id);
+
+  if (rel?.id) {
+    analiseQuery = analiseQuery.eq("relatorio_id", rel.id).order("gerado_em", { ascending: false }).limit(1);
+  } else {
+    analiseQuery = analiseQuery.order("gerado_em", { ascending: false }).limit(1);
+  }
+
+  const { data: analiseRow } = await analiseQuery.maybeSingle();
 
   const p = prestador as PrestadorMeta;
-  const rel = (relatorios?.[0] ?? null) as RelatorioCampanha | null;
-  const analise = (analises?.[0]?.dados_json ?? null) as AnaliseData | null;
-  const analiseEm = analises?.[0]?.gerado_em ?? null;
+  const analise = (analiseRow?.dados_json ?? null) as AnaliseData | null;
+  const analiseEm = analiseRow?.gerado_em ?? null;
 
   const kpis = rel?.dados_json.kpis;
   const campanhas = rel?.dados_json.campanhas ?? [];
+  const conta = rel?.dados_json.conta as ContaMeta | undefined;
   const score = rel?.health_score ?? null;
   const sc = score !== null ? scoreLabel(score) : null;
+  const semAnaliseParaRelatorio = !!rel && !analise;
 
   const hoje = new Date().toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -236,6 +252,18 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
               </div>
             )}
 
+            {conta && (conta.metodo || conta.saldo != null) && (
+              <div className="mb-6 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                <span className="font-semibold text-gray-700">Conta Meta: </span>
+                {conta.metodo === "cartao"
+                  ? "Cartão de crédito"
+                  : conta.metodo === "prepago"
+                    ? "Pré-pago"
+                    : conta.metodo ?? "—"}
+                {conta.saldo != null && <> · Saldo/teto restante: {fmtBRL(conta.saldo)}</>}
+              </div>
+            )}
+
             {/* KPIs */}
             <SectionTitle>Métricas do período</SectionTitle>
             <div className="grid grid-cols-4 gap-3 mb-6">
@@ -294,7 +322,12 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
                           className="py-2 pr-3 text-gray-800 font-medium"
                           style={{ maxWidth: 200 }}
                         >
-                          {c.campaign_name}
+                          <div>{c.campaign_name}</div>
+                          {(c.effective_status ?? c.status) && (
+                            <div className="text-[10px] text-gray-400 font-normal">
+                              {c.effective_status ?? c.status}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 px-2 text-right text-gray-600">{fmt(c.impressions)}</td>
                         <td className="py-2 px-2 text-right text-gray-600">{fmt(c.clicks)}</td>
@@ -357,6 +390,15 @@ export default async function RelatorioPdfPage({ params }: { params: Promise<{ i
           <span>act_{p.meta_ad_account_id ?? "—"}</span>
         </div>
       </div>
+
+      {semAnaliseParaRelatorio && (
+        <div className="max-w-[800px] mx-auto px-8 pb-10 font-sans">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Nenhuma análise IA vinculada a este relatório. Gere a análise na aba Campanha ou use
+            &quot;Relatório de reunião&quot; antes de imprimir.
+          </div>
+        </div>
+      )}
 
       {/* ── Parte 2: Análise IA (renderiza só se existir) ────────────────── */}
       {analise && (

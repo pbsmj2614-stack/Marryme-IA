@@ -55,6 +55,7 @@ export function validarEntrevista(dados: unknown): Record<string, string> | null
 
 export const analiseGerarSchema = z.object({
   prestador_id: z.string().min(1, "prestador_id obrigatório"),
+  relatorio_id: z.string().uuid("relatorio_id inválido").optional(),
 });
 
 export const metaTokenSchema = z.object({

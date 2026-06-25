@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, FileText } from "lucide-react";
+import { toast } from "sonner";
 import type { RelatorioCampanha, CampanhaInsight, KPIsCampanha, ContaMeta } from "@/lib/types";
 import AnaliseIA from "@/components/AnaliseIA";
 import { fmt, fmtBRL, fmtPct } from "@/lib/formatters";
@@ -426,6 +427,7 @@ export default function CampanhaTab({
 }: Props) {
   const router = useRouter();
   const [sincronizando, setSincronizando] = useState(false);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [erroSync, setErroSync] = useState<string | null>(null);
 
   // Período padrão: últimos 30 dias
@@ -447,13 +449,99 @@ export default function CampanhaTab({
           periodo_fim: periodoFim,
         }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        relatorio_id?: string;
+        debug?: { usou_date_preset?: boolean };
+      };
       if (!data.ok) throw new Error(data.error ?? "Erro ao sincronizar");
+      if (data.debug?.usou_date_preset) {
+        toast.warning(
+          "A Meta usou período alternativo (preset) — confira se os dados batem com as datas selecionadas."
+        );
+      }
       router.refresh();
     } catch (e) {
       setErroSync(e instanceof Error ? e.message : String(e));
     } finally {
       setSincronizando(false);
+    }
+  }
+
+  async function consumirAnaliseStream(res: Response): Promise<void> {
+    if (!res.body) throw new Error("Resposta vazia da análise IA");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const msg = JSON.parse(line.slice(6)) as { done?: boolean; error?: string };
+        if (msg.error) throw new Error(msg.error);
+        if (msg.done) return;
+      }
+    }
+  }
+
+  async function handleRelatorioReuniao() {
+    setGerandoRelatorio(true);
+    setErroSync(null);
+    try {
+      toast.info("Sincronizando dados do período…");
+      const syncRes = await fetch("/api/meta/sincronizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prestador_id: prestadorId,
+          periodo_inicio: periodoInicio,
+          periodo_fim: periodoFim,
+        }),
+      });
+      const syncData = (await syncRes.json()) as {
+        ok?: boolean;
+        error?: string;
+        relatorio_id?: string;
+        debug?: { usou_date_preset?: boolean };
+      };
+      if (!syncData.ok) throw new Error(syncData.error ?? "Erro ao sincronizar");
+      if (syncData.debug?.usou_date_preset) {
+        toast.warning(
+          "A Meta usou período alternativo — confira o período exibido no PDF antes da reunião."
+        );
+      }
+      const relatorioId = syncData.relatorio_id;
+      if (!relatorioId) throw new Error("Sync concluído, mas relatorio_id não retornado.");
+
+      toast.info("Gerando análise IA para a reunião…");
+      const analiseRes = await fetch("/api/analise/gerar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prestador_id: prestadorId, relatorio_id: relatorioId }),
+      });
+      if (!analiseRes.ok) {
+        const err = (await analiseRes.json()) as { error?: string };
+        throw new Error(err.error ?? "Erro ao gerar análise");
+      }
+      await consumirAnaliseStream(analiseRes);
+
+      toast.success("Relatório pronto — abrindo PDF…");
+      window.open(
+        `/prestador/${prestadorId}/relatorio-pdf?relatorio_id=${relatorioId}`,
+        "_blank"
+      );
+      router.refresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErroSync(msg);
+      toast.error(msg);
+    } finally {
+      setGerandoRelatorio(false);
     }
   }
 
@@ -544,7 +632,7 @@ export default function CampanhaTab({
             </Link>
             {rel && (
               <Link
-                href={`/prestador/${prestadorId}/relatorio-pdf`}
+                href={`/prestador/${prestadorId}/relatorio-pdf?relatorio_id=${rel.id}`}
                 target="_blank"
                 className="text-xs text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex items-center gap-1.5"
               >
@@ -583,7 +671,7 @@ export default function CampanhaTab({
             </div>
             <Button
               onClick={handleSincronizar}
-              disabled={sincronizando}
+              disabled={sincronizando || gerandoRelatorio}
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition h-auto"
             >
               {sincronizando ? (
@@ -592,6 +680,18 @@ export default function CampanhaTab({
                 <RefreshCw className="w-3.5 h-3.5" />
               )}
               {sincronizando ? "Sincronizando…" : "Atualizar dados"}
+            </Button>
+            <Button
+              onClick={handleRelatorioReuniao}
+              disabled={sincronizando || gerandoRelatorio}
+              className="flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition h-auto"
+            >
+              {gerandoRelatorio ? (
+                <Loader2 className="animate-spin h-3.5 w-3.5" />
+              ) : (
+                <FileText className="w-3.5 h-3.5" />
+              )}
+              {gerandoRelatorio ? "Gerando…" : "Relatório de reunião"}
             </Button>
           </div>
         </div>
@@ -783,11 +883,15 @@ export default function CampanhaTab({
                     key={h.id}
                     className="flex items-center justify-between text-sm py-2 border-b border-gray-50 last:border-0"
                   >
-                    <span className="text-gray-500 text-xs">
+                    <Link
+                      href={`/prestador/${prestadorId}/relatorio-pdf?relatorio_id=${h.id}`}
+                      target="_blank"
+                      className="text-gray-500 text-xs hover:text-brand-700 hover:underline"
+                    >
                       {new Date(h.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")}
                       {" — "}
                       {new Date(h.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}
-                    </span>
+                    </Link>
                     <div className="flex items-center gap-2">
                       <span
                         className="text-xs font-bold"
@@ -818,6 +922,7 @@ export default function CampanhaTab({
           {/* ── Bloco 7: Análise IA ───────────────────────────────────────── */}
           <AnaliseIA
             prestadorId={prestadorId}
+            relatorioId={rel?.id ?? null}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ultimaAnalise={ultimaAnalise as any}
             ultimaAnaliseEm={ultimaAnaliseEm}

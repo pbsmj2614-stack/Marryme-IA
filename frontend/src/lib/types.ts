@@ -133,10 +133,18 @@ export interface PrestadorMeta extends Prestador {
   meta_sync_status: "pendente" | "ok" | "erro" | null;
 }
 
+export interface ConfigCampanha {
+  objetivo_principal: string;
+  todas_mensagens: boolean;
+  campanhas_pausadas: string[];
+}
+
 export interface CampanhaInsight {
   campaign_id: string;
   campaign_name: string;
   status: string;
+  objective?: string | null;
+  effective_status?: string | null;
   impressions: number;
   reach: number;
   frequency: number;
@@ -204,6 +212,7 @@ export interface DadosRelatorio {
   periodo_inicio: string;
   periodo_fim: string;
   conta?: ContaMeta;
+  config_campanha?: ConfigCampanha;
 }
 
 export interface RelatorioCampanha {
