@@ -31,6 +31,14 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { updateTarefaSchema } from "@/lib/schemas";
+import {
+  buildSheetRowFromLayout,
+  detectTaskColumnLayout,
+  findTaskRowByOQue,
+  sheetAppendRange,
+  sheetRowUpdateRange,
+  sheetRowValuesForLayout,
+} from "@/lib/sheets";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -157,64 +165,34 @@ export async function POST(req: NextRequest) {
     // ── 3. Atualiza linha no Sheets ──────────────────────────────────────────────
     if (cliente?.sheets_aba && oQueOrigStr && tarefaAtual) {
       const token = await googleToken();
-      const rows = await sRead(token, `${cliente.sheets_aba}!A:H`);
+      const rows = await sRead(token, `${cliente.sheets_aba}!A:I`);
+      const layout = detectTaskColumnLayout(rows);
 
-      // Identifica a linha pela correspondência: col C (o_que) é obrigatória,
-      // col B (etapa) e col F (prazo DD/MM/YYYY) são restrições adicionais se fornecidas.
-      const oQueNorm = oQueOrigStr.toLowerCase();
       const prazoOrigBR = prazo_original ? toDateBR(prazo_original) : null;
-      const etapaOrigNorm = etapa_original ? etapa_original.trim().toLowerCase() : null;
+      const rowIndex = findTaskRowByOQue(rows, layout, oQueOrigStr, etapa_original, prazoOrigBR);
 
-      let rowIndex = -1;
-      // Busca de baixo para cima — prioriza a linha mais recente (evita match em tarefa antiga duplicada)
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const row = rows[i] ?? [];
-        const rowOQue = (row[2] ?? "").trim().toLowerCase();
-        if (rowOQue !== oQueNorm) continue;
+      const prazoBR = tarefaAtual.prazo ? toDateBR(tarefaAtual.prazo) : "";
+      const sheetRow = buildSheetRowFromLayout(
+        layout,
+        {
+          check_feito: tarefaAtual.check_feito,
+          etapa: tarefaAtual.etapa,
+          o_que: tarefaAtual.o_que,
+          tipo: tarefaAtual.tipo,
+          quem: tarefaAtual.quem,
+          prazo: prazoBR,
+          status: tarefaAtual.status?.trim() || "Não iniciado",
+          observacoes: tarefaAtual.observacoes,
+        },
+        rowIndex >= 0 ? rows[rowIndex] : undefined
+      );
 
-        if (etapaOrigNorm !== null) {
-          const rowEtapa = (row[1] ?? "").trim().toLowerCase();
-          if (rowEtapa !== etapaOrigNorm) continue;
-        }
-        if (prazoOrigBR !== null) {
-          const rowPrazo = (row[5] ?? "").trim();
-          if (rowPrazo !== prazoOrigBR) continue;
-        }
-
-        rowIndex = i;
-        break;
-      }
-
-      // Fallback: só o_que (quando etapa/prazo mudaram ou estavam vazios na criação)
-      if (rowIndex < 0 && oQueNorm) {
-        for (let i = rows.length - 1; i >= 0; i--) {
-          const row = rows[i] ?? [];
-          if ((row[2] ?? "").trim().toLowerCase() === oQueNorm) {
-            rowIndex = i;
-            break;
-          }
-        }
-      }
-
-      const buildRow = (existing: string[]) => [
-        tarefaAtual.check_feito ? "TRUE" : "FALSE",
-        tarefaAtual.etapa?.trim() ?? existing[1] ?? "",
-        tarefaAtual.o_que,
-        tarefaAtual.tipo?.trim() || existing[3] || "Marry Me",
-        tarefaAtual.quem?.trim() ?? existing[4] ?? "",
-        tarefaAtual.prazo ? toDateBR(tarefaAtual.prazo) : existing[5] ?? "",
-        tarefaAtual.status?.trim() || existing[6] || "Não iniciado",
-        tarefaAtual.observacoes?.trim() ?? existing[7] ?? "",
-      ];
+      const rowValues = sheetRowValuesForLayout(layout, sheetRow);
 
       if (rowIndex >= 0) {
-        const existing = rows[rowIndex] ?? [];
-        const sheetRow = rowIndex + 1;
-        await sUpdate(token, `${cliente.sheets_aba}!A${sheetRow}:H${sheetRow}`, [
-          buildRow(existing),
-        ]);
+        await sUpdate(token, sheetRowUpdateRange(cliente.sheets_aba, rowIndex, layout), [rowValues]);
       } else {
-        await sAppend(token, `${cliente.sheets_aba}!A:H`, [buildRow([])]);
+        await sAppend(token, sheetAppendRange(cliente.sheets_aba, layout), [rowValues]);
       }
     }
 

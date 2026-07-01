@@ -15,6 +15,10 @@ import {
   getAbaIdPrefixFromTitle,
   normalizeMmId,
 } from "@/lib/sheets-cadastro";
+import {
+  collectAbaCandidates,
+  resolveSheetsAba,
+} from "@/lib/sheets-aba-resolve";
 
 export interface ImportResult {
   clientes: number;
@@ -127,28 +131,6 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
-function resolveSheetsAba(
-  idCliente: string,
-  abaEncontrada: string | null,
-  existente: string | null | undefined,
-  todasAbas: string[],
-  abasClientes: string[],
-  tarefasPorAba: Record<string, import("@/lib/sheets").TarefaSheet[]>
-): string | null {
-  const idNorm = normalizeMmId(idCliente) ?? idCliente;
-  const abaPorPrefixo = abasClientes.find((a) => getAbaIdPrefixFromTitle(a) === idNorm) ?? null;
-
-  const candidatos = [existente, abaEncontrada, abaPorPrefixo].filter(
-    (a): a is string => !!a && todasAbas.includes(a)
-  );
-  const unicos = Array.from(new Set(candidatos));
-
-  for (const aba of unicos) {
-    if ((tarefasPorAba[aba]?.length ?? 0) > 0) return aba;
-  }
-  return unicos[0] ?? null;
-}
-
 function clienteIdFromAba(sheetsAba: string, fallbackId: string): string {
   return getAbaIdPrefixFromTitle(sheetsAba) ?? normalizeMmId(fallbackId) ?? fallbackId;
 }
@@ -245,12 +227,16 @@ export async function importarPlanilha(
 
   const abasParaFetch = Array.from(
     new Set(
-      clientesPreliminar
-        .flatMap((c) => {
-          const existente = existingSheetsAba.get(c.id_cliente);
-          return [existente, c.abaEncontrada].filter(Boolean) as string[];
-        })
-        .filter((a) => todasAbas.includes(a))
+      clientesPreliminar.flatMap((c) => {
+        const existente = existingSheetsAba.get(c.id_cliente);
+        return collectAbaCandidates(
+          c.id_cliente,
+          c.abaEncontrada,
+          existente,
+          todasAbas,
+          abasClientes
+        );
+      })
     )
   );
 

@@ -15,7 +15,7 @@ import {
   buildClienteIdAliasMap,
   tarefaBelongsToCliente,
 } from "@/lib/client-utils";
-import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
+import { RESPONSAVEIS as RESPONSAVEIS_BASE, isSuperAdminEmail } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
@@ -649,11 +649,11 @@ const TABLE_COLS: { key: SortKey | null; label: string; center?: boolean }[] = [
 
 function recalcClienteMetrics(c: ClienteComMetricas, tCliente: Tarefa[]): ClienteComMetricas {
   const hoje = new Date().toISOString().split("T")[0];
-  const finalizadas = tCliente.filter((t) => t.check_feito || t.status === "Finalizado").length;
+  const isFinalizada = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
+  const finalizadas = tCliente.filter(isFinalizada).length;
   const atrasadas = tCliente.filter(
     (t) =>
-      !t.check_feito &&
-      t.status !== "Finalizado" &&
+      !isFinalizada(t) &&
       t.status !== "Cancelado" &&
       (t.status === "Atrasado" || (t.prazo != null && t.prazo < hoje))
   ).length;
@@ -687,6 +687,7 @@ export default function PipelinePage() {
   const searchParams = useSearchParams();
   const { user, loading: userLoading } = useCurrentUser();
   const { role } = useRole();
+  const isSuperAdmin = isSuperAdminEmail(user?.email);
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
   const invalidatePipeline = useInvalidatePipeline();
 
@@ -863,17 +864,32 @@ export default function PipelinePage() {
         reparados?: string[];
         avisos?: string[];
         erros?: string[];
+        semAba?: string[];
+        semTarefas?: string[];
+        cohort?: number;
         error?: string;
       };
       if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
 
       const parts: string[] = [];
+      if (data.cohort != null) parts.push(`${data.cohort} clientes MM044+`);
       if ((data.reparados ?? []).length > 0)
-        parts.push(`${data.reparados!.length} reparo(s): ${data.reparados!.slice(0, 5).join("; ")}`);
-      if ((data.avisos ?? []).length > 0) parts.push(`avisos: ${data.avisos!.join(" | ")}`);
+        parts.push(`${data.reparados!.length} reparo(s): ${data.reparados!.slice(0, 3).join("; ")}`);
+      if ((data.semAba ?? []).length > 0)
+        parts.push(`sem aba: ${data.semAba!.slice(0, 5).join(", ")}${data.semAba!.length > 5 ? "…" : ""}`);
+      if ((data.semTarefas ?? []).length > 0)
+        parts.push(
+          `sem tarefas: ${data.semTarefas!.slice(0, 5).join(", ")}${data.semTarefas!.length > 5 ? "…" : ""}`
+        );
+      if ((data.avisos ?? []).length > 0) parts.push(`avisos: ${data.avisos!.slice(0, 2).join(" | ")}`);
       if ((data.erros ?? []).length > 0) parts.push(`erros: ${data.erros!.join(" | ")}`);
 
-      if ((data.erros ?? []).length > 0) toast.warning(parts.join(" · "), { duration: 15000 });
+      const temProblema =
+        (data.erros ?? []).length > 0 ||
+        (data.semAba ?? []).length > 0 ||
+        (data.semTarefas ?? []).length > 0;
+
+      if (temProblema) toast.warning(parts.join(" · "), { duration: 15000 });
       else if ((data.reparados ?? []).length === 0)
         toast.info("Nenhuma inconsistência encontrada para reparar.");
       else toast.success(parts.join(" · "), { duration: 12000 });
@@ -1235,7 +1251,7 @@ export default function PipelinePage() {
                 )}
               </button>
 
-              {role === "admin" && (
+              {role === "admin" && isSuperAdmin && (
                 <>
                   <button
                     onClick={handleRepairPipeline}
@@ -1268,7 +1284,11 @@ export default function PipelinePage() {
                       </>
                     )}
                   </button>
+                </>
+              )}
 
+              {role === "admin" && (
+                <>
                   <button
                     onClick={() => {
                       const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");

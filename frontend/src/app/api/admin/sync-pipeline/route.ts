@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 import { type NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { getAuthUser, requireSuperAdmin, UNAUTHORIZED } from "@/lib/api-auth";
 import {
   appendCadastroRow,
   buildCadastroRow,
@@ -123,8 +123,8 @@ function cleanPhone(phone: string): string {
 
 export async function POST() {
   try {
-    const user = await getAuthUser();
-    if (!user) return UNAUTHORIZED();
+    const auth = await requireSuperAdmin();
+    if (auth.response) return auth.response;
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";

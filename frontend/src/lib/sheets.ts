@@ -208,27 +208,68 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
 
 // ─── Task parsing (shared) ────────────────────────────────────────────────────
 
-/**
- * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
- * Detecta automaticamente a linha de cabeçalho e o offset de colunas.
- * Quando não há cabeçalho, detecta a coluna de status pelos valores conhecidos.
- */
-function parseTarefasValues(values: string[][]): TarefaSheet[] {
-  if (values.length === 0) return [];
+const TASK_HEADER_KEYS = [
+  "check",
+  "check_feito",
+  "o_que",
+  "etapa",
+  "prazo",
+  "status",
+  "tarefa",
+  "descricao",
+  "atividade",
+];
 
-  const TASK_HEADER_KEYS = [
-    "o_que",
-    "etapa",
-    "prazo",
-    "status",
-    "tarefa",
-    "descricao",
-    "atividade", // variantes do campo "o que fazer"
-  ];
+const HEADER_LABEL_KEYS = new Set([
+  "check",
+  "check_feito",
+  "feito",
+  "concluido",
+  "etapa",
+  "o_que",
+  "tipo",
+  "quem",
+  "responsavel",
+  "prazo",
+  "status",
+  "situacao",
+  "observacoes",
+  "observacao",
+  "obs",
+  "tarefa",
+  "descricao",
+  "atividade",
+]);
+
+export interface TaskColumnLayout {
+  headerRowIdx: number;
+  hMap: Record<string, number>;
+  dataStartRow: number;
+  checkCol: number | null;
+  hasCheckHeader: boolean;
+  oQueCol: number;
+  etapaCol: number;
+  tipoCol: number;
+  quemCol: number;
+  prazoCol: number;
+  statusCol: number;
+  obsCol: number;
+}
+
+function colIndex(hMap: Record<string, number>, names: string[], fallback: number): number {
+  for (const name of names) {
+    const idx = hMap[name];
+    if (idx !== undefined) return idx;
+  }
+  return fallback;
+}
+
+/** Detecta layout de colunas de tarefas (suporta offset B:I ou A:H). */
+export function detectTaskColumnLayout(values: string[][]): TaskColumnLayout {
   let headerRowIdx = -1;
   let hMap: Record<string, number> = {};
 
-  for (let i = 0; i < Math.min(values.length, 6); i++) {
+  for (let i = 0; i < Math.min(values.length, 8); i++) {
     const candidate = buildHeaderMap(values[i]);
     if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
       headerRowIdx = i;
@@ -237,63 +278,234 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
     }
   }
 
-  // Sem cabeçalho detectado: inclui desde a linha 0 (não descarta a primeira tarefa).
-  const dataRows = headerRowIdx >= 0 ? values.slice(headerRowIdx + 1) : values;
+  const dataStartRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  const checkColFromMap = colIndex(hMap, ["check_feito", "check", "feito", "concluido"], -1);
+  const hasCheckHeader = checkColFromMap >= 0;
 
-  function tcol(r: string[], pos: number, ...names: string[]): string {
-    for (const name of names) {
-      const idx = hMap[name];
-      if (idx !== undefined) return r[idx]?.trim() ?? "";
+  const oQueCol = colIndex(hMap, ["o_que", "tarefa", "descricao", "atividade"], hasCheckHeader ? checkColFromMap + 2 : 2);
+  const etapaCol = colIndex(hMap, ["etapa"], hasCheckHeader ? checkColFromMap + 1 : 1);
+  const tipoCol = colIndex(hMap, ["tipo"], oQueCol + 1);
+  const quemCol = colIndex(hMap, ["quem", "responsavel", "responsavel_tarefa"], tipoCol + 1);
+  const prazoCol = colIndex(
+    hMap,
+    ["prazo", "data_prazo", "data_entrega", "prazo_entrega"],
+    quemCol + 1
+  );
+
+  const STATUS_RE = /(finaliz|atrasad|em andamento|n[aã]o.inici|cancelad)/i;
+  let statusCol = colIndex(hMap, ["status", "situacao", "estado"], -1);
+  if (statusCol < 0) {
+    const dataRows = headerRowIdx >= 0 ? values.slice(dataStartRow) : values;
+    for (const col of [prazoCol + 1, prazoCol + 2, prazoCol, prazoCol + 3]) {
+      if (dataRows.slice(0, 20).some((r) => STATUS_RE.test(r[col]?.trim() ?? ""))) {
+        statusCol = col;
+        break;
+      }
     }
-    return r[pos]?.trim() ?? "";
+    if (statusCol < 0) statusCol = hasCheckHeader ? checkColFromMap + 6 : 6;
   }
 
-  function getCheck(r: string[]): boolean {
-    for (const name of ["check_feito", "check", "feito", "concluido"]) {
-      const idx = hMap[name];
-      if (idx !== undefined) return parseCheckbox(r[idx] ?? "");
+  const obsCol = colIndex(hMap, ["observacoes", "observacao", "obs"], statusCol + 1);
+
+  return {
+    headerRowIdx,
+    hMap,
+    dataStartRow,
+    checkCol: hasCheckHeader ? checkColFromMap : null,
+    hasCheckHeader,
+    oQueCol,
+    etapaCol,
+    tipoCol,
+    quemCol,
+    prazoCol,
+    statusCol,
+    obsCol,
+  };
+}
+
+function isValidTaskRow(oQue: string): boolean {
+  const trimmed = oQue.trim();
+  if (!trimmed) return false;
+  const key = normalizeKey(trimmed);
+  return !HEADER_LABEL_KEYS.has(key);
+}
+
+function readCell(row: string[], col: number): string {
+  return row[col]?.trim() ?? "";
+}
+
+/** Converte índice 0-based para letra de coluna (0=A, 1=B…). */
+export function columnIndexToLetter(index: number): string {
+  let n = index;
+  let result = "";
+  do {
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return result;
+}
+
+/** Monta linha completa para escrita no Sheets respeitando layout detectado. */
+export function buildSheetRowFromLayout(
+  layout: TaskColumnLayout,
+  task: {
+    check_feito: boolean;
+    etapa: string | null;
+    o_que: string;
+    tipo: string | null;
+    quem: string | null;
+    prazo: string;
+    status: string;
+    observacoes: string | null;
+  },
+  existing?: string[]
+): string[] {
+  const cols = [
+    layout.checkCol ?? 0,
+    layout.etapaCol,
+    layout.oQueCol,
+    layout.tipoCol,
+    layout.quemCol,
+    layout.prazoCol,
+    layout.statusCol,
+    layout.obsCol,
+  ];
+  const maxCol = Math.max(...cols);
+  const row = existing ? [...existing] : Array<string>(maxCol + 1).fill("");
+  while (row.length <= maxCol) row.push("");
+
+  if (layout.checkCol !== null) {
+    row[layout.checkCol] = task.check_feito ? "TRUE" : "FALSE";
+  }
+  row[layout.etapaCol] = task.etapa?.trim() ?? row[layout.etapaCol] ?? "";
+  row[layout.oQueCol] = task.o_que;
+  row[layout.tipoCol] = task.tipo?.trim() || row[layout.tipoCol] || "Marry Me";
+  row[layout.quemCol] = task.quem?.trim() ?? row[layout.quemCol] ?? "";
+  row[layout.prazoCol] = task.prazo || (row[layout.prazoCol] ?? "");
+  row[layout.statusCol] = task.status?.trim() || row[layout.statusCol] || "Não iniciado";
+  row[layout.obsCol] = task.observacoes?.trim() ?? row[layout.obsCol] ?? "";
+  return row;
+}
+
+/** Range de colunas para append (ex: Sheet!B:I). */
+export function sheetAppendRange(sheetName: string, layout: TaskColumnLayout): string {
+  const cols = [
+    layout.checkCol ?? 0,
+    layout.etapaCol,
+    layout.oQueCol,
+    layout.tipoCol,
+    layout.quemCol,
+    layout.prazoCol,
+    layout.statusCol,
+    layout.obsCol,
+  ];
+  const minCol = Math.min(...cols);
+  const maxCol = Math.max(...cols);
+  return `${sheetName}!${columnIndexToLetter(minCol)}:${columnIndexToLetter(maxCol)}`;
+}
+
+/** Valores da linha recortados para o range do layout. */
+export function sheetRowValuesForLayout(
+  layout: TaskColumnLayout,
+  row: string[]
+): string[] {
+  const cols = [
+    layout.checkCol ?? 0,
+    layout.etapaCol,
+    layout.oQueCol,
+    layout.tipoCol,
+    layout.quemCol,
+    layout.prazoCol,
+    layout.statusCol,
+    layout.obsCol,
+  ];
+  const minCol = Math.min(...cols);
+  const maxCol = Math.max(...cols);
+  return row.slice(minCol, maxCol + 1);
+}
+
+/** Range A1 para uma linha inteira cobrindo todas as colunas do layout. */
+export function sheetRowUpdateRange(
+  sheetName: string,
+  rowIndex0: number,
+  layout: TaskColumnLayout
+): string {
+  const cols = [
+    layout.checkCol ?? 0,
+    layout.etapaCol,
+    layout.oQueCol,
+    layout.tipoCol,
+    layout.quemCol,
+    layout.prazoCol,
+    layout.statusCol,
+    layout.obsCol,
+  ];
+  const minCol = Math.min(...cols);
+  const maxCol = Math.max(...cols);
+  const rowNum = rowIndex0 + 1;
+  return `${sheetName}!${columnIndexToLetter(minCol)}${rowNum}:${columnIndexToLetter(maxCol)}${rowNum}`;
+}
+
+/** Localiza linha de tarefa pelo o_que (busca de baixo para cima). */
+export function findTaskRowByOQue(
+  rows: string[][],
+  layout: TaskColumnLayout,
+  oQue: string,
+  etapa?: string | null,
+  prazoBR?: string | null
+): number {
+  const oQueNorm = oQue.trim().toLowerCase();
+  const etapaNorm = etapa?.trim().toLowerCase() ?? null;
+
+  for (let i = rows.length - 1; i >= layout.dataStartRow; i--) {
+    const row = rows[i] ?? [];
+    if (readCell(row, layout.oQueCol).toLowerCase() !== oQueNorm) continue;
+    if (etapaNorm && readCell(row, layout.etapaCol).toLowerCase() !== etapaNorm) continue;
+    if (prazoBR && readCell(row, layout.prazoCol) !== prazoBR) continue;
+    return i;
+  }
+
+  if (oQueNorm) {
+    for (let i = rows.length - 1; i >= layout.dataStartRow; i--) {
+      const row = rows[i] ?? [];
+      if (readCell(row, layout.oQueCol).toLowerCase() === oQueNorm) return i;
     }
-    // Sem cabeçalho: coluna A (index 0) é sempre o checkbox
+  }
+  return -1;
+}
+
+/**
+ * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
+ * Detecta automaticamente a linha de cabeçalho e o offset de colunas (A:H ou B:I).
+ */
+export function parseTarefasValues(values: string[][]): TarefaSheet[] {
+  if (values.length === 0) return [];
+
+  const layout = detectTaskColumnLayout(values);
+  const dataRows = values.slice(layout.dataStartRow);
+
+  function getCheck(r: string[]): boolean {
+    if (layout.hasCheckHeader && layout.checkCol !== null) {
+      return parseCheckbox(r[layout.checkCol] ?? "");
+    }
     return parseCheckbox(r[0] ?? "");
   }
 
-  // Determina qual coluna contém o status:
-  // 1. Pelo cabeçalho (hMap)
-  // 2. Escaneando as primeiras linhas de dados por valores conhecidos de status
-  // 3. Fallback posicional (col G = índice 6)
-  // Sem âncora ^ para aceitar emojis prefix: "🚀 Em andamento", "✅ Finalizado", etc.
-  const STATUS_RE = /(finaliz|atrasad|em andamento|n[aã]o.inici|cancelad)/i;
-
-  function detectStatusCol(): number {
-    const fromMap = hMap["status"] ?? hMap["situacao"] ?? hMap["estado"];
-    if (fromMap !== undefined) return fromMap;
-    // Escaneia colunas 5–8 nos primeiros 20 registros
-    for (const col of [6, 7, 5, 8]) {
-      if (dataRows.slice(0, 20).some((r) => STATUS_RE.test(r[col]?.trim() ?? ""))) {
-        return col;
-      }
-    }
-    return 6; // fallback posicional
-  }
-
-  const statusColIdx = detectStatusCol();
-
   return dataRows
     .map((r) => {
-      const oQueFromMap = tcol(r, 2, "o_que", "tarefa", "descricao", "atividade");
-      const oQue = oQueFromMap || r[2]?.trim() || "";
+      const oQue = readCell(r, layout.oQueCol);
       return {
         check_feito: getCheck(r),
-        etapa: tcol(r, 1, "etapa") || r[1]?.trim() || "",
+        etapa: readCell(r, layout.etapaCol),
         o_que: oQue,
-        tipo: tcol(r, 3, "tipo") || r[3]?.trim() || "",
-        quem: tcol(r, 4, "quem", "responsavel", "responsavel_tarefa") || r[4]?.trim() || "",
-        prazo: tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega") || r[5]?.trim() || "",
-        status: r[statusColIdx]?.trim() || "Não iniciado",
-        observacoes: tcol(r, 7, "observacoes", "observacao", "obs") || r[7]?.trim() || "",
+        tipo: readCell(r, layout.tipoCol),
+        quem: readCell(r, layout.quemCol),
+        prazo: readCell(r, layout.prazoCol),
+        status: readCell(r, layout.statusCol) || "Não iniciado",
+        observacoes: readCell(r, layout.obsCol),
       };
     })
-    .filter((t) => t.o_que !== "");
+    .filter((t) => isValidTaskRow(t.o_que));
 }
 
 /**

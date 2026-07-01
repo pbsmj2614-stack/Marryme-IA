@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 import type { UserRole } from "@/hooks/useRole";
 import { hasMinRole } from "@/hooks/useRole";
+import { isSuperAdminEmail } from "@/lib/constants";
 
 export async function getAuthUser() {
   const supabase = await createSupabaseServer();
@@ -48,3 +49,13 @@ export const UNAUTHORIZED = () => NextResponse.json({ error: "Não autorizado" }
 
 export const FORBIDDEN = () =>
   NextResponse.json({ error: "Sem permissão para esta ação" }, { status: 403 });
+
+/** Apenas super admins (Corrigir Gaps / Reparar pipeline). */
+export async function requireSuperAdmin() {
+  const user = await getAuthUser();
+  if (!user) return { response: UNAUTHORIZED() as NextResponse, user: null };
+  if (!isSuperAdminEmail(user.email)) {
+    return { response: FORBIDDEN() as NextResponse, user: null };
+  }
+  return { response: null, user };
+}

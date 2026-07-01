@@ -1,7 +1,7 @@
 /**
  * POST /api/admin/repair-pipeline
  *
- * Repara inconsistências MM051+ entre mm_clientes, abas e tarefas.
+ * Repara inconsistências MM044+ entre mm_clientes, abas e tarefas.
  */
 
 export const runtime = "nodejs";
@@ -9,8 +9,14 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import { requireSuperAdmin } from "@/lib/api-auth";
+import { fetchTodasTarefasBatch } from "@/lib/sheets";
 import {
+  collectAbaCandidates,
+  resolveSheetsAba,
+} from "@/lib/sheets-aba-resolve";
+import {
+  extractMmNum,
   getAbaIdPrefixFromTitle,
   normalizeMmId,
 } from "@/lib/sheets-cadastro";
@@ -18,6 +24,7 @@ import {
 const SHEET_ID =
   process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
+const MM_COHORT_MIN = 44;
 
 function makeJWT(email: string, key: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
@@ -84,8 +91,8 @@ function encontrarAbaPorId(
 
 export async function POST() {
   try {
-    const user = await getAuthUser();
-    if (!user) return UNAUTHORIZED();
+    const auth = await requireSuperAdmin();
+    if (auth.response) return auth.response;
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -97,8 +104,11 @@ export async function POST() {
     const reparados: string[] = [];
     const avisos: string[] = [];
     const erros: string[] = [];
+    const semAba: string[] = [];
+    const semTarefas: string[] = [];
 
     const token = await googleToken();
+
     const meta = (await (
       await fetch(`${BASE}/${SHEET_ID}?fields=sheets.properties.title`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -113,24 +123,63 @@ export async function POST() {
 
     if (errC) throw new Error(errC.message);
 
-    for (const c of clientes ?? []) {
-      const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
-      const abaAtual = c.sheets_aba;
-      const prefixoAtual = getAbaIdPrefixFromTitle(abaAtual);
-      const abaCorreta =
-        abaAtual && todasAbas.includes(abaAtual) && prefixoAtual === idNorm
-          ? abaAtual
-          : encontrarAbaPorId(abasClientes, idNorm, c.nome_empresa);
+    const cohort = (clientes ?? []).filter((c) => extractMmNum(c.id_cliente) >= MM_COHORT_MIN);
 
-      if (abaCorreta && abaCorreta !== abaAtual) {
-        const { error: errAba } = await supabase
-          .from("mm_clientes")
-          .update({ sheets_aba: abaCorreta, atualizado_em: new Date().toISOString() })
-          .eq("id_cliente", c.id_cliente);
-        if (errAba) erros.push(`${idNorm}: falha ao corrigir aba (${errAba.message})`);
-        else reparados.push(`${idNorm}: sheets_aba → ${abaCorreta}`);
+    const abasParaFetch = Array.from(
+      new Set(
+        cohort.flatMap((c) => {
+          const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
+          const abaEncontrada = encontrarAbaPorId(abasClientes, idNorm, c.nome_empresa);
+          return collectAbaCandidates(
+            idNorm,
+            abaEncontrada,
+            c.sheets_aba,
+            todasAbas,
+            abasClientes
+          );
+        })
+      )
+    );
+
+    let tarefasPorAba: Awaited<ReturnType<typeof fetchTodasTarefasBatch>> = {};
+    try {
+      tarefasPorAba = await fetchTodasTarefasBatch(abasParaFetch);
+    } catch (err) {
+      erros.push(`Erro ao buscar tarefas: ${String(err)}`);
+    }
+
+    for (const c of cohort) {
+      const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
+      const abaEncontrada = encontrarAbaPorId(abasClientes, idNorm, c.nome_empresa);
+      const abaIdeal = resolveSheetsAba(
+        idNorm,
+        abaEncontrada,
+        c.sheets_aba,
+        todasAbas,
+        abasClientes,
+        tarefasPorAba
+      );
+
+      if (!abaIdeal) {
+        semAba.push(`${idNorm} (${c.nome_empresa})`);
+      } else {
+        const taskCount = tarefasPorAba[abaIdeal]?.length ?? 0;
+        if (taskCount === 0) semTarefas.push(`${idNorm} (${c.nome_empresa})`);
+
+        if (abaIdeal !== c.sheets_aba) {
+          const { error: errAba } = await supabase
+            .from("mm_clientes")
+            .update({ sheets_aba: abaIdeal, atualizado_em: new Date().toISOString() })
+            .eq("id_cliente", c.id_cliente);
+          if (errAba) erros.push(`${idNorm}: falha ao corrigir aba (${errAba.message})`);
+          else
+            reparados.push(
+              `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
+            );
+        }
       }
 
+      const prefixoAtual = getAbaIdPrefixFromTitle(c.sheets_aba);
       if (prefixoAtual && prefixoAtual !== idNorm) {
         const { data: tarefasOrfa } = await supabase
           .from("mm_tarefas")
@@ -150,7 +199,9 @@ export async function POST() {
       }
 
       if (idNorm !== c.id_cliente) {
-        avisos.push(`${c.id_cliente}: ID não padronizado (esperado ${idNorm}) — corrija manualmente no cadastro`);
+        avisos.push(
+          `${c.id_cliente}: ID não padronizado (esperado ${idNorm}) — corrija manualmente no cadastro`
+        );
       }
     }
 
@@ -162,9 +213,10 @@ export async function POST() {
       const cliente = (clientes ?? []).find(
         (c) =>
           normalizeMmId(c.id_cliente) === mmId ||
-          c.nome_empresa.toLowerCase().trim() === String(dados.nome_artistico ?? "").toLowerCase().trim()
+          c.nome_empresa.toLowerCase().trim() ===
+            String(dados.nome_artistico ?? "").toLowerCase().trim()
       );
-      const idCanonico = cliente ? normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente : mmId;
+      const idCanonico = cliente ? (normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente) : mmId;
       if (dados.mm_id !== idCanonico) {
         await supabase
           .from("entrevistas")
@@ -179,6 +231,9 @@ export async function POST() {
       reparados,
       avisos,
       erros,
+      semAba,
+      semTarefas,
+      cohort: cohort.length,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

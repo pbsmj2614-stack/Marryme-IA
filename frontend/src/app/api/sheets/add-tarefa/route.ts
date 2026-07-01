@@ -17,6 +17,12 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { addTarefaSchema } from "@/lib/schemas";
+import {
+  buildSheetRowFromLayout,
+  detectTaskColumnLayout,
+  sheetAppendRange,
+  sheetRowValuesForLayout,
+} from "@/lib/sheets";
 
 const SHEET_ID = process.env.NEXT_PUBLIC_SHEETS_ID ?? "";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -70,6 +76,14 @@ async function sAppend(token: string, range: string, values: string[][]): Promis
   if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
 }
 
+async function sRead(token: string, range: string): Promise<string[][]> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Sheets READ ${range}: ${res.status} — ${await res.text()}`);
+  const data = (await res.json()) as { values?: string[][] };
+  return data.values ?? [];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** YYYY-MM-DD → DD/MM/YYYY para o Sheets */
@@ -115,22 +129,12 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
 
-    // ── 2. Monta linha para o Sheets (ordem: A=check, B=etapa, C=o_que, D=tipo, E=quem, F=prazo, G=status, H=obs) ──
+    // ── 2. Monta linha para o Sheets com layout detectado (B:I ou A:H) ──
     const prazoBR = prazo ? toDateBR(prazo) : "";
-    const novaLinha = [
-      "FALSE",
-      etapa?.trim() ?? "",
-      o_que.trim(),
-      tipo?.trim() || "Marry Me",
-      quem?.trim() ?? "",
-      prazoBR,
-      status?.trim() || "Não iniciado",
-      observacoes?.trim() ?? "",
-    ];
+    const statusFinal = status?.trim() || "Não iniciado";
 
     // ── 3. Insert no Supabase primeiro (fonte imediata no app) ──
     const prazoISO = prazo || null;
-    const statusFinal = status?.trim() || "Não iniciado";
 
     const { data: novaTarefa, error: errInsert } = await supabase
       .from("mm_tarefas")
@@ -157,7 +161,21 @@ export async function POST(req: NextRequest) {
     let sheetWarning: string | undefined;
     try {
       const token = await googleToken();
-      await sAppend(token, `${cliente.sheets_aba}!A:H`, [novaLinha]);
+      const rows = await sRead(token, `${cliente.sheets_aba}!A:I`);
+      const layout = detectTaskColumnLayout(rows);
+      const novaLinha = buildSheetRowFromLayout(layout, {
+        check_feito: false,
+        etapa: etapa?.trim() ?? null,
+        o_que: o_que.trim(),
+        tipo: tipo?.trim() || "Marry Me",
+        quem: quem?.trim() ?? null,
+        prazo: prazoBR,
+        status: statusFinal,
+        observacoes: observacoes?.trim() ?? null,
+      });
+      await sAppend(token, sheetAppendRange(cliente.sheets_aba, layout), [
+        sheetRowValuesForLayout(layout, novaLinha),
+      ]);
     } catch (sheetErr) {
       const sheetMsg = sheetErr instanceof Error ? sheetErr.message : String(sheetErr);
       console.error("[add-tarefa] Tarefa salva no Supabase, falhou no Sheets:", sheetMsg);
