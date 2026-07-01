@@ -879,7 +879,6 @@ export default function PipelinePage() {
         erros?: string[];
         semAba?: string[];
         semTarefas?: string[];
-        tarefasReimportadas?: string[];
         cohort?: number;
         error?: string;
       };
@@ -889,10 +888,6 @@ export default function PipelinePage() {
       if (data.cohort != null) parts.push(`${data.cohort} clientes MM044+`);
       if ((data.reparados ?? []).length > 0)
         parts.push(`${data.reparados!.length} reparo(s): ${data.reparados!.slice(0, 3).join("; ")}`);
-      if ((data.tarefasReimportadas ?? []).length > 0)
-        parts.push(
-          `${data.tarefasReimportadas!.length} sync tarefas: ${data.tarefasReimportadas!.slice(0, 3).join("; ")}`
-        );
       if ((data.semAba ?? []).length > 0)
         parts.push(`sem aba: ${data.semAba!.slice(0, 5).join(", ")}${data.semAba!.length > 5 ? "…" : ""}`);
       if ((data.semTarefas ?? []).length > 0)
@@ -908,8 +903,8 @@ export default function PipelinePage() {
         (data.semTarefas ?? []).length > 0;
 
       if (temProblema) toast.warning(parts.join(" · "), { duration: 15000 });
-      else if ((data.reparados ?? []).length === 0 && (data.tarefasReimportadas ?? []).length === 0)
-        toast.info("Nenhuma inconsistência encontrada para reparar.");
+      else if ((data.reparados ?? []).length === 0)
+        toast.info("Nenhuma inconsistência encontrada. Use Sincronizar Sheets para importar tarefas.");
       else toast.success(parts.join(" · "), { duration: 12000 });
 
       await invalidatePipeline();

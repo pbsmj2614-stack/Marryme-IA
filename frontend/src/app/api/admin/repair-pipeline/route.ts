@@ -10,8 +10,7 @@ import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { fetchTodasTarefasBatch, fetchAndParseTarefasAba } from "@/lib/sheets";
-import { syncTarefasClienteFromSheet } from "@/lib/importSheets";
+import { fetchTodasTarefasBatch } from "@/lib/sheets";
 import {
   collectAbaCandidates,
   resolveSheetsAba,
@@ -108,7 +107,6 @@ export async function POST() {
     const erros: string[] = [];
     const semAba: string[] = [];
     const semTarefas: string[] = [];
-    const tarefasReimportadas: string[] = [];
 
     const token = await googleToken();
 
@@ -166,19 +164,7 @@ export async function POST() {
       if (!abaIdeal) {
         semAba.push(`${idNorm} (${c.nome_empresa})`);
       } else {
-        const sheetTasks = tarefasPorAba[abaIdeal] ?? [];
-        let taskCount = sheetTasks.length;
-        if (taskCount === 0) {
-          try {
-            const refetched = await fetchAndParseTarefasAba(abaIdeal);
-            if (refetched.length > 0) {
-              tarefasPorAba[abaIdeal] = refetched;
-              taskCount = refetched.length;
-            }
-          } catch {
-            // mantém zero
-          }
-        }
+        const taskCount = tarefasPorAba[abaIdeal]?.length ?? 0;
         if (taskCount === 0) semTarefas.push(`${idNorm} (${c.nome_empresa})`);
 
         if (abaIdeal !== c.sheets_aba) {
@@ -199,21 +185,6 @@ export async function POST() {
               reparados.push(
                 `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
               );
-          }
-        }
-
-        // Reimporta tarefas da planilha quando há linhas parseadas (Reparar sozinho não bastava)
-        if (taskCount > 0) {
-          const tasksToSync = tarefasPorAba[abaIdeal] ?? sheetTasks;
-          const synced = await syncTarefasClienteFromSheet(
-            supabase,
-            { id_cliente: c.id_cliente, sheets_aba: abaIdeal, nome_empresa: c.nome_empresa },
-            tasksToSync
-          );
-          if (!synced.ok) {
-            erros.push(`${idNorm}: falha ao reimportar tarefas (${synced.error})`);
-          } else if (synced.count > 0) {
-            tarefasReimportadas.push(`${idNorm}: ${synced.count} tarefa(s)`);
           }
         }
       }
@@ -272,7 +243,6 @@ export async function POST() {
       erros,
       semAba,
       semTarefas,
-      tarefasReimportadas,
       cohort: cohort.length,
     });
   } catch (err) {

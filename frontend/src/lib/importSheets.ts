@@ -132,15 +132,42 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
-/** Sincroniza tarefas de um cliente a partir da planilha (delete + insert). */
+/** Sincroniza tarefas de um cliente a partir da planilha (merge seguro — nunca apaga em massa). */
+export function taskSyncKey(
+  o_que: string,
+  prazo: string | null,
+  etapa: string | null
+): string {
+  return `${o_que.trim()}|${prazo ?? ""}|${(etapa ?? "").trim()}`;
+}
+
+export interface SyncTarefasResult {
+  ok: boolean;
+  count: number;
+  inserted: number;
+  updated: number;
+  deleted: number;
+  skipped?: boolean;
+  skipReason?: string;
+  error?: string;
+}
+
 export async function syncTarefasClienteFromSheet(
   supabase: SupabaseClient,
   cliente: { id_cliente: string; sheets_aba: string; nome_empresa: string },
   tarefas: import("@/lib/sheets").TarefaSheet[]
-): Promise<{ ok: boolean; count: number; error?: string }> {
-  if (tarefas.length === 0) {
-    return { ok: true, count: 0 };
-  }
+): Promise<SyncTarefasResult> {
+  const emptySkip = (skipReason: string): SyncTarefasResult => ({
+    ok: true,
+    count: 0,
+    inserted: 0,
+    updated: 0,
+    deleted: 0,
+    skipped: true,
+    skipReason,
+  });
+
+  if (tarefas.length === 0) return emptySkip("planilha_vazia");
 
   const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
   const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
@@ -153,16 +180,47 @@ export async function syncTarefasClienteFromSheet(
       .eq("cliente_id", altId);
   }
 
-  const { error: errDelete } = await supabase
+  const { data: existingRows, error: errLoad } = await supabase
     .from("mm_tarefas")
-    .delete()
+    .select("id, o_que, prazo, etapa, check_feito")
     .in("cliente_id", idsRelacionados);
 
-  if (errDelete) {
-    return { ok: false, count: 0, error: errDelete.message };
+  if (errLoad) {
+    return {
+      ok: false,
+      count: 0,
+      inserted: 0,
+      updated: 0,
+      deleted: 0,
+      error: errLoad.message,
+    };
   }
 
-  const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
+  const existing = existingRows ?? [];
+  const existingCount = existing.length;
+
+  if (parseLooksSuspicious(tarefas) && existingCount > 0) {
+    return emptySkip("parse_suspeito");
+  }
+
+  // Nunca substitui em massa quando a planilha retorna muito menos que o DB
+  if (existingCount > 0 && tarefas.length < Math.max(3, Math.ceil(existingCount * 0.6))) {
+    return emptySkip(`regressao (${tarefas.length} planilha vs ${existingCount} DB)`);
+  }
+
+  const existingByKey = new Map(
+    existing.map((e: { id: string; o_que: string; prazo: string | null; etapa: string | null }) => [
+      taskSyncKey(e.o_que, e.prazo, e.etapa),
+      e,
+    ])
+  );
+
+  let inserted = 0;
+  let updated = 0;
+  let deleted = 0;
+  const sheetKeys = new Set<string>();
+
+  for (const t of tarefas) {
     const prazoISO = parseDateBR(t.prazo);
     const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
     const statusFinal = t.check_feito
@@ -170,7 +228,7 @@ export async function syncTarefasClienteFromSheet(
       : isAtrasado(t.prazo, statusNorm)
         ? "Atrasado"
         : statusNorm;
-    return {
+    const payload = {
       cliente_id: taskClienteId,
       check_feito: t.check_feito,
       etapa: t.etapa || null,
@@ -182,13 +240,38 @@ export async function syncTarefasClienteFromSheet(
       observacoes: t.observacoes || null,
       atualizado_em: new Date().toISOString(),
     };
-  });
+    const key = taskSyncKey(payload.o_que, payload.prazo, payload.etapa);
+    sheetKeys.add(key);
 
-  const { error: errInsert } = await supabase.from("mm_tarefas").insert(tarefasPayload);
-  if (errInsert) {
-    return { ok: false, count: 0, error: errInsert.message };
+    const ex = existingByKey.get(key) as { id: string } | undefined;
+    if (ex) {
+      const { error: errUp } = await supabase.from("mm_tarefas").update(payload).eq("id", ex.id);
+      if (!errUp) updated++;
+    } else {
+      const { error: errIns } = await supabase.from("mm_tarefas").insert(payload);
+      if (!errIns) inserted++;
+    }
   }
-  return { ok: true, count: tarefasPayload.length };
+
+  // Remove órfãs só quando a planilha cobre o DB com confiança (ou DB estava vazio)
+  const confidentFullSync =
+    existingCount === 0 ||
+    (tarefas.length >= existingCount && tarefas.length >= Math.ceil(existingCount * 0.85));
+
+  if (confidentFullSync) {
+    const orphanIds = existing
+      .filter(
+        (e: { id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
+          !sheetKeys.has(taskSyncKey(e.o_que, e.prazo, e.etapa))
+      )
+      .map((e: { id: string }) => e.id);
+    if (orphanIds.length > 0) {
+      const { error: errDel } = await supabase.from("mm_tarefas").delete().in("id", orphanIds);
+      if (!errDel) deleted = orphanIds.length;
+    }
+  }
+
+  return { ok: true, count: inserted + updated, inserted, updated, deleted };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -387,12 +470,11 @@ export async function importarPlanilha(
   for (const cliente of abasComCliente) {
     let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
 
-    if (tarefas.length === 0 || parseLooksSuspicious(tarefas)) {
+    if (tarefas.length === 0) {
       try {
-        const refetched = await fetchAndParseTarefasAba(cliente.sheets_aba);
-        if (refetched.length > tarefas.length) tarefas = refetched;
+        tarefas = await fetchAndParseTarefasAba(cliente.sheets_aba);
       } catch {
-        // mantém lote ou vazio
+        // mantém vazio
       }
     }
 
@@ -402,6 +484,12 @@ export async function importarPlanilha(
     }
 
     const synced = await syncTarefasClienteFromSheet(supabase, cliente, tarefas);
+    if (synced.skipped) {
+      erros.push(
+        `Aviso: ${cliente.nome_empresa} — sync ignorado (${synced.skipReason ?? "desconhecido"})`
+      );
+      continue;
+    }
     if (!synced.ok) {
       erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${synced.error}`);
     } else {

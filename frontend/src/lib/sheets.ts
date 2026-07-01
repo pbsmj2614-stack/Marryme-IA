@@ -711,29 +711,32 @@ export function findTaskRowByOQue(
 
 /**
  * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
- * Tenta vários alinhamentos e layouts — fica com o que produzir mais tarefas válidas.
+ * Conservador: detecta layout pelo cabeçalho; fallback fixo só se retornar zero.
  */
 export function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
-  const { headerRowIdx } = findTaskHeaderRow(normalizeSheetGrid(values));
-  const grids: string[][][] = [
-    normalizeSheetGrid(values),
-    normalizeSheetGrid(alignTaskSheetRows(values)),
-    withLeadingPad(normalizeSheetGrid(values), 1, headerRowIdx),
-    withLeadingPad(normalizeSheetGrid(values), 2, headerRowIdx),
-    withLeadingPad(normalizeSheetGrid(alignTaskSheetRows(values)), 1, headerRowIdx),
+  const normalized = normalizeSheetGrid(values);
+  const aligned = normalizeSheetGrid(alignTaskSheetRows(normalized));
+  const { headerRowIdx } = findTaskHeaderRow(aligned);
+
+  const candidates: TarefaSheet[][] = [
+    parseWithLayout(aligned, layoutFromDetected(aligned)),
   ];
 
-  const candidates: TarefaSheet[][] = [];
-  for (const grid of grids) {
-    candidates.push(parseWithLayout(grid, layoutFromDetected(grid)));
-    for (const fixed of fixedLayoutCandidates(grid)) {
-      candidates.push(parseWithLayout(grid, fixed));
+  if (candidates[0].length === 0) {
+    for (const fixed of fixedLayoutCandidates(aligned)) {
+      candidates.push(parseWithLayout(aligned, fixed));
+      if (headerRowIdx >= 0) {
+        candidates.push(
+          parseWithLayout(withLeadingPad(aligned, 1, headerRowIdx), fixed)
+        );
+      }
     }
   }
 
-  return pickBestParse(candidates);
+  const best = pickBestParse(candidates);
+  return best;
 }
 
 /**
@@ -787,13 +790,12 @@ export async function fetchTodasTarefasBatch(
       result[lote[j]] = batchParsed;
     }
 
-    // Reconcilia com A:I quando batch B:I sub-conta ou leu coluna errada
+    // Fallback individual só quando batch retornou zero
     for (const aba of lote) {
-      const batchParsed = result[aba] ?? [];
-      if (batchParsed.length > 0 && !parseLooksSuspicious(batchParsed)) continue;
+      if ((result[aba]?.length ?? 0) > 0) continue;
       try {
-        const fullParsed = await fetchAndParseTarefasAba(aba);
-        if (fullParsed.length > batchParsed.length) result[aba] = fullParsed;
+        const fallback = await fetchAndParseTarefasAba(aba);
+        if (fallback.length > 0) result[aba] = fallback;
       } catch {
         if (!result[aba]) result[aba] = [];
       }
