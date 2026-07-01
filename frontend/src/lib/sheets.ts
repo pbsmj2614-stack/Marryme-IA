@@ -241,6 +241,11 @@ const HEADER_LABEL_KEYS = new Set([
   "atividade",
 ]);
 
+/** Valores típicos da coluna Tipo — nunca são "O que?" real. */
+const TIPO_COLUMN_VALUES = new Set(["marry me", "cliente", "marryme"]);
+
+const HEADER_SCAN_ROWS = 30;
+
 export interface TaskColumnLayout {
   headerRowIdx: number;
   hMap: Record<string, number>;
@@ -264,25 +269,76 @@ function colIndex(hMap: Record<string, number>, names: string[], fallback: numbe
   return fallback;
 }
 
-/** Detecta layout de colunas de tarefas (suporta offset B:I ou A:H). */
-export function detectTaskColumnLayout(values: string[][]): TaskColumnLayout {
-  let headerRowIdx = -1;
-  let hMap: Record<string, number> = {};
+function cleanCell(value: string | undefined | null): string {
+  return (value ?? "").replace(/\u00a0/g, " ").trim();
+}
 
-  for (let i = 0; i < Math.min(values.length, 8); i++) {
-    const candidate = buildHeaderMap(values[i]);
-    if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
-      headerRowIdx = i;
-      hMap = candidate;
-      break;
+function readCell(row: string[], col: number): string {
+  return cleanCell(row[col]);
+}
+
+/** Iguala largura das linhas — a API omite células vazias no fim e às vezes no início. */
+function normalizeSheetGrid(values: string[][]): string[][] {
+  if (values.length === 0) return values;
+  const maxLen = Math.max(...values.map((r) => r.length), 0);
+  return values.map((row) => {
+    if (row.length >= maxLen) return row.map((c) => (c ?? "").replace(/\u00a0/g, " "));
+    return [
+      ...row.map((c) => (c ?? "").replace(/\u00a0/g, " ")),
+      ...Array(maxLen - row.length).fill(""),
+    ];
+  });
+}
+
+/** Mapa de cabeçalho de tarefas com sinônimos tolerantes (O que?, O Que, etc.). */
+function buildTaskHeaderMap(headerRow: string[]): Record<string, number> {
+  const map = buildHeaderMap(headerRow);
+  headerRow.forEach((raw, i) => {
+    const k = normalizeKey(cleanCell(raw));
+    if (!k) return;
+    if (k === "o_que" || k === "oque" || k.startsWith("o_que") || k === "tarefa_a_realizar") {
+      map.o_que ??= i;
+    }
+    if (k === "check" || k === "check_feito" || k === "feito" || k.startsWith("check")) {
+      map.check ??= i;
+      map.check_feito ??= i;
+    }
+    if (k === "etapa" || k.startsWith("etapa")) map.etapa ??= i;
+    if (k === "quem" || k === "responsavel" || k.startsWith("responsavel")) map.quem ??= i;
+    if (k === "prazo" || k.includes("prazo") || k.includes("entrega")) map.prazo ??= i;
+    if (k === "status" || k === "situacao" || k === "estado") map.status ??= i;
+    if (k === "tipo") map.tipo ??= i;
+    if (k.startsWith("obs")) map.observacoes ??= i;
+  });
+  return map;
+}
+
+function findTaskHeaderRow(values: string[][]): { headerRowIdx: number; hMap: Record<string, number> } {
+  for (let i = 0; i < Math.min(values.length, HEADER_SCAN_ROWS); i++) {
+    const hMap = buildTaskHeaderMap(values[i] ?? []);
+    if (TASK_HEADER_KEYS.some((k) => hMap[k] !== undefined)) {
+      return { headerRowIdx: i, hMap };
+    }
+    if (hMap.o_que !== undefined) {
+      return { headerRowIdx: i, hMap };
     }
   }
+  return { headerRowIdx: -1, hMap: {} };
+}
+
+/** Detecta layout de colunas de tarefas (suporta offset B:I ou A:H). */
+export function detectTaskColumnLayout(values: string[][]): TaskColumnLayout {
+  const { headerRowIdx, hMap } = findTaskHeaderRow(values);
 
   const dataStartRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
   const checkColFromMap = colIndex(hMap, ["check_feito", "check", "feito", "concluido"], -1);
   const hasCheckHeader = checkColFromMap >= 0;
 
-  const oQueCol = colIndex(hMap, ["o_que", "tarefa", "descricao", "atividade"], hasCheckHeader ? checkColFromMap + 2 : 2);
+  const oQueCol = colIndex(
+    hMap,
+    ["o_que", "tarefa", "descricao", "atividade"],
+    hasCheckHeader ? checkColFromMap + 2 : 2
+  );
   const etapaCol = colIndex(hMap, ["etapa"], hasCheckHeader ? checkColFromMap + 1 : 1);
   const tipoCol = colIndex(hMap, ["tipo"], oQueCol + 1);
   const quemCol = colIndex(hMap, ["quem", "responsavel", "responsavel_tarefa"], tipoCol + 1);
@@ -297,7 +353,7 @@ export function detectTaskColumnLayout(values: string[][]): TaskColumnLayout {
   if (statusCol < 0) {
     const dataRows = headerRowIdx >= 0 ? values.slice(dataStartRow) : values;
     for (const col of [prazoCol + 1, prazoCol + 2, prazoCol, prazoCol + 3]) {
-      if (dataRows.slice(0, 20).some((r) => STATUS_RE.test(r[col]?.trim() ?? ""))) {
+      if (dataRows.slice(0, 25).some((r) => STATUS_RE.test(readCell(r, col)))) {
         statusCol = col;
         break;
       }
@@ -324,10 +380,141 @@ export function detectTaskColumnLayout(values: string[][]): TaskColumnLayout {
 }
 
 function isValidTaskRow(oQue: string): boolean {
-  const trimmed = oQue.trim();
-  if (!trimmed) return false;
+  const trimmed = cleanCell(oQue);
+  if (!trimmed || trimmed.length < 2) return false;
+  const lower = trimmed.toLowerCase();
+  if (TIPO_COLUMN_VALUES.has(lower)) return false;
   const key = normalizeKey(trimmed);
-  return !HEADER_LABEL_KEYS.has(key);
+  if (HEADER_LABEL_KEYS.has(key)) return false;
+  return true;
+}
+
+interface FixedLayoutCols {
+  dataStartRow: number;
+  checkCol: number | null;
+  etapaCol: number;
+  oQueCol: number;
+  tipoCol: number;
+  quemCol: number;
+  prazoCol: number;
+  statusCol: number;
+  obsCol: number;
+}
+
+function parseWithLayout(values: string[][], layout: FixedLayoutCols): TarefaSheet[] {
+  const dataRows = values.slice(layout.dataStartRow);
+
+  function getCheck(r: string[]): boolean {
+    if (layout.checkCol !== null) {
+      return parseCheckbox(readCell(r, layout.checkCol));
+    }
+    return parseCheckbox(readCell(r, 0));
+  }
+
+  return dataRows
+    .map((r) => {
+      const oQue = readCell(r, layout.oQueCol);
+      return {
+        check_feito: getCheck(r),
+        etapa: readCell(r, layout.etapaCol),
+        o_que: oQue,
+        tipo: readCell(r, layout.tipoCol),
+        quem: readCell(r, layout.quemCol),
+        prazo: readCell(r, layout.prazoCol),
+        status: readCell(r, layout.statusCol) || "Não iniciado",
+        observacoes: readCell(r, layout.obsCol),
+      };
+    })
+    .filter((t) => isValidTaskRow(t.o_que));
+}
+
+function scoreParseResult(tasks: TarefaSheet[]): number {
+  if (tasks.length === 0) return 0;
+  let score = tasks.length * 100;
+  for (const t of tasks) {
+    const o = t.o_que.toLowerCase();
+    if (TIPO_COLUMN_VALUES.has(o)) score -= 500;
+    if (HEADER_LABEL_KEYS.has(normalizeKey(t.o_que))) score -= 500;
+    if (o.length < 4) score -= 80;
+  }
+  return score;
+}
+
+function layoutFromDetected(values: string[][]): FixedLayoutCols {
+  const det = detectTaskColumnLayout(values);
+  return {
+    dataStartRow: det.dataStartRow,
+    checkCol: det.hasCheckHeader ? det.checkCol : null,
+    etapaCol: det.etapaCol,
+    oQueCol: det.oQueCol,
+    tipoCol: det.tipoCol,
+    quemCol: det.quemCol,
+    prazoCol: det.prazoCol,
+    statusCol: det.statusCol,
+    obsCol: det.obsCol,
+  };
+}
+
+function fixedLayoutCandidates(values: string[][]): FixedLayoutCols[] {
+  const { headerRowIdx } = findTaskHeaderRow(values);
+  const start = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+
+  return [
+    // B:I sem col A — Check em B (idx 0)
+    {
+      dataStartRow: start,
+      checkCol: 0,
+      etapaCol: 1,
+      oQueCol: 2,
+      tipoCol: 3,
+      quemCol: 4,
+      prazoCol: 5,
+      statusCol: 6,
+      obsCol: 7,
+    },
+    // B:I com col A vazia no range A:I — Check em B (idx 1)
+    {
+      dataStartRow: start,
+      checkCol: 1,
+      etapaCol: 2,
+      oQueCol: 3,
+      tipoCol: 4,
+      quemCol: 5,
+      prazoCol: 6,
+      statusCol: 7,
+      obsCol: 8,
+    },
+    // Sem checkbox explícito — O que? começa cedo
+    {
+      dataStartRow: start,
+      checkCol: null,
+      etapaCol: 0,
+      oQueCol: 1,
+      tipoCol: 2,
+      quemCol: 3,
+      prazoCol: 4,
+      statusCol: 5,
+      obsCol: 6,
+    },
+  ];
+}
+
+function withLeadingPad(values: string[][], pad: number, headerRowIdx: number): string[][] {
+  if (pad <= 0) return values;
+  return values.map((row, i) => (i <= headerRowIdx ? row : [...Array(pad).fill(""), ...row]));
+}
+
+function pickBestParse(candidates: TarefaSheet[][]): TarefaSheet[] {
+  return candidates.reduce((best, cur) => {
+    return scoreParseResult(cur) > scoreParseResult(best) ? cur : best;
+  }, [] as TarefaSheet[]);
+}
+
+/** Parse com coluna O que? lendo Tipo (Marry Me) indica layout errado. */
+export function parseLooksSuspicious(tasks: TarefaSheet[]): boolean {
+  if (tasks.length === 0) return true;
+  const noise = tasks.filter((t) => TIPO_COLUMN_VALUES.has(t.o_que.toLowerCase())).length;
+  return noise / tasks.length >= 0.5;
 }
 
 /**
@@ -338,29 +525,20 @@ function isValidTaskRow(oQue: string): boolean {
 export function alignTaskSheetRows(values: string[][]): string[][] {
   if (values.length === 0) return values;
 
-  let headerRowIdx = -1;
-  let hMap: Record<string, number> = {};
-  for (let i = 0; i < Math.min(values.length, 12); i++) {
-    const candidate = buildHeaderMap(values[i]);
-    if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
-      headerRowIdx = i;
-      hMap = candidate;
-      break;
-    }
-  }
-  if (headerRowIdx < 0) return values;
+  const normalized = normalizeSheetGrid(values);
+  const { headerRowIdx, hMap } = findTaskHeaderRow(normalized);
+  if (headerRowIdx < 0) return normalized;
 
-  const header = values[headerRowIdx];
-  const headerHasLeadingEmpty = (header[0]?.trim() ?? "") === "";
+  const header = normalized[headerRowIdx];
   const checkCol = hMap.check ?? hMap.check_feito ?? hMap.feito;
-  if (!headerHasLeadingEmpty || checkCol === undefined || checkCol === 0) return values;
+  if (checkCol === undefined || checkCol === 0) return normalized;
 
-  return values.map((row, i) => {
+  return normalized.map((row, i) => {
     if (i <= headerRowIdx) return row;
-    const first = row[0]?.trim() ?? "";
+    const first = readCell(row, 0);
     if (first === "") return row;
-    if (checkCol === 1 && parseCheckbox(first)) return ["", ...row];
-    if (row.length + 1 <= header.length) return ["", ...row];
+    if (parseCheckbox(first)) return [...Array(checkCol).fill(""), ...row];
+    if (row.length + checkCol <= header.length) return [...Array(checkCol).fill(""), ...row];
     return row;
   });
 }
@@ -375,26 +553,20 @@ async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<strin
   return data.values ?? [];
 }
 
-/** Lê valores da aba e parseia tarefas — tenta B:I (layout atual) e fallback A:I. */
+/** Lê valores da aba e parseia tarefas — compara B:I e A:I e fica com a maior contagem. */
 export async function fetchAndParseTarefasAba(aba: string): Promise<TarefaSheet[]> {
-  const attempts = ["B:I", "A:I"] as const;
   let best: TarefaSheet[] = [];
-  for (const suffix of attempts) {
+  for (const suffix of ["B:I", "A:I"] as const) {
     try {
       const values = await fetchSheetValues(aba, suffix);
       if (values.length === 0) continue;
       const parsed = parseTarefasValues(values);
       if (parsed.length > best.length) best = parsed;
-      if (parsed.length > 0 && suffix === "B:I") break;
     } catch {
       // tenta próximo range
     }
   }
   return best;
-}
-
-function readCell(row: string[], col: number): string {
-  return row[col]?.trim() ?? "";
 }
 
 /** Converte índice 0-based para letra de coluna (0=A, 1=B…). */
@@ -539,37 +711,29 @@ export function findTaskRowByOQue(
 
 /**
  * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
- * Detecta automaticamente a linha de cabeçalho e o offset de colunas (A:H ou B:I).
+ * Tenta vários alinhamentos e layouts — fica com o que produzir mais tarefas válidas.
  */
 export function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
-  const aligned = alignTaskSheetRows(values);
-  const layout = detectTaskColumnLayout(aligned);
-  const dataRows = aligned.slice(layout.dataStartRow);
+  const { headerRowIdx } = findTaskHeaderRow(normalizeSheetGrid(values));
+  const grids: string[][][] = [
+    normalizeSheetGrid(values),
+    normalizeSheetGrid(alignTaskSheetRows(values)),
+    withLeadingPad(normalizeSheetGrid(values), 1, headerRowIdx),
+    withLeadingPad(normalizeSheetGrid(values), 2, headerRowIdx),
+    withLeadingPad(normalizeSheetGrid(alignTaskSheetRows(values)), 1, headerRowIdx),
+  ];
 
-  function getCheck(r: string[]): boolean {
-    if (layout.hasCheckHeader && layout.checkCol !== null) {
-      return parseCheckbox(r[layout.checkCol] ?? "");
+  const candidates: TarefaSheet[][] = [];
+  for (const grid of grids) {
+    candidates.push(parseWithLayout(grid, layoutFromDetected(grid)));
+    for (const fixed of fixedLayoutCandidates(grid)) {
+      candidates.push(parseWithLayout(grid, fixed));
     }
-    return parseCheckbox(r[0] ?? "");
   }
 
-  return dataRows
-    .map((r) => {
-      const oQue = readCell(r, layout.oQueCol);
-      return {
-        check_feito: getCheck(r),
-        etapa: readCell(r, layout.etapaCol),
-        o_que: oQue,
-        tipo: readCell(r, layout.tipoCol),
-        quem: readCell(r, layout.quemCol),
-        prazo: readCell(r, layout.prazoCol),
-        status: readCell(r, layout.statusCol) || "Não iniciado",
-        observacoes: readCell(r, layout.obsCol),
-      };
-    })
-    .filter((t) => isValidTaskRow(t.o_que));
+  return pickBestParse(candidates);
 }
 
 /**
@@ -618,18 +782,20 @@ export async function fetchTodasTarefasBatch(
     const valueRanges: Array<{ values?: string[][] }> = data.valueRanges ?? [];
 
     for (let j = 0; j < lote.length; j++) {
-      const parsed = parseTarefasValues(valueRanges[j]?.values ?? []);
-      result[lote[j]] = parsed;
+      const batchValues = valueRanges[j]?.values ?? [];
+      const batchParsed = parseTarefasValues(batchValues);
+      result[lote[j]] = batchParsed;
     }
 
-    // Fallback individual A:I quando B:I no batch retornou 0 tarefas
+    // Reconcilia com A:I quando batch B:I sub-conta ou leu coluna errada
     for (const aba of lote) {
-      if ((result[aba]?.length ?? 0) > 0) continue;
+      const batchParsed = result[aba] ?? [];
+      if (batchParsed.length > 0 && !parseLooksSuspicious(batchParsed)) continue;
       try {
-        const fallback = await fetchAndParseTarefasAba(aba);
-        if (fallback.length > 0) result[aba] = fallback;
+        const fullParsed = await fetchAndParseTarefasAba(aba);
+        if (fullParsed.length > batchParsed.length) result[aba] = fullParsed;
       } catch {
-        result[aba] = result[aba] ?? [];
+        if (!result[aba]) result[aba] = [];
       }
     }
   }

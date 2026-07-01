@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { fetchTodasTarefasBatch } from "@/lib/sheets";
+import { fetchTodasTarefasBatch, fetchAndParseTarefasAba } from "@/lib/sheets";
 import { syncTarefasClienteFromSheet } from "@/lib/importSheets";
 import {
   collectAbaCandidates,
@@ -167,7 +167,18 @@ export async function POST() {
         semAba.push(`${idNorm} (${c.nome_empresa})`);
       } else {
         const sheetTasks = tarefasPorAba[abaIdeal] ?? [];
-        const taskCount = sheetTasks.length;
+        let taskCount = sheetTasks.length;
+        if (taskCount === 0) {
+          try {
+            const refetched = await fetchAndParseTarefasAba(abaIdeal);
+            if (refetched.length > 0) {
+              tarefasPorAba[abaIdeal] = refetched;
+              taskCount = refetched.length;
+            }
+          } catch {
+            // mantém zero
+          }
+        }
         if (taskCount === 0) semTarefas.push(`${idNorm} (${c.nome_empresa})`);
 
         if (abaIdeal !== c.sheets_aba) {
@@ -193,10 +204,11 @@ export async function POST() {
 
         // Reimporta tarefas da planilha quando há linhas parseadas (Reparar sozinho não bastava)
         if (taskCount > 0) {
+          const tasksToSync = tarefasPorAba[abaIdeal] ?? sheetTasks;
           const synced = await syncTarefasClienteFromSheet(
             supabase,
             { id_cliente: c.id_cliente, sheets_aba: abaIdeal, nome_empresa: c.nome_empresa },
-            sheetTasks
+            tasksToSync
           );
           if (!synced.ok) {
             erros.push(`${idNorm}: falha ao reimportar tarefas (${synced.error})`);

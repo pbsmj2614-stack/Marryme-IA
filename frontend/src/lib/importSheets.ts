@@ -10,7 +10,7 @@
 
 import { createClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch } from "@/lib/sheets";
+import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious } from "@/lib/sheets";
 import {
   getAbaIdPrefixFromTitle,
   normalizeMmId,
@@ -387,13 +387,12 @@ export async function importarPlanilha(
   for (const cliente of abasComCliente) {
     let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
 
-    // Fallback individual se batchGet retornou vazio (aba pode ter falhado no lote)
-    if (tarefas.length === 0) {
+    if (tarefas.length === 0 || parseLooksSuspicious(tarefas)) {
       try {
-        const { fetchAndParseTarefasAba } = await import("@/lib/sheets");
-        tarefas = await fetchAndParseTarefasAba(cliente.sheets_aba);
+        const refetched = await fetchAndParseTarefasAba(cliente.sheets_aba);
+        if (refetched.length > tarefas.length) tarefas = refetched;
       } catch {
-        // mantém vazio
+        // mantém lote ou vazio
       }
     }
 

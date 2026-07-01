@@ -50,4 +50,25 @@ describe("parseTarefasValues", () => {
     expect(tarefas).toHaveLength(2);
     expect(tarefas[0].o_que).toBe("Pegar Acesso da BM");
   });
+
+  it("parseia aba lida só em B:I (sem coluna A)", () => {
+    const biOnly = [
+      ["Check", "Etapa", "O que?", "Tipo", "Quem?", "Prazo", "Status", "Obs"],
+      ["TRUE", "Organização", "Pegar Acesso da BM", "Marry Me", "Kauê", "10/06/2026", "Não iniciado", ""],
+      ["FALSE", "Preparação", "Configurar a BM", "Marry Me", "Paulo", "11/06/2026", "Não iniciado", ""],
+    ];
+    const tarefas = parseTarefasValues(biOnly);
+    expect(tarefas).toHaveLength(2);
+    expect(tarefas[0].o_que).toBe("Pegar Acesso da BM");
+  });
+
+  it("tolera cabeçalho O Que sem interrogação", () => {
+    const headerVariant = [
+      ["", "Check", "Etapa", "O Que", "Tipo", "Quem", "Prazo", "Status", "Obs"],
+      ["", "FALSE", "Prep", "Montar campanha", "Marry Me", "Ana", "01/07/2026", "Não iniciado", ""],
+    ];
+    const tarefas = parseTarefasValues(headerVariant);
+    expect(tarefas).toHaveLength(1);
+    expect(tarefas[0].o_que).toBe("Montar campanha");
+  });
 });
