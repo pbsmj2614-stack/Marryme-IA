@@ -20,6 +20,13 @@ export function collectAbaCandidates(
   return Array.from(new Set(raw.filter((a): a is string => !!a && todasAbas.includes(a))));
 }
 
+function taskCount(
+  aba: string,
+  tarefasPorAba: Record<string, TarefaSheet[]>
+): number {
+  return tarefasPorAba[aba]?.length ?? 0;
+}
+
 /** Pontua aba: +1000 prefixo correto, +100 match encontrarAba, +count tarefas. */
 export function scoreSheetsAba(
   aba: string,
@@ -28,13 +35,13 @@ export function scoreSheetsAba(
   tarefasPorAba: Record<string, TarefaSheet[]>
 ): number {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
-  let score = tarefasPorAba[aba]?.length ?? 0;
+  let score = taskCount(aba, tarefasPorAba);
   if (getAbaIdPrefixFromTitle(aba) === idNorm) score += 1000;
   if (abaEncontrada && aba === abaEncontrada) score += 100;
   return score;
 }
 
-/** Escolhe a aba com maior score entre candidatos. */
+/** Escolhe a aba com maior score; prefere abaEncontrada em empate ou quando tem mais tarefas. */
 export function resolveSheetsAba(
   idCliente: string,
   abaEncontrada: string | null,
@@ -43,6 +50,7 @@ export function resolveSheetsAba(
   abasClientes: string[],
   tarefasPorAba: Record<string, TarefaSheet[]>
 ): string | null {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
   const candidatos = collectAbaCandidates(
     idCliente,
     abaEncontrada,
@@ -59,7 +67,53 @@ export function resolveSheetsAba(
     if (s > bestScore) {
       bestScore = s;
       best = aba;
+    } else if (s === bestScore && aba === abaEncontrada) {
+      best = aba;
     }
   }
+
+  // Não troca aba existente por outra com MENOS tarefas (evita regressão pós-reparo)
+  if (
+    existente &&
+    todasAbas.includes(existente) &&
+    best !== existente &&
+    taskCount(best, tarefasPorAba) < taskCount(existente, tarefasPorAba)
+  ) {
+    const prefixoExistente = getAbaIdPrefixFromTitle(existente);
+    if (prefixoExistente === idNorm) return existente;
+  }
+
+  // abaEncontrada com mais tarefas que a escolhida → preferir match por ID/nome
+  if (
+    abaEncontrada &&
+    candidatos.includes(abaEncontrada) &&
+    getAbaIdPrefixFromTitle(abaEncontrada) === idNorm &&
+    taskCount(abaEncontrada, tarefasPorAba) >= taskCount(best, tarefasPorAba)
+  ) {
+    return abaEncontrada;
+  }
+
   return best;
+}
+
+/** Se deve atualizar sheets_aba no reparo (não regride contagem). */
+export function shouldUpdateSheetsAba(
+  idCliente: string,
+  abaAtual: string | null | undefined,
+  abaIdeal: string | null,
+  todasAbas: string[],
+  tarefasPorAba: Record<string, TarefaSheet[]>
+): boolean {
+  if (!abaIdeal) return false;
+  if (!abaAtual || !todasAbas.includes(abaAtual)) return true;
+
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const prefixoAtual = getAbaIdPrefixFromTitle(abaAtual);
+  if (prefixoAtual && prefixoAtual !== idNorm) return true;
+
+  if (abaIdeal === abaAtual) return false;
+
+  const atualCount = taskCount(abaAtual, tarefasPorAba);
+  const idealCount = taskCount(abaIdeal, tarefasPorAba);
+  return idealCount > atualCount;
 }

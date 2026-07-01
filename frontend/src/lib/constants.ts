@@ -1,5 +1,7 @@
 /** Constantes compartilhadas entre páginas e componentes. */
 
+import type { UserRole } from "@/hooks/useRole";
+
 // ─── Equipe ───────────────────────────────────────────────────────────────────
 
 export const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê", "Giovanni"] as const;
@@ -32,22 +34,41 @@ export const DB = {
   CONFIGURACOES: "configuracoes",
 } as const;
 
-// ─── Super admin (ações destrutivas / reparo em lote) ─────────────────────────
+// ─── Super admin (Corrigir Gaps / Reparar pipeline) ─────────────────────────
 
 const DEFAULT_SUPER_ADMIN_EMAILS = ["pauloguimaraes@marryme.com.br"];
 
-/** E-mails autorizados a Corrigir Gaps / Reparar pipeline (env sobrescreve). */
-export function getSuperAdminEmails(): string[] {
+function superAdminEmailsFromEnv(): string[] | null {
   const fromEnv =
     process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS ?? process.env.SUPER_ADMIN_EMAILS ?? "";
   const parsed = fromEnv
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  return parsed.length > 0 ? parsed : DEFAULT_SUPER_ADMIN_EMAILS;
+  return parsed.length > 0 ? parsed : null;
+}
+
+/** E-mails autorizados quando SUPER_ADMIN_EMAILS está definido no env. */
+export function getSuperAdminEmails(): string[] {
+  return superAdminEmailsFromEnv() ?? DEFAULT_SUPER_ADMIN_EMAILS;
 }
 
 export function isSuperAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return getSuperAdminEmails().includes(email.toLowerCase().trim());
+}
+
+/**
+ * Corrigir Gaps / Reparar pipeline:
+ * - Sem env SUPER_ADMIN_EMAILS → qualquer admin (comportamento legado)
+ * - Com env → só e-mails listados
+ */
+export function isPipelineMaintainer(
+  email: string | null | undefined,
+  role: UserRole | null
+): boolean {
+  if (role !== "admin") return false;
+  const restricted = superAdminEmailsFromEnv();
+  if (!restricted) return true;
+  return isSuperAdminEmail(email);
 }

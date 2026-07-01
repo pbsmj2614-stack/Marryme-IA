@@ -9,11 +9,12 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { requireSuperAdmin } from "@/lib/api-auth";
+import { requirePipelineMaintainer } from "@/lib/api-auth";
 import { fetchTodasTarefasBatch } from "@/lib/sheets";
 import {
   collectAbaCandidates,
   resolveSheetsAba,
+  shouldUpdateSheetsAba,
 } from "@/lib/sheets-aba-resolve";
 import {
   extractMmNum,
@@ -91,7 +92,7 @@ function encontrarAbaPorId(
 
 export async function POST() {
   try {
-    const auth = await requireSuperAdmin();
+    const auth = await requirePipelineMaintainer();
     if (auth.response) return auth.response;
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -167,15 +168,24 @@ export async function POST() {
         if (taskCount === 0) semTarefas.push(`${idNorm} (${c.nome_empresa})`);
 
         if (abaIdeal !== c.sheets_aba) {
-          const { error: errAba } = await supabase
-            .from("mm_clientes")
-            .update({ sheets_aba: abaIdeal, atualizado_em: new Date().toISOString() })
-            .eq("id_cliente", c.id_cliente);
-          if (errAba) erros.push(`${idNorm}: falha ao corrigir aba (${errAba.message})`);
-          else
-            reparados.push(
-              `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
-            );
+          const shouldUpdate = shouldUpdateSheetsAba(
+            idNorm,
+            c.sheets_aba,
+            abaIdeal,
+            todasAbas,
+            tarefasPorAba
+          );
+          if (shouldUpdate) {
+            const { error: errAba } = await supabase
+              .from("mm_clientes")
+              .update({ sheets_aba: abaIdeal, atualizado_em: new Date().toISOString() })
+              .eq("id_cliente", c.id_cliente);
+            if (errAba) erros.push(`${idNorm}: falha ao corrigir aba (${errAba.message})`);
+            else
+              reparados.push(
+                `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
+              );
+          }
         }
       }
 

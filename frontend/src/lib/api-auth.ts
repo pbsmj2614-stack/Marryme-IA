@@ -50,12 +50,24 @@ export const UNAUTHORIZED = () => NextResponse.json({ error: "Não autorizado" }
 export const FORBIDDEN = () =>
   NextResponse.json({ error: "Sem permissão para esta ação" }, { status: 403 });
 
-/** Apenas super admins (Corrigir Gaps / Reparar pipeline). */
-export async function requireSuperAdmin() {
-  const user = await getAuthUser();
-  if (!user) return { response: UNAUTHORIZED() as NextResponse, user: null };
-  if (!isSuperAdminEmail(user.email)) {
+/** Admin + (opcional) lista de e-mails quando SUPER_ADMIN_EMAILS está no env. */
+export async function requirePipelineMaintainer() {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return { response: auth, user: null };
+
+  const restricted =
+    (process.env.SUPER_ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean).length > 0;
+
+  if (restricted && !isSuperAdminEmail(auth.user.email)) {
     return { response: FORBIDDEN() as NextResponse, user: null };
   }
-  return { response: null, user };
+  return { response: null, user: auth.user };
+}
+
+/** @deprecated use requirePipelineMaintainer */
+export async function requireSuperAdmin() {
+  return requirePipelineMaintainer();
 }

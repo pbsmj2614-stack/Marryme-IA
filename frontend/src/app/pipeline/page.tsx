@@ -15,7 +15,7 @@ import {
   buildClienteIdAliasMap,
   tarefaBelongsToCliente,
 } from "@/lib/client-utils";
-import { RESPONSAVEIS as RESPONSAVEIS_BASE, isSuperAdminEmail } from "@/lib/constants";
+import { RESPONSAVEIS as RESPONSAVEIS_BASE, isPipelineMaintainer } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
@@ -687,7 +687,7 @@ export default function PipelinePage() {
   const searchParams = useSearchParams();
   const { user, loading: userLoading } = useCurrentUser();
   const { role } = useRole();
-  const isSuperAdmin = isSuperAdminEmail(user?.email);
+  const isMaintainer = isPipelineMaintainer(user?.email, role);
   const { data: rawData, isLoading: dataLoading } = usePipelineRaw(!!user);
   const invalidatePipeline = useInvalidatePipeline();
 
@@ -1251,7 +1251,7 @@ export default function PipelinePage() {
                 )}
               </button>
 
-              {role === "admin" && isSuperAdmin && (
+              {isMaintainer && (
                 <>
                   <button
                     onClick={handleRepairPipeline}
