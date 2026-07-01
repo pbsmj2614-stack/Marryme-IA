@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { fetchTodasTarefasBatch } from "@/lib/sheets";
+import { fetchTodasTarefasBatch, refillTarefasLoteVazias } from "@/lib/sheets";
 import {
   collectAbaCandidates,
   resolveSheetsAba,
@@ -126,26 +126,12 @@ export async function POST() {
 
     const cohort = (clientes ?? []).filter((c) => extractMmNum(c.id_cliente) >= MM_COHORT_MIN);
 
-    const abasParaFetch = Array.from(
-      new Set(
-        cohort.flatMap((c) => {
-          const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
-          const abaEncontrada = encontrarAbaPorId(abasClientes, idNorm, c.nome_empresa);
-          return collectAbaCandidates(
-            idNorm,
-            abaEncontrada,
-            c.sheets_aba,
-            todasAbas,
-            abasClientes,
-            c.nome_empresa
-          );
-        })
-      )
-    );
+    const abasParaFetch = abasClientes;
 
     let tarefasPorAba: Awaited<ReturnType<typeof fetchTodasTarefasBatch>> = {};
     try {
       tarefasPorAba = await fetchTodasTarefasBatch(abasParaFetch);
+      await refillTarefasLoteVazias(tarefasPorAba, abasParaFetch);
     } catch (err) {
       erros.push(`Erro ao buscar tarefas: ${String(err)}`);
     }

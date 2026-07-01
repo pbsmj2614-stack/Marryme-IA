@@ -624,10 +624,35 @@ export function alignTaskSheetRows(values: string[][]): string[][] {
   });
 }
 
+/** A1 notation com escape correto do nome da aba (espaços, acentos, etc.). */
+export function formatSheetRange(sheetName: string, a1Suffix: string): string {
+  const safe = sheetName.replace(/'/g, "''");
+  if (/^[A-Za-z0-9_]+$/.test(sheetName)) {
+    return `${sheetName}!${a1Suffix}`;
+  }
+  return `'${safe}'!${a1Suffix}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchSheetsUrl(url: string, retries = 4): Promise<Response> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.status === 429 && attempt < retries - 1) {
+      await sleep(400 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Sheets API: falha após retries");
+}
+
 async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<string[][]> {
-  const range = encodeURIComponent(`${aba}!${rangeSuffix}`);
+  const range = encodeURIComponent(formatSheetRange(aba, rangeSuffix));
   const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetchSheetsUrl(url);
   if (res.status === 400) return [];
   if (!res.ok) throw new Error(`Sheets API error (${aba}!${rangeSuffix}) ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as { values?: string[][] };
@@ -860,15 +885,15 @@ export async function fetchTodasTarefasBatch(
     const lote = abas.slice(i, i + ABAS_PER_BATCH);
     const rangePaths: string[] = [];
     for (const a of lote) {
-      rangePaths.push(`${a}!A:I`);
-      rangePaths.push(`${a}!B:I`);
+      rangePaths.push(formatSheetRange(a, "A:I"));
+      rangePaths.push(formatSheetRange(a, "B:I"));
     }
     const rangesParam = rangePaths
       .map((r) => `ranges=${encodeURIComponent(r)}`)
       .join("&");
     const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
 
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetchSheetsUrl(url);
 
     if (!res.ok) {
       for (const aba of lote) {
@@ -894,6 +919,24 @@ export async function fetchTodasTarefasBatch(
   }
 
   return result;
+}
+
+/** Re-fetch individual para abas que o batchGet parseou vazio (rate limit throttle). */
+export async function refillTarefasLoteVazias(
+  lote: Record<string, TarefaSheet[]>,
+  abas: string[]
+): Promise<void> {
+  const vazias = abas.filter((a) => (lote[a]?.length ?? 0) === 0);
+  for (let i = 0; i < vazias.length; i++) {
+    const aba = vazias[i];
+    try {
+      const parsed = await fetchAndParseTarefasAba(aba);
+      if (parsed.length > 0) lote[aba] = parsed;
+    } catch {
+      // mantém vazio
+    }
+    if (i > 0 && i % 4 === 0) await sleep(350);
+  }
 }
 
 /**

@@ -10,7 +10,7 @@
 
 import { createClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious, scoreTarefasParse } from "@/lib/sheets";
+import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious, scoreTarefasParse, refillTarefasLoteVazias } from "@/lib/sheets";
 import {
   getAbaIdPrefixFromTitle,
   normalizeMmId,
@@ -133,20 +133,39 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
+/** Todas abas plausíveis para um cliente (prefixo MM, nome, sheets_aba, resolve). */
+function expandAbaCandidates(
+  idCliente: string,
+  nomeEmpresa: string,
+  sheetsAba: string | null,
+  candidatos: string[],
+  abasClientes: string[],
+  todasAbas: string[]
+): string[] {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const raw = [
+    ...candidatos,
+    sheetsAba,
+    ...abasClientes.filter((a) => getAbaIdPrefixFromTitle(a) === idNorm),
+    ...abasClientes.filter((a) => abaMatchesNomeEmpresa(a, nomeEmpresa)),
+  ];
+  return Array.from(new Set(raw.filter((a): a is string => !!a && todasAbas.includes(a))));
+}
+
 /** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
 async function pickBestTarefasFromAbas(
   abas: string[],
   lote: Record<string, import("@/lib/sheets").TarefaSheet[]>
 ): Promise<{ aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] }> {
-  let bestAba = abas[0] ?? "";
-  let bestTarefas: import("@/lib/sheets").TarefaSheet[] = [];
-  let bestScore = -1;
+  if (abas.length === 0) return { aba: "", tarefas: [] };
+
+  let bestNonSuspicious: { aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] } | null =
+    null;
+  let bestNonSuspiciousScore = -1;
 
   for (const aba of abas) {
     let parsed = lote[aba] ?? [];
-    const needsRefetch =
-      parsed.length === 0 || parseLooksSuspicious(parsed);
-    if (needsRefetch) {
+    if (parsed.length === 0 || parseLooksSuspicious(parsed)) {
       try {
         const refetched = await fetchAndParseTarefasAba(aba);
         if (scoreTarefasParse(refetched) > scoreTarefasParse(parsed)) {
@@ -159,17 +178,42 @@ async function pickBestTarefasFromAbas(
     }
 
     const score = scoreTarefasParse(parsed);
-    if (score > bestScore) {
-      bestScore = score;
-      bestAba = aba;
-      bestTarefas = parsed;
+    if (!parseLooksSuspicious(parsed) && parsed.length > 0 && score > bestNonSuspiciousScore) {
+      bestNonSuspiciousScore = score;
+      bestNonSuspicious = { aba, tarefas: parsed };
     }
   }
 
-  if (parseLooksSuspicious(bestTarefas)) {
-    return { aba: bestAba, tarefas: [] };
+  if (bestNonSuspicious) return bestNonSuspicious;
+  return { aba: abas[0], tarefas: [] };
+}
+
+async function syncClienteTarefasFromAbas(
+  supabase: SupabaseClient,
+  cliente: { id_cliente: string; sheets_aba: string; nome_empresa: string },
+  abasTry: string[],
+  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>
+): Promise<{
+  bestAba: string;
+  tarefas: import("@/lib/sheets").TarefaSheet[];
+  synced: SyncTarefasResult | null;
+}> {
+  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, lote);
+
+  if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
+    await supabase
+      .from("mm_clientes")
+      .update({ sheets_aba: bestAba, atualizado_em: new Date().toISOString() })
+      .eq("id_cliente", cliente.id_cliente);
+    cliente.sheets_aba = bestAba;
   }
-  return { aba: bestAba, tarefas: bestTarefas };
+
+  if (tarefas.length === 0) {
+    return { bestAba, tarefas, synced: null };
+  }
+
+  const synced = await syncTarefasClienteFromSheet(supabase, cliente, tarefas);
+  return { bestAba, tarefas, synced };
 }
 
 /** Sincroniza tarefas de um cliente a partir da planilha (merge seguro — nunca apaga em massa). */
@@ -416,6 +460,7 @@ export async function importarPlanilha(
   let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
   try {
     todasTarefasLote = await fetchTodasTarefasBatch(abasParaFetch);
+    await refillTarefasLoteVazias(todasTarefasLote, abasParaFetch);
   } catch (err) {
     erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
   }
@@ -432,9 +477,10 @@ export async function importarPlanilha(
       todasTarefasLote,
       c.nome_empresa
     );
-    // Não zera sheets_aba no upsert se resolve falhou mas aba anterior ainda existe
+    // Nunca zera sheets_aba: resolve → match por ID/nome → valor anterior válido
     const sheets_aba =
       resolved ??
+      abaEncontrada ??
       (existente && todasAbas.includes(existente) ? existente : null);
     if (!sheets_aba) semAbas.push(`${id_cliente} (${c.nome_empresa})`);
     return {
@@ -490,16 +536,24 @@ export async function importarPlanilha(
   }
   totalClientes = clientesPayload.length;
 
-  // ── 6. Busca TODAS as tarefas em batchGet (todos os IDs com aba) ──
+  // ── 6. Clientes com aba resolvida (nunca pula por sheets_aba null se a aba existir no Sheets)
   const abasComCliente = clientesPayload
-    .filter((c) => c.sheets_aba)
-    .map((c) => ({
-      id_cliente: c.id_cliente,
-      sheets_aba: c.sheets_aba as string,
-      nome_empresa: c.nome_empresa,
-    }));
+    .map((c) => {
+      const aba =
+        c.sheets_aba ??
+        encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
+      if (!aba) return null;
+      return {
+        id_cliente: c.id_cliente,
+        sheets_aba: aba,
+        nome_empresa: c.nome_empresa,
+      };
+    })
+    .filter((c): c is { id_cliente: string; sheets_aba: string; nome_empresa: string } => c !== null);
 
   // ── 7. Sincroniza tarefas por cliente (planilha = fonte de verdade) ──
+  const retryQueue: typeof abasComCliente = [];
+
   for (const cliente of abasComCliente) {
     const abaEncontrada = encontrarAba(
       abasClientes,
@@ -515,45 +569,89 @@ export async function importarPlanilha(
       abasClientes,
       cliente.nome_empresa
     );
-    const abasTry =
-      candidatos.length > 0 ? candidatos : [cliente.sheets_aba];
+    const abasTry = expandAbaCandidates(
+      cliente.id_cliente,
+      cliente.nome_empresa,
+      cliente.sheets_aba,
+      candidatos.length > 0 ? candidatos : abaEncontrada ? [abaEncontrada] : [cliente.sheets_aba],
+      abasClientes,
+      todasAbas
+    );
 
-    let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, todasTarefasLote);
-
-    if (tarefas.length === 0) {
-      const porNome = abasClientes.filter((a) =>
-        abaMatchesNomeEmpresa(a, cliente.nome_empresa)
-      );
-      const extra = await pickBestTarefasFromAbas(porNome, todasTarefasLote);
-      if (extra.tarefas.length > tarefas.length) {
-        bestAba = extra.aba;
-        tarefas = extra.tarefas;
-      }
-    }
-
-    if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
-      await supabase
-        .from("mm_clientes")
-        .update({ sheets_aba: bestAba, atualizado_em: new Date().toISOString() })
-        .eq("id_cliente", cliente.id_cliente);
-      cliente.sheets_aba = bestAba;
-    }
+    const { tarefas, synced } = await syncClienteTarefasFromAbas(
+      supabase,
+      cliente,
+      abasTry,
+      todasTarefasLote
+    );
 
     if (tarefas.length === 0) {
+      retryQueue.push(cliente);
       semTarefas.push(`${cliente.id_cliente} (${cliente.nome_empresa})`);
       continue;
     }
 
-    const synced = await syncTarefasClienteFromSheet(supabase, cliente, tarefas);
-    if (synced.skipped) {
+    if (synced?.skipped) {
       erros.push(
         `Aviso: ${cliente.nome_empresa} — sync ignorado (${synced.skipReason ?? "desconhecido"})`
       );
       continue;
     }
-    if (!synced.ok) {
+    if (synced && !synced.ok) {
       erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${synced.error}`);
-    } else {
+    } else if (synced?.ok) {
+      totalTarefas += synced.count;
+      const idx = semTarefas.findIndex((s) => s.startsWith(`${cliente.id_cliente} (`));
+      if (idx >= 0) semTarefas.splice(idx, 1);
+    }
+  }
+
+  // ── 7b. Segunda passada — refetch agressivo para MM051+ que ficaram vazios ──
+  for (const cliente of retryQueue) {
+    const abaEncontrada = encontrarAba(
+      abasClientes,
+      cliente.id_cliente,
+      cliente.nome_empresa,
+      todasAbas
+    );
+    const abasTry = expandAbaCandidates(
+      cliente.id_cliente,
+      cliente.nome_empresa,
+      cliente.sheets_aba,
+      [],
+      abasClientes,
+      todasAbas
+    );
+    if (abaEncontrada && !abasTry.includes(abaEncontrada)) abasTry.unshift(abaEncontrada);
+
+    for (const aba of abasTry) {
+      try {
+        const parsed = await fetchAndParseTarefasAba(aba);
+        if (parsed.length > 0) todasTarefasLote[aba] = parsed;
+      } catch {
+        // tenta próxima
+      }
+    }
+
+    const { tarefas, synced } = await syncClienteTarefasFromAbas(
+      supabase,
+      cliente,
+      abasTry,
+      todasTarefasLote
+    );
+
+    if (tarefas.length === 0) continue;
+
+    const idx = semTarefas.findIndex((s) => s.startsWith(`${cliente.id_cliente} (`));
+    if (idx >= 0) semTarefas.splice(idx, 1);
+
+    if (synced?.skipped) {
+      erros.push(
+        `Aviso: ${cliente.nome_empresa} — sync ignorado (${synced.skipReason ?? "desconhecido"})`
+      );
+    } else if (synced && !synced.ok) {
+      erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${synced.error}`);
+    } else if (synced?.ok) {
       totalTarefas += synced.count;
     }
   }
