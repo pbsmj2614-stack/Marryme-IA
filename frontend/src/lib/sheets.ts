@@ -500,7 +500,8 @@ function layoutFromHeaderMap(
   };
 }
 
-function scoreParseResult(tasks: TarefaSheet[]): number {
+/** Pontua qualidade do parse (maior = melhor). */
+export function scoreTarefasParse(tasks: TarefaSheet[]): number {
   if (tasks.length === 0) return 0;
   if (parseLooksSuspicious(tasks)) return Math.max(1, tasks.length);
   let score = tasks.length * 1000;
@@ -579,7 +580,7 @@ function withLeadingPad(values: string[][], pad: number, headerRowIdx: number): 
 
 function pickBestParse(candidates: TarefaSheet[][]): TarefaSheet[] {
   return candidates.reduce((best, cur) => {
-    return scoreParseResult(cur) > scoreParseResult(best) ? cur : best;
+    return scoreTarefasParse(cur) > scoreTarefasParse(best) ? cur : best;
   }, [] as TarefaSheet[]);
 }
 
@@ -634,7 +635,7 @@ export async function fetchAndParseTarefasAba(aba: string): Promise<TarefaSheet[
       const values = await fetchSheetValues(aba, suffix);
       if (values.length === 0) continue;
       const parsed = parseTarefasValues(values);
-      if (scoreParseResult(parsed) > scoreParseResult(best)) best = parsed;
+      if (scoreTarefasParse(parsed) > scoreTarefasParse(best)) best = parsed;
     } catch {
       // tenta próximo range
     }
@@ -836,32 +837,36 @@ export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[
 }
 
 /**
- * Busca as tarefas de TODAS as abas em UMA única chamada batchGet.
- * Evita o erro 429 (Rate Limit) causado por N chamadas individuais.
- * Processa em lotes de 20 ranges por chamada.
+ * Busca tarefas de várias abas via batchGet (A:I + B:I por aba).
+ * Evita centenas de chamadas individuais que causam 429/timeout no sync.
  */
 export async function fetchTodasTarefasBatch(
   abas: string[]
 ): Promise<Record<string, TarefaSheet[]>> {
   if (abas.length === 0) return {};
 
-  const BATCH_SIZE = 20;
+  /** 10 abas × 2 ranges = 20 ranges por batchGet (limite da API). */
+  const ABAS_PER_BATCH = 10;
   const result: Record<string, TarefaSheet[]> = {};
 
-  for (let i = 0; i < abas.length; i += BATCH_SIZE) {
-    const lote = abas.slice(i, i + BATCH_SIZE);
-    const rangesParam = lote
-      .map((a) => `ranges=${encodeURIComponent(`${a}!A:I`)}`)
+  for (let i = 0; i < abas.length; i += ABAS_PER_BATCH) {
+    const lote = abas.slice(i, i + ABAS_PER_BATCH);
+    const rangePaths: string[] = [];
+    for (const a of lote) {
+      rangePaths.push(`${a}!A:I`);
+      rangePaths.push(`${a}!B:I`);
+    }
+    const rangesParam = rangePaths
+      .map((r) => `ranges=${encodeURIComponent(r)}`)
       .join("&");
     const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
 
     const res = await fetch(url, { cache: "no-store" });
 
     if (!res.ok) {
-      // Fallback individual se batchGet falhar (ex: range inválido causa 400 no lote todo)
       for (const aba of lote) {
         try {
-          result[aba] = await fetchTarefasCliente(aba);
+          result[aba] = await fetchAndParseTarefasAba(aba);
         } catch {
           result[aba] = [];
         }
@@ -873,20 +878,11 @@ export async function fetchTodasTarefasBatch(
     const valueRanges: Array<{ values?: string[][] }> = data.valueRanges ?? [];
 
     for (let j = 0; j < lote.length; j++) {
-      const batchValues = valueRanges[j]?.values ?? [];
-      const batchParsed = parseTarefasValues(batchValues);
-      result[lote[j]] = batchParsed;
-    }
-
-    // Usa o maior parse entre batch B:I e leitura individual B:I + A:I
-    for (const aba of lote) {
-      const batchCount = result[aba]?.length ?? 0;
-      try {
-        const fullParsed = await fetchAndParseTarefasAba(aba);
-        if (fullParsed.length > batchCount) result[aba] = fullParsed;
-      } catch {
-        if (!result[aba]) result[aba] = [];
-      }
+      const aiValues = valueRanges[j * 2]?.values ?? [];
+      const biValues = valueRanges[j * 2 + 1]?.values ?? [];
+      const fromAi = aiValues.length > 0 ? parseTarefasValues(aiValues) : [];
+      const fromBi = biValues.length > 0 ? parseTarefasValues(biValues) : [];
+      result[lote[j]] = pickBestParse([fromAi, fromBi]);
     }
   }
 

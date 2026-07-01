@@ -10,7 +10,7 @@
 
 import { createClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious } from "@/lib/sheets";
+import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious, scoreTarefasParse } from "@/lib/sheets";
 import {
   getAbaIdPrefixFromTitle,
   normalizeMmId,
@@ -18,6 +18,7 @@ import {
 import {
   collectAbaCandidates,
   resolveSheetsAba,
+  abaMatchesNomeEmpresa,
 } from "@/lib/sheets-aba-resolve";
 import { clienteIdsForTarefas } from "@/lib/client-utils";
 
@@ -130,6 +131,45 @@ function encontrarAba(
     return aLower.includes(nomeLower) || nomeLower.includes(aLower);
   });
   return porNomeTodas ?? null;
+}
+
+/** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
+async function pickBestTarefasFromAbas(
+  abas: string[],
+  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>
+): Promise<{ aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] }> {
+  let bestAba = abas[0] ?? "";
+  let bestTarefas: import("@/lib/sheets").TarefaSheet[] = [];
+  let bestScore = -1;
+
+  for (const aba of abas) {
+    let parsed = lote[aba] ?? [];
+    const needsRefetch =
+      parsed.length === 0 || parseLooksSuspicious(parsed);
+    if (needsRefetch) {
+      try {
+        const refetched = await fetchAndParseTarefasAba(aba);
+        if (scoreTarefasParse(refetched) > scoreTarefasParse(parsed)) {
+          parsed = refetched;
+          lote[aba] = refetched;
+        }
+      } catch {
+        // mantém lote
+      }
+    }
+
+    const score = scoreTarefasParse(parsed);
+    if (score > bestScore) {
+      bestScore = score;
+      bestAba = aba;
+      bestTarefas = parsed;
+    }
+  }
+
+  if (parseLooksSuspicious(bestTarefas)) {
+    return { aba: bestAba, tarefas: [] };
+  }
+  return { aba: bestAba, tarefas: bestTarefas };
 }
 
 /** Sincroniza tarefas de um cliente a partir da planilha (merge seguro — nunca apaga em massa). */
@@ -355,21 +395,7 @@ export async function importarPlanilha(
     };
   });
 
-  const abasParaFetch = Array.from(
-    new Set(
-      clientesPreliminar.flatMap((c) => {
-        const existente = existingSheetsAba.get(c.id_cliente);
-        return collectAbaCandidates(
-          c.id_cliente,
-          c.abaEncontrada,
-          existente,
-          todasAbas,
-          abasClientes,
-          c.raw.nome_empresa
-        );
-      })
-    )
-  );
+  const abasParaFetch = abasClientes;
 
   let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
   try {
@@ -476,20 +502,16 @@ export async function importarPlanilha(
     const abasTry =
       candidatos.length > 0 ? candidatos : [cliente.sheets_aba];
 
-    let bestAba = cliente.sheets_aba;
-    let tarefas: import("@/lib/sheets").TarefaSheet[] = [];
+    let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, todasTarefasLote);
 
-    for (const aba of abasTry) {
-      let parsed = todasTarefasLote[aba] ?? [];
-      try {
-        const refetched = await fetchAndParseTarefasAba(aba);
-        if (refetched.length > parsed.length) parsed = refetched;
-      } catch {
-        // mantém lote
-      }
-      if (parsed.length > tarefas.length) {
-        tarefas = parsed;
-        bestAba = aba;
+    if (tarefas.length === 0) {
+      const porNome = abasClientes.filter((a) =>
+        abaMatchesNomeEmpresa(a, cliente.nome_empresa)
+      );
+      const extra = await pickBestTarefasFromAbas(porNome, todasTarefasLote);
+      if (extra.tarefas.length > tarefas.length) {
+        bestAba = extra.aba;
+        tarefas = extra.tarefas;
       }
     }
 
