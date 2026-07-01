@@ -199,28 +199,11 @@ export async function syncTarefasClienteFromSheet(
   const existing = existingRows ?? [];
   const existingCount = existing.length;
 
-  if (parseLooksSuspicious(tarefas) && existingCount > 0) {
+  if (parseLooksSuspicious(tarefas)) {
     return emptySkip("parse_suspeito");
   }
 
-  // Nunca substitui em massa quando a planilha retorna muito menos que o DB
-  if (existingCount > 0 && tarefas.length < Math.max(3, Math.ceil(existingCount * 0.6))) {
-    return emptySkip(`regressao (${tarefas.length} planilha vs ${existingCount} DB)`);
-  }
-
-  const existingByKey = new Map(
-    existing.map((e: { id: string; o_que: string; prazo: string | null; etapa: string | null }) => [
-      taskSyncKey(e.o_que, e.prazo, e.etapa),
-      e,
-    ])
-  );
-
-  let inserted = 0;
-  let updated = 0;
-  let deleted = 0;
-  const sheetKeys = new Set<string>();
-
-  for (const t of tarefas) {
+  const payloads = tarefas.map((t) => {
     const prazoISO = parseDateBR(t.prazo);
     const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
     const statusFinal = t.check_feito
@@ -228,7 +211,7 @@ export async function syncTarefasClienteFromSheet(
       : isAtrasado(t.prazo, statusNorm)
         ? "Atrasado"
         : statusNorm;
-    const payload = {
+    return {
       cliente_id: taskClienteId,
       check_feito: t.check_feito,
       etapa: t.etapa || null,
@@ -240,38 +223,44 @@ export async function syncTarefasClienteFromSheet(
       observacoes: t.observacoes || null,
       atualizado_em: new Date().toISOString(),
     };
-    const key = taskSyncKey(payload.o_que, payload.prazo, payload.etapa);
-    sheetKeys.add(key);
+  });
 
-    const ex = existingByKey.get(key) as { id: string } | undefined;
-    if (ex) {
-      const { error: errUp } = await supabase.from("mm_tarefas").update(payload).eq("id", ex.id);
-      if (!errUp) updated++;
-    } else {
-      const { error: errIns } = await supabase.from("mm_tarefas").insert(payload);
-      if (!errIns) inserted++;
-    }
+  // Planilha é fonte de verdade no sync — substitui tarefas do cliente (limpa lixo de syncs antigos)
+  const { error: errDelete } = await supabase
+    .from("mm_tarefas")
+    .delete()
+    .in("cliente_id", idsRelacionados);
+
+  if (errDelete) {
+    return {
+      ok: false,
+      count: 0,
+      inserted: 0,
+      updated: 0,
+      deleted: 0,
+      error: errDelete.message,
+    };
   }
 
-  // Remove órfãs só quando a planilha cobre o DB com confiança (ou DB estava vazio)
-  const confidentFullSync =
-    existingCount === 0 ||
-    (tarefas.length >= existingCount && tarefas.length >= Math.ceil(existingCount * 0.85));
-
-  if (confidentFullSync) {
-    const orphanIds = existing
-      .filter(
-        (e: { id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
-          !sheetKeys.has(taskSyncKey(e.o_que, e.prazo, e.etapa))
-      )
-      .map((e: { id: string }) => e.id);
-    if (orphanIds.length > 0) {
-      const { error: errDel } = await supabase.from("mm_tarefas").delete().in("id", orphanIds);
-      if (!errDel) deleted = orphanIds.length;
-    }
+  const { error: errInsert } = await supabase.from("mm_tarefas").insert(payloads);
+  if (errInsert) {
+    return {
+      ok: false,
+      count: 0,
+      inserted: 0,
+      updated: 0,
+      deleted: existingCount,
+      error: errInsert.message,
+    };
   }
 
-  return { ok: true, count: inserted + updated, inserted, updated, deleted };
+  return {
+    ok: true,
+    count: payloads.length,
+    inserted: payloads.length,
+    updated: 0,
+    deleted: existingCount,
+  };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -470,12 +459,11 @@ export async function importarPlanilha(
   for (const cliente of abasComCliente) {
     let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
 
-    if (tarefas.length === 0) {
-      try {
-        tarefas = await fetchAndParseTarefasAba(cliente.sheets_aba);
-      } catch {
-        // mantém vazio
-      }
+    try {
+      const refetched = await fetchAndParseTarefasAba(cliente.sheets_aba);
+      if (refetched.length > tarefas.length) tarefas = refetched;
+    } catch {
+      // mantém lote
     }
 
     if (tarefas.length === 0) {

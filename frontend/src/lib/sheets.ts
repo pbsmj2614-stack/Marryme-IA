@@ -428,14 +428,33 @@ function parseWithLayout(values: string[][], layout: FixedLayoutCols): TarefaShe
     .filter((t) => isValidTaskRow(t.o_que));
 }
 
+function layoutFromHeaderMap(
+  headerRowIdx: number,
+  hMap: Record<string, number>
+): FixedLayoutCols {
+  const oQue = hMap.o_que!;
+  return {
+    dataStartRow: headerRowIdx + 1,
+    checkCol: hMap.check ?? hMap.check_feito ?? null,
+    etapaCol: hMap.etapa ?? Math.max(0, oQue - 1),
+    oQueCol: oQue,
+    tipoCol: hMap.tipo ?? oQue + 1,
+    quemCol: hMap.quem ?? oQue + 2,
+    prazoCol: hMap.prazo ?? oQue + 3,
+    statusCol: hMap.status ?? oQue + 4,
+    obsCol: hMap.observacoes ?? oQue + 5,
+  };
+}
+
 function scoreParseResult(tasks: TarefaSheet[]): number {
   if (tasks.length === 0) return 0;
-  let score = tasks.length * 100;
+  if (parseLooksSuspicious(tasks)) return Math.max(1, tasks.length);
+  let score = tasks.length * 1000;
   for (const t of tasks) {
     const o = t.o_que.toLowerCase();
     if (TIPO_COLUMN_VALUES.has(o)) score -= 500;
     if (HEADER_LABEL_KEYS.has(normalizeKey(t.o_que))) score -= 500;
-    if (o.length < 4) score -= 80;
+    if (o.length >= 8) score += 5;
   }
   return score;
 }
@@ -710,32 +729,45 @@ export function findTaskRowByOQue(
 }
 
 /**
- * Parseia um array 2D de valores (resposta da Sheets API) para TarefaSheet[].
- * Conservador: detecta layout pelo cabeçalho; fallback fixo só se retornar zero.
+ * Parseia tarefas da aba — prioriza colunas mapeadas pelo cabeçalho (Check / O que?).
  */
 export function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
   const normalized = normalizeSheetGrid(values);
   const aligned = normalizeSheetGrid(alignTaskSheetRows(normalized));
-  const { headerRowIdx } = findTaskHeaderRow(aligned);
+  const { headerRowIdx, hMap } = findTaskHeaderRow(aligned);
+
+  // Cabeçalho com "O que?" → usa colunas exatas (layout padrão B:I / A:I)
+  if (headerRowIdx >= 0 && hMap.o_que !== undefined) {
+    const fromHeader = parseWithLayout(aligned, layoutFromHeaderMap(headerRowIdx, hMap));
+    if (fromHeader.length > 0 && !parseLooksSuspicious(fromHeader)) {
+      return fromHeader;
+    }
+  }
 
   const candidates: TarefaSheet[][] = [
     parseWithLayout(aligned, layoutFromDetected(aligned)),
   ];
 
-  if (candidates[0].length === 0) {
-    for (const fixed of fixedLayoutCandidates(aligned)) {
-      candidates.push(parseWithLayout(aligned, fixed));
-      if (headerRowIdx >= 0) {
-        candidates.push(
-          parseWithLayout(withLeadingPad(aligned, 1, headerRowIdx), fixed)
-        );
-      }
+  const grids = [aligned];
+  if (headerRowIdx >= 0) {
+    grids.push(withLeadingPad(aligned, 1, headerRowIdx));
+    if (hMap.o_que !== undefined) {
+      candidates.push(
+        parseWithLayout(grids[1], layoutFromHeaderMap(headerRowIdx, hMap))
+      );
+    }
+  }
+
+  for (const grid of grids) {
+    for (const fixed of fixedLayoutCandidates(grid)) {
+      candidates.push(parseWithLayout(grid, fixed));
     }
   }
 
   const best = pickBestParse(candidates);
+  if (parseLooksSuspicious(best)) return [];
   return best;
 }
 
@@ -790,12 +822,12 @@ export async function fetchTodasTarefasBatch(
       result[lote[j]] = batchParsed;
     }
 
-    // Fallback individual só quando batch retornou zero
+    // Usa o maior parse entre batch B:I e leitura individual B:I + A:I
     for (const aba of lote) {
-      if ((result[aba]?.length ?? 0) > 0) continue;
+      const batchCount = result[aba]?.length ?? 0;
       try {
-        const fallback = await fetchAndParseTarefasAba(aba);
-        if (fallback.length > 0) result[aba] = fallback;
+        const fullParsed = await fetchAndParseTarefasAba(aba);
+        if (fullParsed.length > batchCount) result[aba] = fullParsed;
       } catch {
         if (!result[aba]) result[aba] = [];
       }
