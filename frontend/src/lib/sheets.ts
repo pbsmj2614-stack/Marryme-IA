@@ -611,7 +611,14 @@ export function alignTaskSheetRows(values: string[][]): string[][] {
     if (i <= headerRowIdx) return row;
     const first = readCell(row, 0);
     if (first === "") return row;
-    if (parseCheckbox(first)) return [...Array(checkCol).fill(""), ...row];
+
+    const firstLower = first.toLowerCase();
+    const looksLikeCheckCol =
+      parseCheckbox(first) || firstLower === "false" || firstLower === "falso";
+
+    // Check em B (col A vazia omitida): TRUE/FALSE na col 0 → desloca tudo
+    if (looksLikeCheckCol) return [...Array(checkCol).fill(""), ...row];
+
     if (row.length + checkCol <= header.length) return [...Array(checkCol).fill(""), ...row];
     return row;
   });

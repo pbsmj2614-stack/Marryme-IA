@@ -223,7 +223,7 @@ export async function syncTarefasClienteFromSheet(
   const { data: existingRows, error: errLoad } = await supabase
     .from("mm_tarefas")
     .select("id, o_que, prazo, etapa, check_feito")
-    .in("cliente_id", idsRelacionados);
+    .eq("cliente_id", taskClienteId);
 
   if (errLoad) {
     return {
@@ -265,33 +265,49 @@ export async function syncTarefasClienteFromSheet(
     };
   });
 
-  // Planilha é fonte de verdade no sync — substitui tarefas do cliente (limpa lixo de syncs antigos)
-  const { error: errDelete } = await supabase
+  // Insert-first: nunca apaga antes de gravar — evita zerar cliente se insert falhar
+  const { data: insertedRows, error: errInsert } = await supabase
     .from("mm_tarefas")
-    .delete()
-    .in("cliente_id", idsRelacionados);
+    .insert(payloads)
+    .select("id");
 
-  if (errDelete) {
-    return {
-      ok: false,
-      count: 0,
-      inserted: 0,
-      updated: 0,
-      deleted: 0,
-      error: errDelete.message,
-    };
-  }
-
-  const { error: errInsert } = await supabase.from("mm_tarefas").insert(payloads);
   if (errInsert) {
     return {
       ok: false,
       count: 0,
       inserted: 0,
       updated: 0,
-      deleted: existingCount,
+      deleted: 0,
       error: errInsert.message,
     };
+  }
+
+  const newIds = (insertedRows ?? []).map((r: { id: string }) => r.id);
+  let deleted = 0;
+
+  if (existingCount > 0 && newIds.length > 0) {
+    const idsToRemove = existing
+      .map((r: { id: string }) => r.id)
+      .filter((id: string) => !newIds.includes(id));
+
+    if (idsToRemove.length > 0) {
+      const { error: errDelete } = await supabase
+        .from("mm_tarefas")
+        .delete()
+        .in("id", idsToRemove);
+
+      if (errDelete) {
+        return {
+          ok: false,
+          count: newIds.length,
+          inserted: newIds.length,
+          updated: 0,
+          deleted: 0,
+          error: `Tarefas inseridas mas falha ao substituir antigas: ${errDelete.message}`,
+        };
+      }
+      deleted = idsToRemove.length;
+    }
   }
 
   return {
@@ -299,7 +315,7 @@ export async function syncTarefasClienteFromSheet(
     count: payloads.length,
     inserted: payloads.length,
     updated: 0,
-    deleted: existingCount,
+    deleted,
   };
 }
 

@@ -408,7 +408,7 @@ export async function POST() {
 
             if (updates.length > 0) await sheetsBatchUpdate(token, updates);
           } catch {
-            abaFinal = novaAba;
+            abaFinal = null;
           }
         } else {
           abaFinal = null;
