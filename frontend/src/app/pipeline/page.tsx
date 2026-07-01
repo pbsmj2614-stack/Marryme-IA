@@ -4,7 +4,6 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Header from "@/components/Header";
-import { importarPlanilha } from "@/lib/importSheets";
 import { getStatusFromScore, getScoreColor } from "@/lib/healthScore";
 import {
   isPrazoVencido,
@@ -20,6 +19,7 @@ import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useRole } from "@/hooks/useRole";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
+import type { ImportResult } from "@/lib/importSheets";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
 import { Loader2, RefreshCw, X, Plus, List, LayoutGrid, GripVertical } from "lucide-react";
@@ -707,6 +707,7 @@ export default function PipelinePage() {
   const loading = userLoading || dataLoading;
   const [syncing, setSyncing] = useState(false);
   const [syncingGaps, setSyncingGaps] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [cleaningGaps, setCleaningGaps] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "kanban">("list");
@@ -768,7 +769,10 @@ export default function PipelinePage() {
   async function handleSync() {
     setSyncing(true);
     try {
-      const result = await importarPlanilha();
+      const res = await fetch("/api/sheets/importar", { method: "POST" });
+      const result = (await res.json()) as ImportResult & { ok?: boolean; error?: string };
+      if (!res.ok || !result.ok) throw new Error(result.error ?? `Erro ${res.status}`);
+
       const wb = await fetch("/api/sheets/write-back-status", { method: "POST" }).catch(() => null);
 
       const parts: string[] = [`${result.clientes} clientes · ${result.tarefas} tarefas`];
@@ -799,7 +803,8 @@ export default function PipelinePage() {
       if (wbErro) parts.push(wbErro);
 
       const msg = parts.join(" · ");
-      const temProblema = result.erros.length > 0 || result.semAbas.length > 0 || !!wbErro;
+      const temProblema =
+        result.erros.length > 0 || result.semAbas.length > 0 || result.semTarefas.length > 0 || !!wbErro;
       if (temProblema) {
         toast.warning(msg, { duration: 12000 });
       } else {
@@ -846,6 +851,38 @@ export default function PipelinePage() {
       toast.error(err instanceof Error ? err.message : "Erro ao corrigir gaps");
     } finally {
       setSyncingGaps(false);
+    }
+  }
+
+  async function handleRepairPipeline() {
+    setRepairing(true);
+    try {
+      const res = await fetch("/api/admin/repair-pipeline", { method: "POST" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        reparados?: string[];
+        avisos?: string[];
+        erros?: string[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? `Erro ${res.status}`);
+
+      const parts: string[] = [];
+      if ((data.reparados ?? []).length > 0)
+        parts.push(`${data.reparados!.length} reparo(s): ${data.reparados!.slice(0, 5).join("; ")}`);
+      if ((data.avisos ?? []).length > 0) parts.push(`avisos: ${data.avisos!.join(" | ")}`);
+      if ((data.erros ?? []).length > 0) parts.push(`erros: ${data.erros!.join(" | ")}`);
+
+      if ((data.erros ?? []).length > 0) toast.warning(parts.join(" · "), { duration: 15000 });
+      else if ((data.reparados ?? []).length === 0)
+        toast.info("Nenhuma inconsistência encontrada para reparar.");
+      else toast.success(parts.join(" · "), { duration: 12000 });
+
+      await invalidatePipeline();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reparar pipeline");
+    } finally {
+      setRepairing(false);
     }
   }
 
@@ -1201,8 +1238,23 @@ export default function PipelinePage() {
               {role === "admin" && (
                 <>
                   <button
+                    onClick={handleRepairPipeline}
+                    disabled={repairing || syncing || syncingGaps || cleaningGaps}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
+                  >
+                    {repairing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Reparando...
+                      </>
+                    ) : (
+                      <>Reparar pipeline</>
+                    )}
+                  </button>
+
+                  <button
                     onClick={handleSyncGaps}
-                    disabled={syncingGaps || syncing || cleaningGaps}
+                    disabled={syncingGaps || syncing || cleaningGaps || repairing}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap shadow-sm"
                   >
                     {syncingGaps ? (
@@ -1222,7 +1274,7 @@ export default function PipelinePage() {
                       const id = window.prompt("Apagar a partir de qual ID? (ex: MM046)");
                       if (id) handleCleanGaps(id.trim().toUpperCase());
                     }}
-                    disabled={cleaningGaps || syncing || syncingGaps}
+                    disabled={cleaningGaps || syncing || syncingGaps || repairing}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-100 border border-red-300 text-sm text-red-700 hover:bg-red-200 transition disabled:opacity-50 whitespace-nowrap"
                   >
                     {cleaningGaps ? (

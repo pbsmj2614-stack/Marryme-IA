@@ -19,22 +19,26 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
+import {
+  appendCadastroRow,
+  buildCadastroRow,
+  CATEGORIA_LABELS,
+  colLetter,
+  dateBR,
+  detectCadastroLayout,
+  extractMmNum,
+  findCadastroRowIndex,
+  formatMmId,
+  nextMmId,
+  normalizeMmId,
+  slugifyAba,
+} from "@/lib/sheets-cadastro";
 
 const SHEET_ID =
   process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 const FASES_INATIVAS = new Set(["Pausado", "Churn"]);
-
-const CATEGORIA_LABELS: Record<string, string> = {
-  musico: "Músico / Banda",
-  fotografo: "Fotógrafo / Cinegrafista",
-  celebrante: "Celebrante / Cerimonialista",
-  dj: "DJ",
-  outro: "Outro",
-};
-
-// ─── Google Auth ──────────────────────────────────────────────────────────────
 
 function makeJWT(email: string, key: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
@@ -93,16 +97,6 @@ async function sheetsPost(token: string, path: string, body: unknown): Promise<u
   return res.json();
 }
 
-async function sheetsAppend(token: string, range: string, values: string[][]): Promise<void> {
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values }),
-  });
-  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
-}
-
 async function sheetsBatchUpdate(
   token: string,
   data: Array<{ range: string; values: string[][] }>
@@ -117,42 +111,12 @@ async function sheetsBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function dateBR(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}/${d.getFullYear()}`;
-}
-
-function slugify(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .trim()
-    .replace(/\s+/g, "_")
-    .substring(0, 35);
-}
-
-function colLetter(col: number): string {
-  let s = "";
-  let c = col + 1;
-  while (c > 0) {
-    const rem = (c - 1) % 26;
-    s = String.fromCharCode(65 + rem) + s;
-    c = Math.floor((c - 1) / 26);
-  }
-  return s;
+async function sheetsGetValues(token: string, path: string): Promise<{ values?: string[][] }> {
+  return (await sheetsGet(token, path)) as { values?: string[][] };
 }
 
 function cleanPhone(phone: string): string {
   return String(phone ?? "").replace(/\D/g, "");
-}
-
-function extractMMNum(id: string): number {
-  const m = String(id ?? "").match(/^MM(\d+)$/i);
-  return m ? parseInt(m[1], 10) : 0;
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -207,17 +171,24 @@ export async function POST() {
     // ── 3. Lê mm_clientes ─────────────────────────────────────────────────────
     const { data: mmRaw, error: errM } = await supabase
       .from("mm_clientes")
-      .select("id_cliente, nome_empresa");
+      .select("id_cliente, nome_empresa, sheets_aba");
 
     if (errM) throw new Error(`Erro ao buscar mm_clientes: ${errM.message}`);
 
-    const mmByIdSet = new Set((mmRaw ?? []).map((c) => String(c.id_cliente).toUpperCase()));
+    const mmByIdSet = new Set(
+      (mmRaw ?? []).map((c) => (normalizeMmId(String(c.id_cliente)) ?? String(c.id_cliente)).toUpperCase())
+    );
     const mmByNomeMap = new Map(
-      (mmRaw ?? []).map((c) => [String(c.nome_empresa).toLowerCase().trim(), String(c.id_cliente)])
+      (mmRaw ?? []).map((c) => [
+        String(c.nome_empresa).toLowerCase().trim(),
+        normalizeMmId(String(c.id_cliente)) ?? String(c.id_cliente),
+      ])
+    );
+    const mmRowByNome = new Map(
+      (mmRaw ?? []).map((c) => [String(c.nome_empresa).toLowerCase().trim(), c])
     );
 
-    // ── 4. Identifica prestadores sem mm_cliente ──────────────────────────────
-    const missing: Array<{
+    type WorkItem = {
       prestadorId: string;
       nome: string;
       categoria: string;
@@ -226,7 +197,10 @@ export async function POST() {
       email: string;
       dados: Record<string, string>;
       entrevistaId: string;
-    }> = [];
+      existingId?: string;
+    };
+
+    const work: WorkItem[] = [];
 
     for (const p of prestadores) {
       const entrevista = latestEntrevista.get(String(p.id));
@@ -235,27 +209,43 @@ export async function POST() {
 
       if (FASES_INATIVAS.has(faseProjeto)) continue;
 
-      const mmId = String(dados.mm_id ?? "").toUpperCase();
+      const mmIdRaw = String(dados.mm_id ?? "");
+      const mmId = (normalizeMmId(mmIdRaw) ?? mmIdRaw).toUpperCase();
       const nomeLower = String(p.nome_artistico ?? "")
         .toLowerCase()
         .trim();
 
-      const jaExiste = (mmId.length > 0 && mmByIdSet.has(mmId)) || mmByNomeMap.has(nomeLower);
-      if (!jaExiste) {
-        missing.push({
-          prestadorId: String(p.id),
-          nome: String(p.nome_artistico ?? "").trim(),
-          categoria: String(p.categoria ?? "outro"),
-          cidade: String(p.cidade_base ?? "").trim(),
-          whatsapp: cleanPhone(String(p.whatsapp ?? "")),
-          email: String(p.email ?? "").trim(),
-          dados,
-          entrevistaId: entrevista?.id ?? "",
-        });
+      const baseItem = {
+        prestadorId: String(p.id),
+        nome: String(p.nome_artistico ?? "").trim(),
+        categoria: String(p.categoria ?? "outro"),
+        cidade: String(p.cidade_base ?? "").trim(),
+        whatsapp: cleanPhone(String(p.whatsapp ?? "")),
+        email: String(p.email ?? "").trim(),
+        dados,
+        entrevistaId: entrevista?.id ?? "",
+      };
+
+      const existingById =
+        mmId.length > 0 && mmByIdSet.has(mmId)
+          ? mmId
+          : mmByNomeMap.get(nomeLower) ?? null;
+
+      if (existingById) {
+        const row = mmRowByNome.get(nomeLower);
+        if (row && !row.sheets_aba) {
+          work.push({
+            ...baseItem,
+            existingId: normalizeMmId(String(row.id_cliente)) ?? String(row.id_cliente),
+          });
+        }
+        continue;
       }
+
+      work.push(baseItem);
     }
 
-    if (missing.length === 0) {
+    if (work.length === 0) {
       return NextResponse.json({
         ok: true,
         created: [],
@@ -289,20 +279,14 @@ export async function POST() {
 
     const cadastroRows: string[][] = Array.isArray(cadastroData.values) ? cadastroData.values : [];
 
-    const allNums = [
-      ...cadastroRows
-        .flat()
-        .map(extractMMNum)
-        .filter((x) => x > 0),
-      ...Array.from(mmByIdSet)
-        .map(extractMMNum)
-        .filter((x) => x > 0),
-      0,
-    ];
+    let nextNum = extractMmNum(
+      nextMmId({
+        cadastroFlat: cadastroRows.flat(),
+        supabaseIds: (mmRaw ?? []).map((c) => String(c.id_cliente)),
+        tabTitles: abas.map((s) => s.properties.title),
+      })
+    );
 
-    let nextNum = Math.max(...allNums) + 1;
-
-    // ── 7. Cria entradas ──────────────────────────────────────────────────────
     const created: Array<{ id: string; nome: string; aba: string | null }> = [];
     const erros: Array<{ nome: string; erro: string }> = [];
 
@@ -310,38 +294,55 @@ export async function POST() {
     const hojeStr = dateBR(hoje);
     const d7 = new Date(hoje.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    for (const item of missing) {
+    const cadRowsForLookup = (
+      await sheetsGetValues(token, `/values/${encodeURIComponent(`${nomeAbaCadastro}!A1:P500`)}`)
+    ).values ?? [];
+
+    for (const item of work) {
       const stepName = item.nome;
       try {
-        const newId = `MM${String(nextNum).padStart(3, "0")}`;
-        nextNum++;
-
+        const newId = item.existingId ?? formatMmId(nextNum++);
         const segmento = CATEGORIA_LABELS[item.categoria] ?? item.categoria;
         const plano = String(item.dados.plano ?? "Essencial");
         const faseProjeto = String(item.dados.fase_projeto ?? "Onboarding");
         const responsavelMm = String(item.dados.responsavel_mm ?? "");
         const observacoes = String(item.dados.informacoes_adicionais ?? "");
-        const novaAba = `${newId}_${slugify(item.nome)}`;
+        const novaAba = `${newId}_${slugifyAba(item.nome)}`;
 
-        // 7a. Append no Cadastro_Clientes
-        await sheetsAppend(token, `${nomeAbaCadastro}!A:L`, [
-          [
-            newId,
-            item.nome,
-            segmento,
-            item.cidade,
-            item.whatsapp,
-            item.email,
-            hojeStr,
-            plano,
-            faseProjeto,
-            "Ativo",
-            responsavelMm,
-            observacoes,
-          ],
-        ]);
+        const cadastroLinha = buildCadastroRow({
+          id_cliente: newId,
+          nome_empresa: item.nome,
+          segmento,
+          cidade: item.cidade,
+          whatsapp: item.whatsapp,
+          email: item.email,
+          inicio_contrato: hojeStr,
+          plano,
+          fase_projeto: faseProjeto,
+          responsavel_mm: responsavelMm,
+          observacoes,
+        });
 
-        // 7b. Tenta criar aba individual (PlanilhaModelo) — falha silenciosa
+        if (findCadastroRowIndex(cadRowsForLookup, newId) >= 0) {
+          const layout = detectCadastroLayout(cadRowsForLookup);
+          const rowIdx = findCadastroRowIndex(cadRowsForLookup, newId);
+          const tabQuoted = `'${nomeAbaCadastro.replace(/'/g, "''")}'`;
+          await sheetsBatchUpdate(token, [
+            {
+              range: `${tabQuoted}!${layout.startCol}${rowIdx + 1}`,
+              values: [cadastroLinha],
+            },
+          ]);
+        } else {
+          await appendCadastroRow({
+            token,
+            sheetId: SHEET_ID,
+            cadastroTabTitle: nomeAbaCadastro,
+            row: cadastroLinha,
+            sheetsBatchUpdate,
+            sheetsGet: sheetsGetValues,
+          });
+        }
         let abaFinal: string | null = novaAba;
         if (modeloSheet) {
           try {
@@ -377,7 +378,6 @@ export async function POST() {
               }
             }
 
-            // Preenche prazo em linhas com tarefa mas sem prazo
             let hRowIdx = -1,
               prazoCol = -1,
               oQueCol = -1;
@@ -408,16 +408,13 @@ export async function POST() {
 
             if (updates.length > 0) await sheetsBatchUpdate(token, updates);
           } catch {
-            // Aba pode já existir ou PlanilhaModelo sem permissão — não bloqueia
             abaFinal = novaAba;
           }
         } else {
           abaFinal = null;
         }
 
-        // 7c. Insere no mm_clientes
-        const { error: dbErr } = await supabase.from("mm_clientes").insert({
-          id_cliente: newId,
+        const dbPayload = {
           nome_empresa: item.nome,
           segmento: segmento || null,
           cidade: item.cidade || null,
@@ -429,11 +426,24 @@ export async function POST() {
           responsavel_mm: responsavelMm || null,
           observacoes: observacoes || null,
           inicio_contrato: hojeStr.split("/").reverse().join("-"),
-          valor_contrato: 0,
           sheets_aba: abaFinal,
           atualizado_em: new Date().toISOString(),
-        });
-        if (dbErr) throw new Error(`Supabase insert: ${dbErr.message}`);
+        };
+
+        if (item.existingId) {
+          const { error: dbErr } = await supabase
+            .from("mm_clientes")
+            .update(dbPayload)
+            .eq("id_cliente", newId);
+          if (dbErr) throw new Error(`Supabase update: ${dbErr.message}`);
+        } else {
+          const { error: dbErr } = await supabase.from("mm_clientes").insert({
+            id_cliente: newId,
+            valor_contrato: 0,
+            ...dbPayload,
+          });
+          if (dbErr) throw new Error(`Supabase insert: ${dbErr.message}`);
+        }
 
         // 7d. Atualiza mm_id na entrevista
         if (item.entrevistaId) {
@@ -452,7 +462,7 @@ export async function POST() {
     return NextResponse.json({
       ok: true,
       created,
-      skipped: prestadores.length - missing.length,
+      skipped: prestadores.length - work.length,
       erros,
     });
   } catch (err) {
@@ -472,7 +482,7 @@ export async function DELETE(req: NextRequest) {
     if (!user) return UNAUTHORIZED();
 
     const fromParam = new URL(req.url).searchParams.get("from") ?? "";
-    const fromNum = extractMMNum(fromParam);
+    const fromNum = extractMmNum(fromParam);
     if (fromNum <= 0) {
       return NextResponse.json(
         { error: 'Parâmetro "from" inválido. Use ex: ?from=MM046' },
@@ -491,7 +501,7 @@ export async function DELETE(req: NextRequest) {
 
     if (errF) throw new Error(`Erro ao buscar mm_clientes: ${errF.message}`);
 
-    const targets = (allMM ?? []).filter((c) => extractMMNum(String(c.id_cliente)) >= fromNum);
+    const targets = (allMM ?? []).filter((c) => extractMmNum(String(c.id_cliente)) >= fromNum);
 
     if (targets.length === 0) {
       return NextResponse.json({
@@ -501,7 +511,11 @@ export async function DELETE(req: NextRequest) {
       });
     }
 
-    const targetIds = new Set(targets.map((c) => String(c.id_cliente).toUpperCase()));
+    const targetIds = new Set(
+      targets.map(
+        (c) => (normalizeMmId(String(c.id_cliente)) ?? String(c.id_cliente)).toUpperCase()
+      )
+    );
     const targetAbas = new Set(targets.map((c) => String(c.sheets_aba ?? "")).filter(Boolean));
 
     // 2. Google Sheets: remove linhas e abas
@@ -529,12 +543,13 @@ export async function DELETE(req: NextRequest) {
         `/values/${encodeURIComponent(nomeAbaCadastro)}`
       )) as { values?: string[][] };
       const rows: string[][] = Array.isArray(cadastroData.values) ? cadastroData.values : [];
+      const layout = detectCadastroLayout(rows);
 
-      // Índices das linhas de dados que correspondem a um dos IDs alvo (pula cabeçalho i=0)
       const rowsToDelete: number[] = [];
-      for (let i = 1; i < rows.length; i++) {
-        const cellId = String(rows[i]?.[0] ?? "").toUpperCase();
-        if (targetIds.has(cellId)) rowsToDelete.push(i);
+      for (let i = 0; i < rows.length; i++) {
+        const rawId = rows[i]?.[layout.idColIdx] ?? "";
+        const cellId = (normalizeMmId(String(rawId).trim()) ?? String(rawId).trim()).toUpperCase();
+        if (cellId && targetIds.has(cellId)) rowsToDelete.push(i);
       }
 
       // Ordem decrescente para índices não se deslocarem

@@ -1,9 +1,8 @@
 /**
  * sheets.ts — Google Sheets API v4 (REST + API Key)
- *
- * A planilha deve ser pública ("qualquer pessoa com o link pode ver")
- * OU a API Key deve ter permissão de leitura via domínio autorizado.
  */
+
+import { normalizeMmId } from "@/lib/sheets-cadastro";
 
 const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const SHEET_ID =
@@ -181,20 +180,23 @@ export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
 
   const rows = values
     .slice(dataStartRow)
-    .map((r) => ({
-      id_cliente: col(r, 0, "id_cliente", "id", "codigo", "codigo_cliente"),
-      nome_empresa: col(r, 1, "nome_empresa", "nome", "empresa"),
-      segmento: col(r, 2, "segmento"),
-      cidade: col(r, 3, "cidade"),
-      whatsapp: col(r, 4, "whatsapp", "telefone", "celular"),
-      email: col(r, 5, "email", "e_mail"),
-      inicio_contrato: col(r, 6, "inicio_contrato", "inicio", "data_inicio"),
-      plano: col(r, 7, "plano"),
-      fase_projeto: col(r, 9, "fase_projeto", "fase", "fase_do_projeto"), // col K (skip J=Valor)
-      status: col(r, 10, "status"), // col L
-      responsavel_mm: col(r, 13, "responsavel_mm", "responsavel"), // col O (skip M,N)
-      observacoes: col(r, 14, "observacoes", "observacao", "obs"), // col P
-    }))
+    .map((r) => {
+      const rawId = col(r, 0, "id_cliente", "id", "codigo", "codigo_cliente");
+      return {
+        id_cliente: normalizeMmId(rawId) ?? rawId,
+        nome_empresa: col(r, 1, "nome_empresa", "nome", "empresa"),
+        segmento: col(r, 2, "segmento"),
+        cidade: col(r, 3, "cidade"),
+        whatsapp: col(r, 4, "whatsapp", "telefone", "celular"),
+        email: col(r, 5, "email", "e_mail"),
+        inicio_contrato: col(r, 6, "inicio_contrato", "inicio", "data_inicio"),
+        plano: col(r, 7, "plano"),
+        fase_projeto: col(r, 9, "fase_projeto", "fase", "fase_do_projeto"),
+        status: col(r, 10, "status"),
+        responsavel_mm: col(r, 13, "responsavel_mm", "responsavel"),
+        observacoes: col(r, 14, "observacoes", "observacao", "obs"),
+      };
+    })
     .filter((c) => /^MM\d+/i.test(c.id_cliente));
 
   if (rows.length === 0) {

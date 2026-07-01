@@ -2,19 +2,13 @@
  * POST /api/sheets/novo-cliente
  *
  * Cadastra um novo cliente:
- *  1. Determina o próximo ID sequencial (MM001, MM002…)
+ *  1. Determina o próximo ID sequencial (MM001, MM002…) ou reutiliza ID incompleto
  *  2. Duplica a aba "PlanilhaModelo" no Sheets
  *  3. Renomeia para "MMXXX_NomeLimpo"
  *  4. Substitui "contratante" no título da aba pelo nome do cliente
  *  5. Preenche prazo = hoje + 7 dias em linhas com tarefa mas sem prazo
  *  6. Adiciona linha ao Cadastro_Clientes
  *  7. Insere o cliente no Supabase (mm_clientes)
- *
- * Requer env:
- *   GOOGLE_SERVICE_ACCOUNT_JSON   (conteúdo do JSON da Service Account)
- *   NEXT_PUBLIC_SHEETS_ID         (ID da planilha)
- *   SUPABASE_URL                  (ou NEXT_PUBLIC_SUPABASE_URL)
- *   SUPABASE_SERVICE_ROLE_KEY
  */
 
 export const runtime = "nodejs";
@@ -24,12 +18,21 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { novoClienteSchema } from "@/lib/schemas";
+import {
+  appendCadastroRow,
+  buildCadastroRow,
+  colLetter,
+  dateBR,
+  detectCadastroLayout,
+  findCadastroRowIndex,
+  nextMmId,
+  normalizeMmId,
+  slugifyAba,
+} from "@/lib/sheets-cadastro";
 
 const SHEET_ID =
   process.env.NEXT_PUBLIC_SHEETS_ID ?? "1o-r_3RvG7FokLgIjJXWbjn5E9EeiyMb4WZQlBKIABDY";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
-
-// ─── Google Service Account Auth ──────────────────────────────────────────────
 
 function makeJWT(email: string, key: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
@@ -43,7 +46,6 @@ function makeJWT(email: string, key: string): string {
       exp: now + 3600,
     })
   ).toString("base64url");
-
   const msg = `${header}.${payload}`;
   const sign = createSign("RSA-SHA256");
   sign.update(msg);
@@ -56,7 +58,6 @@ async function googleToken(): Promise<string> {
     throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON não configurado nas variáveis de ambiente.");
   const sa = JSON.parse(raw) as { client_email: string; private_key: string };
   const jwt = makeJWT(sa.client_email, sa.private_key);
-
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -70,8 +71,6 @@ async function googleToken(): Promise<string> {
     throw new Error(`Google Auth falhou: ${data.error_description ?? JSON.stringify(data)}`);
   return data.access_token;
 }
-
-// ─── Sheets helpers ────────────────────────────────────────────────────────────
 
 async function sGet(token: string, path: string): Promise<unknown> {
   const res = await fetch(`${BASE}/${SHEET_ID}${path}`, {
@@ -105,46 +104,11 @@ async function sBatchUpdate(
   if (!res.ok) throw new Error(`Sheets batchUpdate: ${res.status} — ${await res.text()}`);
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function dateBR(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
+async function sheetsGetValues(token: string, path: string): Promise<{ values?: string[][] }> {
+  return (await sGet(token, path)) as { values?: string[][] };
 }
-
-function colLetter(col: number): string {
-  let s = "";
-  let c = col + 1;
-  while (c > 0) {
-    const rem = (c - 1) % 26;
-    s = String.fromCharCode(65 + rem) + s;
-    c = Math.floor((c - 1) / 26);
-  }
-  return s;
-}
-
-/** Remove acentos, caracteres especiais e espaços (→ _) para nome de aba. */
-function slugify(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .trim()
-    .replace(/\s+/g, "_")
-    .substring(0, 35);
-}
-
-/** Valida e normaliza número de telefone (remove tudo que não for dígito). */
-function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
-
-// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  console.log("[novo-cliente] POST iniciado");
   try {
     const user = await getAuthUser();
     if (!user) return UNAUTHORIZED();
@@ -167,12 +131,10 @@ export async function POST(req: NextRequest) {
       observacoes,
     } = parsed.data;
 
-    // ── 0. Verificar duplicata no banco ANTES de fazer qualquer coisa ──
-    // Busca exata (sem wildcards) para evitar falso positivo de entradas parciais.
-    // Se a entrada existente não tem sheets_aba, o pipeline estava incompleto — prossegue.
     const supabaseUrlCheck = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKeyCheck = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    let idClienteExistente: string | null = null; // preenchido quando será UPDATE em vez de INSERT
+    let idClienteExistente: string | null = null;
+
     if (supabaseUrlCheck && supabaseKeyCheck) {
       const sbCheck = createClient(supabaseUrlCheck, supabaseKeyCheck);
       const nomeNorm = nome_empresa.trim();
@@ -185,7 +147,6 @@ export async function POST(req: NextRequest) {
 
       if (existente) {
         if (existente.sheets_aba) {
-          // Pipeline completa — duplicata real, bloqueia
           return NextResponse.json(
             {
               error: `Cliente "${existente.nome_empresa}" (${existente.id_cliente}) já está cadastrado. Use a sincronização para atualizar ou edite diretamente no app.`,
@@ -195,23 +156,16 @@ export async function POST(req: NextRequest) {
             { status: 409 }
           );
         }
-        // Pipeline incompleta (sem sheets_aba) — prossegue para completar
-        idClienteExistente = existente.id_cliente;
-        console.log(
-          "[novo-cliente] entrada existente sem aba, completando pipeline:",
-          existente.id_cliente
-        );
+        idClienteExistente = normalizeMmId(existente.id_cliente) ?? existente.id_cliente;
       }
     }
 
     const token = await googleToken();
 
-    // ── 1. Metadados da planilha ──
     type SheetMeta = { properties: { sheetId: number; title: string; index: number } };
     const meta = (await sGet(token, "?fields=sheets.properties")) as { sheets: SheetMeta[] };
     const abas = meta.sheets ?? [];
 
-    // ── 2. Encontrar PlanilhaModelo ──
     const modeloSheet = abas.find((s) =>
       /planilha.?modelo|^modelo$/i.test(s.properties.title.trim())
     );
@@ -222,7 +176,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 3. Encontrar Cadastro_Clientes ──
     const cadastroSheet = abas.find((s) =>
       /cadastro.?clientes|^clientes$|^cadastro$/i.test(s.properties.title.trim())
     );
@@ -233,55 +186,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 4. Determinar próximo ID ──
     const cadastroData = (await sGet(
       token,
       `/values/${encodeURIComponent(cadastroSheet.properties.title)}`
     )) as { values?: string[][] };
     const cadastroRows: string[][] = cadastroData.values ?? [];
 
-    const sheetNums = cadastroRows
-      .flat()
-      .map((c) => {
-        const m = String(c ?? "").match(/^MM(\d+)$/i);
-        return m ? parseInt(m[1], 10) : NaN;
-      })
-      .filter((n) => !isNaN(n));
-
-    // Também verifica o max ID no Supabase (fonte de verdade — pode estar à frente da planilha)
     const supabaseUrl2 = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey2 = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    let supabaseNums: number[] = [];
+    let supabaseIds: string[] = [];
     if (supabaseUrl2 && supabaseKey2) {
       const sbId = createClient(supabaseUrl2, supabaseKey2);
       const { data: idsData } = await sbId.from("mm_clientes").select("id_cliente");
-      supabaseNums = (idsData ?? [])
-        .map((r: { id_cliente: string }) => {
-          const m = r.id_cliente.match(/^MM(\d+)$/i);
-          return m ? parseInt(m[1], 10) : NaN;
-        })
-        .filter((n: number) => !isNaN(n));
+      supabaseIds = (idsData ?? []).map((r: { id_cliente: string }) => r.id_cliente);
     }
 
-    // Inclui IDs das abas existentes — previne colisão quando cadastro parcial
-    // criou a aba mas não registrou no Supabase/Cadastro_Clientes
-    const tabaNums = abas
-      .map((s) => {
-        const m = s.properties.title.match(/^MM(\d+)/i);
-        return m ? parseInt(m[1], 10) : NaN;
-      })
-      .filter((n) => !isNaN(n));
+    const newId =
+      idClienteExistente ??
+      nextMmId({
+        cadastroFlat: cadastroRows.flat(),
+        supabaseIds,
+        tabTitles: abas.map((s) => s.properties.title),
+      });
 
-    const allNums = [...sheetNums, ...supabaseNums, ...tabaNums];
-    const nextNum = allNums.length > 0 ? Math.max(...allNums) + 1 : 1;
-    const newId = `MM${String(nextNum).padStart(3, "0")}`;
-
-    // ── 5. Nome da nova aba ──
     const nomeTrimmed = nome_empresa.trim();
-    const novaAba = `${newId}_${slugify(nomeTrimmed)}`;
+    const novaAba = `${newId}_${slugifyAba(nomeTrimmed)}`;
 
-    // ── 6. Duplicar PlanilhaModelo ──
-    // Usa max(index) + 1 para inserir no final — mais robusto que abas.length
     const maxTabIndex = abas.reduce((m, s) => Math.max(m, s.properties.index), 0);
     await sPost(token, ":batchUpdate", {
       requests: [
@@ -295,13 +225,11 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // ── 7. Ler conteúdo da nova aba ──
     const novaData = (await sGet(token, `/values/${encodeURIComponent(novaAba)}`)) as {
       values?: string[][];
     };
     const novaRows: string[][] = novaData.values ?? [];
 
-    // ── 8. Substituir "contratante" no título ──
     const tituloUpdates: Array<{ range: string; values: string[][] }> = [];
     for (let r = 0; r < Math.min(novaRows.length, 3); r++) {
       for (let c = 0; c < novaRows[r].length; c++) {
@@ -316,13 +244,11 @@ export async function POST(req: NextRequest) {
     }
     if (tituloUpdates.length > 0) await sBatchUpdate(token, tituloUpdates);
 
-    // ── 9. Preencher prazo = hoje + 7 dias em linhas com tarefa sem prazo ──
     const hoje = new Date();
     const d7 = new Date(hoje);
     d7.setDate(d7.getDate() + 7);
     const prazoD7 = dateBR(d7);
 
-    // Localiza cabeçalho (procura colunas prazo e o_que)
     let hRowIdx = -1,
       prazoCol = -1,
       oQueCol = -1;
@@ -354,55 +280,48 @@ export async function POST(req: NextRequest) {
     }
     if (prazoUpdates.length > 0) await sBatchUpdate(token, prazoUpdates);
 
-    // ── 10. Adicionar linha no Cadastro_Clientes ──
     const hojeStr = dateBR(hoje);
-    // Ordem real da aba cadastro_clientes (B até P):
-    // B=ID Cliente, C=Nome/Empresa, D=Segmento, E=Cidade, F=WhatsApp, G=E-mail,
-    // H=Início Contrato, I=Plano, J=Valor, K=Fase do Projeto, L=Status,
-    // M=Último Check-in, N=URL Planilha de Controle, O=Responsável MM, P=Observações
-    const novaLinha = [
-      newId, // B: ID Cliente
-      nomeTrimmed, // C: Nome / Empresa
-      segmento?.trim() ?? "", // D: Segmento
-      cidade?.trim() ?? "", // E: Cidade
-      normalizePhone(whatsapp ?? ""), // F: WhatsApp
-      email?.trim() ?? "", // G: E-mail
-      hojeStr, // H: Início Contrato
-      plano?.trim() ?? "", // I: Plano
-      "", // J: Valor (não coletado no form)
-      fase_projeto?.trim() ?? "Onboarding", // K: Fase do Projeto
-      "Ativo", // L: Status
-      "", // M: Último Check-in
-      "", // N: URL Planilha de Controle
-      responsavel_mm?.trim() ?? "", // O: Responsável MM
-      observacoes?.trim() ?? "", // P: Observações
-    ];
+    const novaLinha = buildCadastroRow({
+      id_cliente: newId,
+      nome_empresa: nomeTrimmed,
+      segmento,
+      cidade,
+      whatsapp,
+      email,
+      inicio_contrato: hojeStr,
+      plano,
+      fase_projeto,
+      responsavel_mm,
+      observacoes,
+    });
 
-    // Lê A:P para detectar MM IDs em qualquer coluna (a planilha pode ter layout variável)
-    const cadRowsData = (await sGet(
+    const cadRowsData = await sheetsGetValues(
       token,
       `/values/${encodeURIComponent(cadastroSheet.properties.title + "!A1:P500")}`
-    )) as { values?: string[][] };
+    );
     const cadRows: string[][] = cadRowsData.values ?? [];
+    const existingRowIdx = findCadastroRowIndex(cadRows, newId);
 
-    let lastMMRowIdx = -1;
-    let idColIdx = 1; // coluna onde estão os MM IDs (padrão: B — layout da cadastro_clientes)
-    for (let i = 0; i < cadRows.length; i++) {
-      const col = cadRows[i]?.findIndex((c) => /^MM\d+/i.test((c ?? "").trim())) ?? -1;
-      if (col >= 0) {
-        lastMMRowIdx = i;
-        idColIdx = col;
-      }
+    if (existingRowIdx >= 0) {
+      const layout = detectCadastroLayout(cadRows);
+      const tabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
+      await sBatchUpdate(token, [
+        {
+          range: `${tabQuoted}!${layout.startCol}${existingRowIdx + 1}`,
+          values: [novaLinha],
+        },
+      ]);
+    } else {
+      await appendCadastroRow({
+        token,
+        sheetId: SHEET_ID,
+        cadastroTabTitle: cadastroSheet.properties.title,
+        row: novaLinha,
+        sheetsBatchUpdate: sBatchUpdate,
+        sheetsGet: sheetsGetValues,
+      });
     }
-    const insertRow = Math.max(2, lastMMRowIdx + 2); // i+1 = linha real, +1 = próxima
-    const startCol = colLetter(idColIdx); // ex: coluna B → "B"
 
-    const tabQuoted = `'${cadastroSheet.properties.title.replace(/'/g, "''")}'`;
-    await sBatchUpdate(token, [
-      { range: `${tabQuoted}!${startCol}${insertRow}`, values: [novaLinha] },
-    ]);
-
-    // ── 11. Inserir/atualizar no Supabase (obrigatório — lança se falhar) ──
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
     if (!supabaseUrl || !supabaseKey) throw new Error("Variáveis Supabase não configuradas.");
@@ -412,7 +331,7 @@ export async function POST(req: NextRequest) {
       nome_empresa: nomeTrimmed,
       segmento: segmento?.trim() || null,
       cidade: cidade?.trim() || null,
-      whatsapp: normalizePhone(whatsapp ?? "") || null,
+      whatsapp: String(whatsapp ?? "").replace(/\D/g, "") || null,
       email: email?.trim() || null,
       plano: plano?.trim() || null,
       status: "Ativo",
@@ -426,11 +345,10 @@ export async function POST(req: NextRequest) {
 
     let dbErr;
     if (idClienteExistente) {
-      // Entrada já existia sem aba — atualiza para completar o pipeline
       ({ error: dbErr } = await supabase
         .from("mm_clientes")
-        .update({ ...clientePayload, sheets_aba: novaAba })
-        .eq("id_cliente", idClienteExistente));
+        .update(clientePayload)
+        .eq("id_cliente", newId));
     } else {
       ({ error: dbErr } = await supabase.from("mm_clientes").insert({
         id_cliente: newId,

@@ -9,7 +9,12 @@
  */
 
 import { createClient } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch } from "@/lib/sheets";
+import {
+  getAbaIdPrefixFromTitle,
+  normalizeMmId,
+} from "@/lib/sheets-cadastro";
 
 export interface ImportResult {
   clientes: number;
@@ -89,20 +94,23 @@ function normalizeTaskStatus(s: string, checkFeito: boolean): string {
  *  3. Nome da empresa na aba   → fallback fuzzy            ✓
  */
 function encontrarAba(
-  abasDisponiveis: string[], // abas filtradas MM\d+
+  abasDisponiveis: string[],
   idCliente: string,
   nomeEmpresa: string,
-  todasAbas: string[] = [] // todas as abas (fallback para abas sem prefixo MM)
+  todasAbas: string[] = []
 ): string | null {
-  const idLower = idCliente.toLowerCase();
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const idLower = idNorm.toLowerCase();
   const nomeLower = nomeEmpresa.toLowerCase().replace(/\s+/g, "");
 
-  // 1ª: ID como prefixo (MM039_Nome ou MM039 Nome ou exatamente MM039)
   const porId = abasDisponiveis.find((a) => {
     const al = a.toLowerCase();
     return al.startsWith(idLower + "_") || al.startsWith(idLower + " ") || al === idLower;
   });
   if (porId) return porId;
+
+  const porPrefixo = abasDisponiveis.find((a) => getAbaIdPrefixFromTitle(a) === idNorm);
+  if (porPrefixo) return porPrefixo;
 
   // 2ª: nome da empresa nas abas MM
   const porNomeMM = abasDisponiveis.find((a) => {
@@ -119,10 +127,38 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
+function resolveSheetsAba(
+  idCliente: string,
+  abaEncontrada: string | null,
+  existente: string | null | undefined,
+  todasAbas: string[],
+  abasClientes: string[],
+  tarefasPorAba: Record<string, import("@/lib/sheets").TarefaSheet[]>
+): string | null {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const abaPorPrefixo = abasClientes.find((a) => getAbaIdPrefixFromTitle(a) === idNorm) ?? null;
+
+  const candidatos = [existente, abaEncontrada, abaPorPrefixo].filter(
+    (a): a is string => !!a && todasAbas.includes(a)
+  );
+  const unicos = Array.from(new Set(candidatos));
+
+  for (const aba of unicos) {
+    if ((tarefasPorAba[aba]?.length ?? 0) > 0) return aba;
+  }
+  return unicos[0] ?? null;
+}
+
+function clienteIdFromAba(sheetsAba: string, fallbackId: string): string {
+  return getAbaIdPrefixFromTitle(sheetsAba) ?? normalizeMmId(fallbackId) ?? fallbackId;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export async function importarPlanilha(): Promise<ImportResult> {
-  const supabase = createClient();
+export async function importarPlanilha(
+  supabaseClient?: SupabaseClient
+): Promise<ImportResult> {
+  const supabase = supabaseClient ?? createClient();
   const erros: string[] = [];
   const semAbas: string[] = [];
   const semTarefas: string[] = [];
@@ -196,19 +232,49 @@ export async function importarPlanilha(): Promise<ImportResult> {
     )
   );
 
-  // ── 3. Monta payload de clientes (merge — não apaga clientes/tarefas fora da planilha) ──
-  const resolveSheetsAba = (idCliente: string, abaEncontrada: string | null): string | null => {
-    const existente = existingSheetsAba.get(idCliente);
-    if (existente && todasAbas.includes(existente)) return existente;
-    return abaEncontrada;
-  };
-
-  // ── 4. Monta payload de clientes ──
-  const clientesPayload = clientesSheet.map((c) => {
-    const aba = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
-    if (!aba) semAbas.push(`${c.id_cliente} (${c.nome_empresa})`);
+  // ── 3. Monta payload preliminar de clientes ──
+  const clientesPreliminar = clientesSheet.map((c) => {
+    const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
+    const aba = encontrarAba(abasClientes, idNorm, c.nome_empresa, todasAbas);
     return {
-      id_cliente: c.id_cliente,
+      raw: c,
+      id_cliente: idNorm,
+      abaEncontrada: aba,
+    };
+  });
+
+  const abasParaFetch = Array.from(
+    new Set(
+      clientesPreliminar
+        .flatMap((c) => {
+          const existente = existingSheetsAba.get(c.id_cliente);
+          return [existente, c.abaEncontrada].filter(Boolean) as string[];
+        })
+        .filter((a) => todasAbas.includes(a))
+    )
+  );
+
+  let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
+  try {
+    todasTarefasLote = await fetchTodasTarefasBatch(abasParaFetch);
+  } catch (err) {
+    erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
+  }
+
+  // ── 4. Monta payload final com sheets_aba reconciliada ──
+  const clientesPayload = clientesPreliminar.map(({ raw: c, id_cliente, abaEncontrada }) => {
+    const existente = existingSheetsAba.get(id_cliente);
+    const sheets_aba = resolveSheetsAba(
+      id_cliente,
+      abaEncontrada,
+      existente,
+      todasAbas,
+      abasClientes,
+      todasTarefasLote
+    );
+    if (!sheets_aba) semAbas.push(`${id_cliente} (${c.nome_empresa})`);
+    return {
+      id_cliente,
       nome_empresa: c.nome_empresa,
       segmento: c.segmento || null,
       cidade: c.cidade || null,
@@ -219,13 +285,12 @@ export async function importarPlanilha(): Promise<ImportResult> {
       fase_projeto: c.fase_projeto || null,
       status: (() => {
         const sheetStatus = normalizeClientStatus(c.status);
-        const override = statusOverrides.get(c.id_cliente);
-        // Override manual (Pausado/Encerrado) prevalece quando a planilha diz "Ativo"
+        const override = statusOverrides.get(id_cliente);
         return override && sheetStatus === "Ativo" ? override : sheetStatus;
       })(),
       responsavel_mm: c.responsavel_mm || null,
       observacoes: c.observacoes || null,
-      sheets_aba: resolveSheetsAba(c.id_cliente, aba),
+      sheets_aba,
       atualizado_em: new Date().toISOString(),
     };
   });
@@ -270,13 +335,6 @@ export async function importarPlanilha(): Promise<ImportResult> {
       nome_empresa: c.nome_empresa,
     }));
 
-  let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
-  try {
-    todasTarefasLote = await fetchTodasTarefasBatch(abasComCliente.map((c) => c.sheets_aba));
-  } catch (err) {
-    erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
-  }
-
   // ── 7. Sincroniza tarefas por cliente (substitui só quando a planilha retornou linhas) ──
   for (const cliente of abasComCliente) {
     let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
@@ -297,10 +355,12 @@ export async function importarPlanilha(): Promise<ImportResult> {
       continue;
     }
 
+    const taskClienteId = clienteIdFromAba(cliente.sheets_aba, cliente.id_cliente);
+
     const { error: errDelete } = await supabase
       .from("mm_tarefas")
       .delete()
-      .eq("cliente_id", cliente.id_cliente);
+      .eq("cliente_id", taskClienteId);
 
     if (errDelete) {
       erros.push(
@@ -318,7 +378,7 @@ export async function importarPlanilha(): Promise<ImportResult> {
           ? "Atrasado"
           : statusNorm;
       return {
-        cliente_id: cliente.id_cliente,
+        cliente_id: taskClienteId,
         check_feito: t.check_feito,
         etapa: t.etapa || null,
         o_que: t.o_que,

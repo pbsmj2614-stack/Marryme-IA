@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import Header from "@/components/Header";
-import { importarPlanilha } from "@/lib/importSheets";
+import type { ImportResult } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
 import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome, buildClienteIdAliasMap, tarefaBelongsToCliente } from "@/lib/client-utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -448,13 +448,16 @@ export default function DailyPage() {
   async function handleSync() {
     setSyncing(true);
     try {
-      const r = await importarPlanilha();
+      const res = await fetch("/api/sheets/importar", { method: "POST" });
+      const r = (await res.json()) as ImportResult & { ok?: boolean; error?: string };
+      if (!res.ok || !r.ok) throw new Error(r.error ?? `Erro ${res.status}`);
+
       const parts: string[] = [`${r.clientes} clientes · ${r.tarefas} tarefas`];
       if (r.semAbas.length > 0) parts.push(`sem aba: ${r.semAbas.join(", ")}`);
       if (r.semTarefas.length > 0) parts.push(`sem tarefas: ${r.semTarefas.join(", ")}`);
       if (r.erros.length > 0) parts.push(`erros: ${r.erros.join(" | ")}`);
       const msg = parts.join(" · ");
-      if (r.erros.length > 0 || r.semAbas.length > 0) {
+      if (r.erros.length > 0 || r.semAbas.length > 0 || r.semTarefas.length > 0) {
         toast.warning(msg, { duration: 10000 });
       } else {
         toast.success(msg);

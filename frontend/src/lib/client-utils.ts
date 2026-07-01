@@ -1,5 +1,7 @@
 /** Utilitários compartilhados entre pipeline e daily (sem dependências de servidor). */
 
+import { normalizeMmId } from "@/lib/sheets-cadastro";
+
 export function isPrazoVencido(prazo: string | null, status: string): boolean {
   if (!prazo || status === "Finalizado") return false;
   return prazo < new Date().toISOString().split("T")[0];
@@ -104,7 +106,8 @@ export function buildClienteLookupMap<T extends { nome_empresa: string; id_clien
 /** Prefixo MM### extraído do nome da aba (ex: MM039_Nome → MM039). */
 export function getAbaIdPrefix(sheetsAba: string | null | undefined): string | null {
   if (!sheetsAba) return null;
-  return sheetsAba.match(/^(MM\d+)/i)?.[1]?.toUpperCase() ?? null;
+  const m = sheetsAba.match(/^(MM\d+)/i);
+  return m ? normalizeMmId(m[0]) : null;
 }
 
 /** IDs de cliente_id a consultar no Supabase (inclui prefixo da aba quando diferente). */
