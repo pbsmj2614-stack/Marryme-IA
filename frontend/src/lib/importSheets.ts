@@ -176,6 +176,28 @@ function abaPrefixOk(aba: string, idCliente: string): boolean {
   return getAbaIdPrefixFromTitle(aba) === idNorm;
 }
 
+function normalizeAbaMatchKey(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^mm[\s_-]*\d{1,4}[\s_-]*/i, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function abaMatchesClienteSemPrefixo(aba: string, nomeEmpresa: string): boolean {
+  if (getAbaIdPrefixFromTitle(aba)) return false;
+  const abaKey = normalizeAbaMatchKey(aba);
+  const nomeKey = normalizeAbaMatchKey(nomeEmpresa);
+  if (abaKey.length < 4 || nomeKey.length < 4) return false;
+  return abaKey.includes(nomeKey) || nomeKey.includes(abaKey);
+}
+
+function addCandidateAba(candidates: string[], aba: string | null | undefined): void {
+  if (!aba || candidates.includes(aba)) return;
+  candidates.push(aba);
+}
+
 /** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
 async function pickBestTarefasFromAbas(
   abas: string[],
@@ -460,7 +482,19 @@ export async function resyncTarefasCohort(
     const c = cohort[i];
     if (i > 0) await cohortFetchDelay(fromNum, c.id_cliente);
 
-    const abasTry = abasById.get(c.id_cliente) ?? [];
+    const abasTry = [...(abasById.get(c.id_cliente) ?? [])];
+    const savedAbaPrefix = getAbaIdPrefixFromTitle(c.sheets_aba);
+    if (
+      c.sheets_aba &&
+      todasAbas.includes(c.sheets_aba) &&
+      (!savedAbaPrefix || savedAbaPrefix === c.id_cliente)
+    ) {
+      addCandidateAba(abasTry, c.sheets_aba);
+    }
+    for (const aba of todasAbas) {
+      if (abaMatchesClienteSemPrefixo(aba, c.nome_empresa)) addCandidateAba(abasTry, aba);
+    }
+
     if (abasTry.length === 0) {
       semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
       continue;
