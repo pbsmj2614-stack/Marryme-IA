@@ -3,6 +3,7 @@
  */
 
 import { normalizeMmId } from "@/lib/sheets-cadastro";
+import { getGoogleSheetsAccessTokenOptional } from "@/lib/sheets-google-auth";
 
 const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const SHEET_ID =
@@ -70,12 +71,29 @@ function parseCheckbox(value: string): boolean {
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
+async function sheetsApiGet(suffix: string, retries = 5): Promise<Response> {
+  const token = await getGoogleSheetsAccessTokenOptional();
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const base = `${SHEETS_BASE}/${SHEET_ID}${suffix}`;
+    const url = token
+      ? base
+      : `${base}${suffix.includes("?") ? "&" : "?"}key=${apiKey()}`;
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(url, { cache: "no-store", headers });
+    if (res.status === 429 && attempt < retries - 1) {
+      await sleep(600 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Sheets API: falha após retries");
+}
+
 /**
  * Retorna nomes de todas as abas da planilha.
  */
 export async function fetchTodasAbas(): Promise<string[]> {
-  const url = `${SHEETS_BASE}/${SHEET_ID}?key=${apiKey()}&fields=sheets.properties.title`;
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await sheetsApiGet("?fields=sheets.properties.title");
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Sheets API error ${res.status}: ${body}`);
@@ -134,9 +152,7 @@ function buildHeaderMap(headerRow: string[]): Record<string, number> {
  */
 export async function fetchCadastroClientes(): Promise<ClienteSheet[]> {
   const nomeAba = await resolverAbaCadastro();
-  const range = encodeURIComponent(nomeAba);
-  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await sheetsApiGet(`/values/${encodeURIComponent(nomeAba)}`);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`Sheets API error (${nomeAba}) ${res.status}: ${body}`);
@@ -637,11 +653,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchSheetsUrl(url: string, retries = 4): Promise<Response> {
+async function fetchSheetsUrl(url: string, retries = 5): Promise<Response> {
   for (let attempt = 0; attempt < retries; attempt++) {
     const res = await fetch(url, { cache: "no-store" });
     if (res.status === 429 && attempt < retries - 1) {
-      await sleep(400 * (attempt + 1));
+      await sleep(600 * (attempt + 1));
       continue;
     }
     return res;
@@ -651,8 +667,7 @@ async function fetchSheetsUrl(url: string, retries = 4): Promise<Response> {
 
 async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<string[][]> {
   const range = encodeURIComponent(formatSheetRange(aba, rangeSuffix));
-  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
-  const res = await fetchSheetsUrl(url);
+  const res = await sheetsApiGet(`/values/${range}`);
   if (res.status === 400) return [];
   if (!res.ok) throw new Error(`Sheets API error (${aba}!${rangeSuffix}) ${res.status}: ${await res.text()}`);
   const data = (await res.json()) as { values?: string[][] };
@@ -671,6 +686,25 @@ export async function fetchAndParseTarefasAba(aba: string): Promise<TarefaSheet[
     } catch {
       // tenta próximo range
     }
+  }
+  return best;
+}
+
+/** fetchAndParseTarefasAba com retry (429 / falha transitória). */
+export async function fetchAndParseTarefasAbaWithRetry(
+  aba: string,
+  maxAttempts = 6
+): Promise<TarefaSheet[]> {
+  let best: TarefaSheet[] = [];
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const parsed = await fetchAndParseTarefasAba(aba);
+      if (scoreTarefasParse(parsed) > scoreTarefasParse(best)) best = parsed;
+      if (best.length > 0 && !parseLooksSuspicious(best)) return best;
+    } catch {
+      // retry
+    }
+    if (attempt < maxAttempts - 1) await sleep(500 * (attempt + 1));
   }
   return best;
 }
@@ -891,9 +925,9 @@ export async function fetchTodasTarefasBatch(
     const rangesParam = rangePaths
       .map((r) => `ranges=${encodeURIComponent(r)}`)
       .join("&");
-    const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
+    const res = await sheetsApiGet(`/values:batchGet?${rangesParam}`);
 
-    const res = await fetchSheetsUrl(url);
+    if (i + ABAS_PER_BATCH < abas.length) await sleep(450);
 
     if (!res.ok) {
       for (const aba of lote) {
@@ -935,7 +969,7 @@ export async function refillTarefasLoteVazias(
     } catch {
       // mantém vazio
     }
-    if (i > 0 && i % 4 === 0) await sleep(350);
+    if (i > 0 && i % 3 === 0) await sleep(500);
   }
 }
 

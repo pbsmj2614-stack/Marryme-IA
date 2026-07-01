@@ -10,10 +10,11 @@
 
 import { createClient } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAba, parseLooksSuspicious, scoreTarefasParse, refillTarefasLoteVazias } from "@/lib/sheets";
+import { fetchTodasAbas, fetchCadastroClientes, fetchTodasTarefasBatch, fetchAndParseTarefasAbaWithRetry, parseLooksSuspicious, scoreTarefasParse } from "@/lib/sheets";
 import {
   getAbaIdPrefixFromTitle,
   normalizeMmId,
+  extractMmNum,
 } from "@/lib/sheets-cadastro";
 import {
   collectAbaCandidates,
@@ -21,6 +22,17 @@ import {
   abaMatchesNomeEmpresa,
 } from "@/lib/sheets-aba-resolve";
 import { clienteIdsForTarefas } from "@/lib/client-utils";
+
+/** Cohort MM044+ — fetch direto da aba (não confia no batch lote). */
+export const MM_COHORT_DIRECT_MIN = 44;
+/** Segunda passada automática pós-import (MM051+ costumam falhar no batch). */
+export const MM_COHORT_RESYNC_MIN = 51;
+const COHORT_FETCH_DELAY_MS = 280;
+
+function cohortFetchDelay(fromNum: number, idCliente: string): Promise<void> {
+  if (extractMmNum(idCliente) < fromNum) return Promise.resolve();
+  return new Promise((r) => setTimeout(r, COHORT_FETCH_DELAY_MS));
+}
 
 export interface ImportResult {
   clientes: number;
@@ -155,7 +167,8 @@ function expandAbaCandidates(
 /** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
 async function pickBestTarefasFromAbas(
   abas: string[],
-  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>
+  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>,
+  forceDirect = false
 ): Promise<{ aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] }> {
   if (abas.length === 0) return { aba: "", tarefas: [] };
 
@@ -164,10 +177,10 @@ async function pickBestTarefasFromAbas(
   let bestNonSuspiciousScore = -1;
 
   for (const aba of abas) {
-    let parsed = lote[aba] ?? [];
-    if (parsed.length === 0 || parseLooksSuspicious(parsed)) {
+    let parsed = forceDirect ? [] : (lote[aba] ?? []);
+    if (forceDirect || parsed.length === 0 || parseLooksSuspicious(parsed)) {
       try {
-        const refetched = await fetchAndParseTarefasAba(aba);
+        const refetched = await fetchAndParseTarefasAbaWithRetry(aba);
         if (scoreTarefasParse(refetched) > scoreTarefasParse(parsed)) {
           parsed = refetched;
           lote[aba] = refetched;
@@ -192,13 +205,14 @@ async function syncClienteTarefasFromAbas(
   supabase: SupabaseClient,
   cliente: { id_cliente: string; sheets_aba: string; nome_empresa: string },
   abasTry: string[],
-  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>
+  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>,
+  forceDirect = false
 ): Promise<{
   bestAba: string;
   tarefas: import("@/lib/sheets").TarefaSheet[];
   synced: SyncTarefasResult | null;
 }> {
-  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, lote);
+  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, lote, forceDirect);
 
   if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
     await supabase
@@ -363,6 +377,108 @@ export async function syncTarefasClienteFromSheet(
   };
 }
 
+/** Reimporta tarefas da planilha para clientes MM### >= fromNum (fetch direto por aba). */
+export async function resyncTarefasCohort(
+  supabase: SupabaseClient,
+  fromNum: number,
+  shared?: { erros?: string[]; semTarefas?: string[] }
+): Promise<{ clientes: number; tarefas: number; semTarefas: string[]; erros: string[] }> {
+  const erros = shared?.erros ?? [];
+  const semTarefasOut: string[] = [];
+  let totalTarefas = 0;
+
+  const todasAbas = await fetchTodasAbas();
+  const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
+
+  const { data: clientesDb, error: errDb } = await supabase
+    .from("mm_clientes")
+    .select("id_cliente, nome_empresa, sheets_aba")
+    .order("id_cliente");
+
+  if (errDb) throw new Error(errDb.message);
+
+  const cohort = (clientesDb ?? [])
+    .filter((c) => extractMmNum(c.id_cliente) >= fromNum)
+    .map((c) => ({
+      id_cliente: normalizeMmId(c.id_cliente) ?? c.id_cliente,
+      nome_empresa: c.nome_empresa,
+      sheets_aba: c.sheets_aba as string | null,
+    }));
+
+  const lote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
+
+  for (let i = 0; i < cohort.length; i++) {
+    const c = cohort[i];
+    if (i > 0) await cohortFetchDelay(fromNum, c.id_cliente);
+
+    const abaEncontrada = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
+    const abaBase =
+      (c.sheets_aba && todasAbas.includes(c.sheets_aba) ? c.sheets_aba : null) ??
+      abaEncontrada;
+    if (!abaBase) {
+      semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
+      continue;
+    }
+
+    const cliente = {
+      id_cliente: c.id_cliente,
+      sheets_aba: abaBase,
+      nome_empresa: c.nome_empresa,
+    };
+
+    const abasTry = expandAbaCandidates(
+      c.id_cliente,
+      c.nome_empresa,
+      abaBase,
+      collectAbaCandidates(
+        c.id_cliente,
+        abaEncontrada,
+        abaBase,
+        todasAbas,
+        abasClientes,
+        c.nome_empresa
+      ),
+      abasClientes,
+      todasAbas
+    );
+
+    const { tarefas, synced } = await syncClienteTarefasFromAbas(
+      supabase,
+      cliente,
+      abasTry,
+      lote,
+      true
+    );
+
+    if (tarefas.length === 0) {
+      semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
+      continue;
+    }
+
+    if (synced?.skipped) {
+      erros.push(`${c.nome_empresa} — ignorado (${synced.skipReason ?? "?"})`);
+    } else if (synced && !synced.ok) {
+      erros.push(`${c.nome_empresa}: ${synced.error}`);
+    } else if (synced?.ok) {
+      totalTarefas += synced.count;
+      if (shared?.semTarefas) {
+        const idx = shared.semTarefas.findIndex((s) => s.startsWith(`${c.id_cliente} (`));
+        if (idx >= 0) shared.semTarefas.splice(idx, 1);
+      }
+    }
+  }
+
+  if (shared?.semTarefas) {
+    for (const s of semTarefasOut) {
+      if (!shared.semTarefas.some((x) => x.startsWith(s.split(" (")[0] + " ("))) {
+        shared.semTarefas.push(s);
+      }
+    }
+  }
+
+  return { clientes: cohort.length, tarefas: totalTarefas, semTarefas: semTarefasOut, erros };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function importarPlanilha(
@@ -455,12 +571,16 @@ export async function importarPlanilha(
     };
   });
 
-  const abasParaFetch = abasClientes;
+  // MM044+ não entra no batchGet — libera quota para fetch direto por aba (evita lote vazio por 429)
+  const abasParaFetch = abasClientes.filter((a) => {
+    const prefix = getAbaIdPrefixFromTitle(a);
+    if (!prefix) return true;
+    return extractMmNum(prefix) < MM_COHORT_DIRECT_MIN;
+  });
 
   let todasTarefasLote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
   try {
     todasTarefasLote = await fetchTodasTarefasBatch(abasParaFetch);
-    await refillTarefasLoteVazias(todasTarefasLote, abasParaFetch);
   } catch (err) {
     erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
   }
@@ -549,12 +669,23 @@ export async function importarPlanilha(
         nome_empresa: c.nome_empresa,
       };
     })
-    .filter((c): c is { id_cliente: string; sheets_aba: string; nome_empresa: string } => c !== null);
+    .filter((c): c is { id_cliente: string; sheets_aba: string; nome_empresa: string } => c !== null)
+    .sort((a, b) => {
+      const na = extractMmNum(a.id_cliente);
+      const nb = extractMmNum(b.id_cliente);
+      const aPri = na >= MM_COHORT_DIRECT_MIN ? 0 : 1;
+      const bPri = nb >= MM_COHORT_DIRECT_MIN ? 0 : 1;
+      if (aPri !== bPri) return aPri - bPri;
+      return na - nb;
+    });
 
   // ── 7. Sincroniza tarefas por cliente (planilha = fonte de verdade) ──
   const retryQueue: typeof abasComCliente = [];
 
-  for (const cliente of abasComCliente) {
+  for (let ci = 0; ci < abasComCliente.length; ci++) {
+    const cliente = abasComCliente[ci];
+    const forceDirect = extractMmNum(cliente.id_cliente) >= MM_COHORT_DIRECT_MIN;
+    if (ci > 0 && forceDirect) await cohortFetchDelay(MM_COHORT_DIRECT_MIN, cliente.id_cliente);
     const abaEncontrada = encontrarAba(
       abasClientes,
       cliente.id_cliente,
@@ -582,7 +713,8 @@ export async function importarPlanilha(
       supabase,
       cliente,
       abasTry,
-      todasTarefasLote
+      todasTarefasLote,
+      forceDirect
     );
 
     if (tarefas.length === 0) {
@@ -606,8 +738,10 @@ export async function importarPlanilha(
     }
   }
 
-  // ── 7b. Segunda passada — refetch agressivo para MM051+ que ficaram vazios ──
-  for (const cliente of retryQueue) {
+  // ── 7b. Segunda passada — cohort MM044+ com fetch 100% direto ──
+  for (const cliente of retryQueue.filter(
+    (c) => extractMmNum(c.id_cliente) >= MM_COHORT_DIRECT_MIN
+  )) {
     const abaEncontrada = encontrarAba(
       abasClientes,
       cliente.id_cliente,
@@ -624,20 +758,12 @@ export async function importarPlanilha(
     );
     if (abaEncontrada && !abasTry.includes(abaEncontrada)) abasTry.unshift(abaEncontrada);
 
-    for (const aba of abasTry) {
-      try {
-        const parsed = await fetchAndParseTarefasAba(aba);
-        if (parsed.length > 0) todasTarefasLote[aba] = parsed;
-      } catch {
-        // tenta próxima
-      }
-    }
-
     const { tarefas, synced } = await syncClienteTarefasFromAbas(
       supabase,
       cliente,
       abasTry,
-      todasTarefasLote
+      todasTarefasLote,
+      true
     );
 
     if (tarefas.length === 0) continue;
@@ -654,6 +780,17 @@ export async function importarPlanilha(
     } else if (synced?.ok) {
       totalTarefas += synced.count;
     }
+  }
+
+  // ── 7c. Terceira passada — MM051+ só fetch direto (recupera falhas de rate limit) ──
+  try {
+    const resync = await resyncTarefasCohort(supabase, MM_COHORT_RESYNC_MIN, {
+      erros,
+      semTarefas,
+    });
+    totalTarefas += resync.tarefas;
+  } catch (err) {
+    erros.push(`Resync MM${MM_COHORT_RESYNC_MIN}+ falhou: ${String(err)}`);
   }
 
   // ── 8. Re-aplica checks manuais que a planilha ainda não reflete ──

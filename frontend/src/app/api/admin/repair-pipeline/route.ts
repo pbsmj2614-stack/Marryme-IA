@@ -10,7 +10,8 @@ import { NextResponse } from "next/server";
 import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { fetchTodasTarefasBatch, refillTarefasLoteVazias } from "@/lib/sheets";
+import { fetchTodasTarefasBatch } from "@/lib/sheets";
+import { resyncTarefasCohort } from "@/lib/importSheets";
 import {
   collectAbaCandidates,
   resolveSheetsAba,
@@ -131,7 +132,6 @@ export async function POST() {
     let tarefasPorAba: Awaited<ReturnType<typeof fetchTodasTarefasBatch>> = {};
     try {
       tarefasPorAba = await fetchTodasTarefasBatch(abasParaFetch);
-      await refillTarefasLoteVazias(tarefasPorAba, abasParaFetch);
     } catch (err) {
       erros.push(`Erro ao buscar tarefas: ${String(err)}`);
     }
@@ -224,6 +224,19 @@ export async function POST() {
       }
     }
 
+    let resyncTarefas = 0;
+    let resyncClientes = 0;
+    try {
+      const resync = await resyncTarefasCohort(supabase, MM_COHORT_MIN, { erros, semTarefas });
+      resyncTarefas = resync.tarefas;
+      resyncClientes = resync.clientes;
+      if (resync.tarefas > 0) {
+        reparados.push(`resync MM${MM_COHORT_MIN}+: ${resync.tarefas} tarefa(s) em ${resync.clientes} cliente(s)`);
+      }
+    } catch (err) {
+      erros.push(`Resync tarefas falhou: ${String(err)}`);
+    }
+
     return NextResponse.json({
       ok: true,
       reparados,
@@ -232,6 +245,8 @@ export async function POST() {
       semAba,
       semTarefas,
       cohort: cohort.length,
+      resyncTarefas,
+      resyncClientes,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
