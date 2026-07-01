@@ -20,13 +20,14 @@ import {
   collectAbaCandidates,
   resolveSheetsAba,
   abaMatchesNomeEmpresa,
+  MM_ABA_STRICT_PREFIX_MIN,
 } from "@/lib/sheets-aba-resolve";
 import { clienteIdsForTarefas } from "@/lib/client-utils";
 
 /** Cohort MM044+ — fetch direto da aba (não confia no batch lote). */
 export const MM_COHORT_DIRECT_MIN = 44;
-/** Segunda passada automática pós-import (MM051+ costumam falhar no batch). */
-export const MM_COHORT_RESYNC_MIN = 51;
+/** Segunda passada automática pós-import — cohort MM044+ (fetch direto). */
+export const MM_COHORT_RESYNC_MIN = MM_COHORT_DIRECT_MIN;
 const COHORT_FETCH_DELAY_MS = 280;
 
 function cohortFetchDelay(fromNum: number, idCliente: string): Promise<void> {
@@ -130,6 +131,9 @@ function encontrarAba(
   const porPrefixo = abasDisponiveis.find((a) => getAbaIdPrefixFromTitle(a) === idNorm);
   if (porPrefixo) return porPrefixo;
 
+  const strictPrefix = extractMmNum(idNorm) >= MM_ABA_STRICT_PREFIX_MIN;
+  if (strictPrefix) return null;
+
   // 2ª: nome da empresa nas abas MM
   const porNomeMM = abasDisponiveis.find((a) => {
     const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
@@ -159,24 +163,36 @@ function expandAbaCandidates(
     ...candidatos,
     sheetsAba,
     ...abasClientes.filter((a) => getAbaIdPrefixFromTitle(a) === idNorm),
-    ...abasClientes.filter((a) => abaMatchesNomeEmpresa(a, nomeEmpresa)),
+    ...abasClientes.filter(
+      (a) =>
+        abaMatchesNomeEmpresa(a, nomeEmpresa) &&
+        getAbaIdPrefixFromTitle(a) === idNorm
+    ),
   ];
   return Array.from(new Set(raw.filter((a): a is string => !!a && todasAbas.includes(a))));
+}
+
+function abaPrefixOk(aba: string, idCliente: string): boolean {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  if (extractMmNum(idNorm) < MM_ABA_STRICT_PREFIX_MIN) return true;
+  return getAbaIdPrefixFromTitle(aba) === idNorm;
 }
 
 /** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
 async function pickBestTarefasFromAbas(
   abas: string[],
   lote: Record<string, import("@/lib/sheets").TarefaSheet[]>,
-  forceDirect = false
+  forceDirect = false,
+  idCliente?: string
 ): Promise<{ aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] }> {
-  if (abas.length === 0) return { aba: "", tarefas: [] };
+  const scoped = idCliente ? abas.filter((a) => abaPrefixOk(a, idCliente)) : abas;
+  if (scoped.length === 0) return { aba: abas[0] ?? "", tarefas: [] };
 
   let bestNonSuspicious: { aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] } | null =
     null;
   let bestNonSuspiciousScore = -1;
 
-  for (const aba of abas) {
+  for (const aba of scoped) {
     let parsed = forceDirect ? [] : (lote[aba] ?? []);
     if (forceDirect || parsed.length === 0 || parseLooksSuspicious(parsed)) {
       try {
@@ -191,14 +207,22 @@ async function pickBestTarefasFromAbas(
     }
 
     const score = scoreTarefasParse(parsed);
-    if (!parseLooksSuspicious(parsed) && parsed.length > 0 && score > bestNonSuspiciousScore) {
-      bestNonSuspiciousScore = score;
+    const prefixBonus =
+      idCliente && getAbaIdPrefixFromTitle(aba) === (normalizeMmId(idCliente) ?? idCliente)
+        ? 1_000_000
+        : 0;
+    if (
+      !parseLooksSuspicious(parsed) &&
+      parsed.length > 0 &&
+      score + prefixBonus > bestNonSuspiciousScore
+    ) {
+      bestNonSuspiciousScore = score + prefixBonus;
       bestNonSuspicious = { aba, tarefas: parsed };
     }
   }
 
   if (bestNonSuspicious) return bestNonSuspicious;
-  return { aba: abas[0], tarefas: [] };
+  return { aba: scoped[0], tarefas: [] };
 }
 
 async function syncClienteTarefasFromAbas(
@@ -212,7 +236,12 @@ async function syncClienteTarefasFromAbas(
   tarefas: import("@/lib/sheets").TarefaSheet[];
   synced: SyncTarefasResult | null;
 }> {
-  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(abasTry, lote, forceDirect);
+  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(
+    abasTry,
+    lote,
+    forceDirect,
+    cliente.id_cliente
+  );
 
   if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
     await supabase
@@ -268,14 +297,18 @@ export async function syncTarefasClienteFromSheet(
   if (tarefas.length === 0) return emptySkip("planilha_vazia");
 
   const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
+  const abaPrefix = getAbaIdPrefixFromTitle(cliente.sheets_aba);
   const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
 
-  for (const altId of idsRelacionados) {
-    if (altId === taskClienteId) continue;
-    await supabase
-      .from("mm_tarefas")
-      .update({ cliente_id: taskClienteId, atualizado_em: new Date().toISOString() })
-      .eq("cliente_id", altId);
+  // Só consolida tarefas do prefixo da aba quando aba e cadastro são o mesmo MM (evita roubar MM051→MM052)
+  if (abaPrefix === taskClienteId) {
+    for (const altId of idsRelacionados) {
+      if (altId === taskClienteId) continue;
+      await supabase
+        .from("mm_tarefas")
+        .update({ cliente_id: taskClienteId, atualizado_em: new Date().toISOString() })
+        .eq("cliente_id", altId);
+    }
   }
 
   const { data: existingRows, error: errLoad } = await supabase
@@ -413,9 +446,11 @@ export async function resyncTarefasCohort(
 
     const abaEncontrada = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
     const abaBase =
-      (c.sheets_aba && todasAbas.includes(c.sheets_aba) ? c.sheets_aba : null) ??
+      (c.sheets_aba && todasAbas.includes(c.sheets_aba) && abaPrefixOk(c.sheets_aba, c.id_cliente)
+        ? c.sheets_aba
+        : null) ??
       abaEncontrada;
-    if (!abaBase) {
+    if (!abaBase || !abaPrefixOk(abaBase, c.id_cliente)) {
       semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
       continue;
     }
@@ -656,36 +691,27 @@ export async function importarPlanilha(
   }
   totalClientes = clientesPayload.length;
 
-  // ── 6. Clientes com aba resolvida (nunca pula por sheets_aba null se a aba existir no Sheets)
+  // ── 6. Clientes com aba resolvida ──
   const abasComCliente = clientesPayload
     .map((c) => {
       const aba =
         c.sheets_aba ??
         encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
-      if (!aba) return null;
+      if (!aba || !abaPrefixOk(aba, c.id_cliente)) return null;
       return {
         id_cliente: c.id_cliente,
         sheets_aba: aba,
         nome_empresa: c.nome_empresa,
       };
     })
-    .filter((c): c is { id_cliente: string; sheets_aba: string; nome_empresa: string } => c !== null)
-    .sort((a, b) => {
-      const na = extractMmNum(a.id_cliente);
-      const nb = extractMmNum(b.id_cliente);
-      const aPri = na >= MM_COHORT_DIRECT_MIN ? 0 : 1;
-      const bPri = nb >= MM_COHORT_DIRECT_MIN ? 0 : 1;
-      if (aPri !== bPri) return aPri - bPri;
-      return na - nb;
-    });
+    .filter((c): c is { id_cliente: string; sheets_aba: string; nome_empresa: string } => c !== null);
 
-  // ── 7. Sincroniza tarefas por cliente (planilha = fonte de verdade) ──
-  const retryQueue: typeof abasComCliente = [];
+  const clientesLegacy = abasComCliente
+    .filter((c) => extractMmNum(c.id_cliente) < MM_COHORT_DIRECT_MIN)
+    .sort((a, b) => extractMmNum(a.id_cliente) - extractMmNum(b.id_cliente));
 
-  for (let ci = 0; ci < abasComCliente.length; ci++) {
-    const cliente = abasComCliente[ci];
-    const forceDirect = extractMmNum(cliente.id_cliente) >= MM_COHORT_DIRECT_MIN;
-    if (ci > 0 && forceDirect) await cohortFetchDelay(MM_COHORT_DIRECT_MIN, cliente.id_cliente);
+  // ── 7. Sincroniza MM001–MM043 via batch lote ──
+  for (const cliente of clientesLegacy) {
     const abaEncontrada = encontrarAba(
       abasClientes,
       cliente.id_cliente,
@@ -714,11 +740,10 @@ export async function importarPlanilha(
       cliente,
       abasTry,
       todasTarefasLote,
-      forceDirect
+      false
     );
 
     if (tarefas.length === 0) {
-      retryQueue.push(cliente);
       semTarefas.push(`${cliente.id_cliente} (${cliente.nome_empresa})`);
       continue;
     }
@@ -738,59 +763,15 @@ export async function importarPlanilha(
     }
   }
 
-  // ── 7b. Segunda passada — cohort MM044+ com fetch 100% direto ──
-  for (const cliente of retryQueue.filter(
-    (c) => extractMmNum(c.id_cliente) >= MM_COHORT_DIRECT_MIN
-  )) {
-    const abaEncontrada = encontrarAba(
-      abasClientes,
-      cliente.id_cliente,
-      cliente.nome_empresa,
-      todasAbas
-    );
-    const abasTry = expandAbaCandidates(
-      cliente.id_cliente,
-      cliente.nome_empresa,
-      cliente.sheets_aba,
-      [],
-      abasClientes,
-      todasAbas
-    );
-    if (abaEncontrada && !abasTry.includes(abaEncontrada)) abasTry.unshift(abaEncontrada);
-
-    const { tarefas, synced } = await syncClienteTarefasFromAbas(
-      supabase,
-      cliente,
-      abasTry,
-      todasTarefasLote,
-      true
-    );
-
-    if (tarefas.length === 0) continue;
-
-    const idx = semTarefas.findIndex((s) => s.startsWith(`${cliente.id_cliente} (`));
-    if (idx >= 0) semTarefas.splice(idx, 1);
-
-    if (synced?.skipped) {
-      erros.push(
-        `Aviso: ${cliente.nome_empresa} — sync ignorado (${synced.skipReason ?? "desconhecido"})`
-      );
-    } else if (synced && !synced.ok) {
-      erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${synced.error}`);
-    } else if (synced?.ok) {
-      totalTarefas += synced.count;
-    }
-  }
-
-  // ── 7c. Terceira passada — MM051+ só fetch direto (recupera falhas de rate limit) ──
+  // ── 7b. MM044+ — uma passada com fetch direto por aba (prefixo estrito) ──
   try {
-    const resync = await resyncTarefasCohort(supabase, MM_COHORT_RESYNC_MIN, {
+    const resync = await resyncTarefasCohort(supabase, MM_COHORT_DIRECT_MIN, {
       erros,
       semTarefas,
     });
     totalTarefas += resync.tarefas;
   } catch (err) {
-    erros.push(`Resync MM${MM_COHORT_RESYNC_MIN}+ falhou: ${String(err)}`);
+    erros.push(`Resync MM${MM_COHORT_DIRECT_MIN}+ falhou: ${String(err)}`);
   }
 
   // ── 8. Re-aplica checks manuais que a planilha ainda não reflete ──

@@ -3,8 +3,30 @@
  * e prefixo MM correto (cohort MM044+).
  */
 
-import { getAbaIdPrefixFromTitle, normalizeMmId } from "@/lib/sheets-cadastro";
+import { extractMmNum, getAbaIdPrefixFromTitle, normalizeMmId } from "@/lib/sheets-cadastro";
 import type { TarefaSheet } from "@/lib/sheets";
+
+/** MM044+ exige prefixo da aba = id do cadastro (evita roubar aba/tarefas de outro cliente). */
+export const MM_ABA_STRICT_PREFIX_MIN = 44;
+
+function abaPrefixMatchesCliente(aba: string, idCliente: string): boolean {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const prefix = getAbaIdPrefixFromTitle(aba);
+  return prefix === idNorm;
+}
+
+function preferAbaComPrefixoCorreto(
+  candidatos: string[],
+  idCliente: string,
+  abaEncontrada: string | null,
+  existente: string | null | undefined
+): string | null {
+  const comPrefixo = candidatos.filter((a) => abaPrefixMatchesCliente(a, idCliente));
+  if (comPrefixo.length === 0) return null;
+  if (abaEncontrada && comPrefixo.includes(abaEncontrada)) return abaEncontrada;
+  if (existente && comPrefixo.includes(existente)) return existente;
+  return comPrefixo[0];
+}
 
 function normalizeNomeKey(nome: string): string {
   return nome
@@ -36,8 +58,13 @@ export function collectAbaCandidates(
 ): string[] {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
   const abasPorPrefixo = abasClientes.filter((a) => getAbaIdPrefixFromTitle(a) === idNorm);
+  const strictPrefix = extractMmNum(idNorm) >= MM_ABA_STRICT_PREFIX_MIN;
   const abasPorNome = nomeEmpresa
-    ? abasClientes.filter((a) => abaMatchesNomeEmpresa(a, nomeEmpresa))
+    ? abasClientes.filter(
+        (a) =>
+          abaMatchesNomeEmpresa(a, nomeEmpresa) &&
+          (!strictPrefix || abaPrefixMatchesCliente(a, idCliente))
+      )
     : [];
   const raw = [existente, abaEncontrada, ...abasPorPrefixo, ...abasPorNome];
   return Array.from(new Set(raw.filter((a): a is string => !!a && todasAbas.includes(a))));
@@ -86,9 +113,23 @@ export function resolveSheetsAba(
   );
   if (candidatos.length === 0) return null;
 
-  let best = candidatos[0];
+  const strictPrefix = extractMmNum(idNorm) >= MM_ABA_STRICT_PREFIX_MIN;
+  const candidatosEscopo = strictPrefix
+    ? candidatos.filter((a) => abaPrefixMatchesCliente(a, idCliente))
+    : candidatos;
+  if (candidatosEscopo.length === 0) return null;
+
+  const todosLoteVazios = candidatosEscopo.every((a) => taskCount(a, tarefasPorAba) === 0);
+  if (todosLoteVazios) {
+    return (
+      preferAbaComPrefixoCorreto(candidatosEscopo, idCliente, abaEncontrada, existente) ??
+      candidatosEscopo[0]
+    );
+  }
+
+  let best = candidatosEscopo[0];
   let bestScore = -1;
-  for (const aba of candidatos) {
+  for (const aba of candidatosEscopo) {
     const s = scoreSheetsAba(aba, idCliente, abaEncontrada, tarefasPorAba);
     if (s > bestScore) {
       bestScore = s;
@@ -98,9 +139,9 @@ export function resolveSheetsAba(
     }
   }
 
-  // Prefixo correto mas 0 tarefas perde para aba com tarefas (MM044+ com aba MM058)
+  // Só troca para aba com tarefas se o prefixo MM for do próprio cliente
   if (taskCount(best, tarefasPorAba) === 0) {
-    const comTarefas = candidatos.filter((a) => taskCount(a, tarefasPorAba) > 0);
+    const comTarefas = candidatosEscopo.filter((a) => taskCount(a, tarefasPorAba) > 0);
     if (comTarefas.length > 0) {
       best = comTarefas.reduce((a, b) =>
         taskCount(a, tarefasPorAba) >= taskCount(b, tarefasPorAba) ? a : b

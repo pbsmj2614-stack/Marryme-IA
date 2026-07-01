@@ -83,6 +83,8 @@ function encontrarAbaPorId(
   const porPrefixo = abas.find((a) => getAbaIdPrefixFromTitle(a) === idNorm);
   if (porPrefixo) return porPrefixo;
 
+  if (extractMmNum(idNorm) >= MM_COHORT_MIN) return null;
+
   return (
     abas.find((a) => {
       const aLower = a.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
