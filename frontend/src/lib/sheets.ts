@@ -330,6 +330,69 @@ function isValidTaskRow(oQue: string): boolean {
   return !HEADER_LABEL_KEYS.has(key);
 }
 
+/**
+ * A API do Sheets omite células vazias à esquerda em algumas linhas (col A vazia).
+ * Se o cabeçalho tem col A vazia e "Check" em B, linhas de dados podem vir sem o
+ * padding inicial — deslocando O que? e zerando o parse.
+ */
+export function alignTaskSheetRows(values: string[][]): string[][] {
+  if (values.length === 0) return values;
+
+  let headerRowIdx = -1;
+  let hMap: Record<string, number> = {};
+  for (let i = 0; i < Math.min(values.length, 12); i++) {
+    const candidate = buildHeaderMap(values[i]);
+    if (TASK_HEADER_KEYS.some((k) => candidate[k] !== undefined)) {
+      headerRowIdx = i;
+      hMap = candidate;
+      break;
+    }
+  }
+  if (headerRowIdx < 0) return values;
+
+  const header = values[headerRowIdx];
+  const headerHasLeadingEmpty = (header[0]?.trim() ?? "") === "";
+  const checkCol = hMap.check ?? hMap.check_feito ?? hMap.feito;
+  if (!headerHasLeadingEmpty || checkCol === undefined || checkCol === 0) return values;
+
+  return values.map((row, i) => {
+    if (i <= headerRowIdx) return row;
+    const first = row[0]?.trim() ?? "";
+    if (first === "") return row;
+    if (checkCol === 1 && parseCheckbox(first)) return ["", ...row];
+    if (row.length + 1 <= header.length) return ["", ...row];
+    return row;
+  });
+}
+
+async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<string[][]> {
+  const range = encodeURIComponent(`${aba}!${rangeSuffix}`);
+  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${range}?key=${apiKey()}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (res.status === 400) return [];
+  if (!res.ok) throw new Error(`Sheets API error (${aba}!${rangeSuffix}) ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as { values?: string[][] };
+  return data.values ?? [];
+}
+
+/** Lê valores da aba e parseia tarefas — tenta B:I (layout atual) e fallback A:I. */
+export async function fetchAndParseTarefasAba(aba: string): Promise<TarefaSheet[]> {
+  const attempts = ["B:I", "A:I"] as const;
+  let best: TarefaSheet[] = [];
+  for (const suffix of attempts) {
+    try {
+      const values = await fetchSheetValues(aba, suffix);
+      if (values.length === 0) continue;
+      const parsed = parseTarefasValues(values);
+      if (parsed.length > best.length) best = parsed;
+      if (parsed.length > 0 && suffix === "B:I") break;
+    } catch {
+      // tenta próximo range
+    }
+  }
+  return best;
+}
+
 function readCell(row: string[], col: number): string {
   return row[col]?.trim() ?? "";
 }
@@ -481,8 +544,9 @@ export function findTaskRowByOQue(
 export function parseTarefasValues(values: string[][]): TarefaSheet[] {
   if (values.length === 0) return [];
 
-  const layout = detectTaskColumnLayout(values);
-  const dataRows = values.slice(layout.dataStartRow);
+  const aligned = alignTaskSheetRows(values);
+  const layout = detectTaskColumnLayout(aligned);
+  const dataRows = aligned.slice(layout.dataStartRow);
 
   function getCheck(r: string[]): boolean {
     if (layout.hasCheckHeader && layout.checkCol !== null) {
@@ -513,12 +577,7 @@ export function parseTarefasValues(values: string[][]): TarefaSheet[] {
  * Retorna [] se a aba não existir (HTTP 400).
  */
 export async function fetchTarefasCliente(nomeAba: string): Promise<TarefaSheet[]> {
-  const url = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(nomeAba)}?key=${apiKey()}`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (res.status === 400) return [];
-  if (!res.ok) throw new Error(`Sheets API error (${nomeAba}) ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return parseTarefasValues(data.values ?? []);
+  return fetchAndParseTarefasAba(nomeAba);
 }
 
 /**
@@ -536,7 +595,9 @@ export async function fetchTodasTarefasBatch(
 
   for (let i = 0; i < abas.length; i += BATCH_SIZE) {
     const lote = abas.slice(i, i + BATCH_SIZE);
-    const rangesParam = lote.map((a) => `ranges=${encodeURIComponent(a)}`).join("&");
+    const rangesParam = lote
+      .map((a) => `ranges=${encodeURIComponent(`${a}!B:I`)}`)
+      .join("&");
     const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
 
     const res = await fetch(url, { cache: "no-store" });
@@ -557,7 +618,19 @@ export async function fetchTodasTarefasBatch(
     const valueRanges: Array<{ values?: string[][] }> = data.valueRanges ?? [];
 
     for (let j = 0; j < lote.length; j++) {
-      result[lote[j]] = parseTarefasValues(valueRanges[j]?.values ?? []);
+      const parsed = parseTarefasValues(valueRanges[j]?.values ?? []);
+      result[lote[j]] = parsed;
+    }
+
+    // Fallback individual A:I quando B:I no batch retornou 0 tarefas
+    for (const aba of lote) {
+      if ((result[aba]?.length ?? 0) > 0) continue;
+      try {
+        const fallback = await fetchAndParseTarefasAba(aba);
+        if (fallback.length > 0) result[aba] = fallback;
+      } catch {
+        result[aba] = result[aba] ?? [];
+      }
     }
   }
 

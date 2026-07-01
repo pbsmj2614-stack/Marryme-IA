@@ -132,6 +132,65 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
+/** Sincroniza tarefas de um cliente a partir da planilha (delete + insert). */
+export async function syncTarefasClienteFromSheet(
+  supabase: SupabaseClient,
+  cliente: { id_cliente: string; sheets_aba: string; nome_empresa: string },
+  tarefas: import("@/lib/sheets").TarefaSheet[]
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (tarefas.length === 0) {
+    return { ok: true, count: 0 };
+  }
+
+  const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
+  const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
+
+  for (const altId of idsRelacionados) {
+    if (altId === taskClienteId) continue;
+    await supabase
+      .from("mm_tarefas")
+      .update({ cliente_id: taskClienteId, atualizado_em: new Date().toISOString() })
+      .eq("cliente_id", altId);
+  }
+
+  const { error: errDelete } = await supabase
+    .from("mm_tarefas")
+    .delete()
+    .in("cliente_id", idsRelacionados);
+
+  if (errDelete) {
+    return { ok: false, count: 0, error: errDelete.message };
+  }
+
+  const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
+    const prazoISO = parseDateBR(t.prazo);
+    const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
+    const statusFinal = t.check_feito
+      ? "Finalizado"
+      : isAtrasado(t.prazo, statusNorm)
+        ? "Atrasado"
+        : statusNorm;
+    return {
+      cliente_id: taskClienteId,
+      check_feito: t.check_feito,
+      etapa: t.etapa || null,
+      o_que: t.o_que,
+      tipo: t.tipo || null,
+      quem: t.quem || null,
+      prazo: prazoISO,
+      status: statusFinal,
+      observacoes: t.observacoes || null,
+      atualizado_em: new Date().toISOString(),
+    };
+  });
+
+  const { error: errInsert } = await supabase.from("mm_tarefas").insert(tarefasPayload);
+  if (errInsert) {
+    return { ok: false, count: 0, error: errInsert.message };
+  }
+  return { ok: true, count: tarefasPayload.length };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function importarPlanilha(
@@ -331,71 +390,23 @@ export async function importarPlanilha(
     // Fallback individual se batchGet retornou vazio (aba pode ter falhado no lote)
     if (tarefas.length === 0) {
       try {
-        const { fetchTarefasCliente } = await import("@/lib/sheets");
-        tarefas = await fetchTarefasCliente(cliente.sheets_aba);
+        const { fetchAndParseTarefasAba } = await import("@/lib/sheets");
+        tarefas = await fetchAndParseTarefasAba(cliente.sheets_aba);
       } catch {
-        // mantém vazio — não apaga tarefas existentes no Supabase
+        // mantém vazio
       }
     }
 
     if (tarefas.length === 0) {
       semTarefas.push(`${cliente.id_cliente} (${cliente.nome_empresa})`);
-      // Não apaga tarefas existentes — evita perda quando batchGet falha ou parse retorna vazio
       continue;
     }
 
-    const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
-    const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
-
-    // Consolida tarefas gravadas com prefixo de aba divergente no ID canônico do cadastro
-    for (const altId of idsRelacionados) {
-      if (altId === taskClienteId) continue;
-      await supabase
-        .from("mm_tarefas")
-        .update({ cliente_id: taskClienteId, atualizado_em: new Date().toISOString() })
-        .eq("cliente_id", altId);
-    }
-
-    const { error: errDelete } = await supabase
-      .from("mm_tarefas")
-      .delete()
-      .in("cliente_id", idsRelacionados);
-
-    if (errDelete) {
-      erros.push(
-        `Erro ao limpar tarefas de ${cliente.nome_empresa}: ${errDelete.message}`
-      );
-      continue;
-    }
-
-    const tarefasPayload = tarefas.map((t: import("@/lib/sheets").TarefaSheet) => {
-      const prazoISO = parseDateBR(t.prazo);
-      const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
-      const statusFinal = t.check_feito
-        ? "Finalizado"
-        : isAtrasado(t.prazo, statusNorm)
-          ? "Atrasado"
-          : statusNorm;
-      return {
-        cliente_id: taskClienteId,
-        check_feito: t.check_feito,
-        etapa: t.etapa || null,
-        o_que: t.o_que,
-        tipo: t.tipo || null,
-        quem: t.quem || null,
-        prazo: prazoISO,
-        status: statusFinal,
-        observacoes: t.observacoes || null,
-        atualizado_em: new Date().toISOString(),
-      };
-    });
-
-    const { error: errInsert } = await supabase.from("mm_tarefas").insert(tarefasPayload);
-
-    if (errInsert) {
-      erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${errInsert.message}`);
+    const synced = await syncTarefasClienteFromSheet(supabase, cliente, tarefas);
+    if (!synced.ok) {
+      erros.push(`Erro ao salvar tarefas de ${cliente.nome_empresa}: ${synced.error}`);
     } else {
-      totalTarefas += tarefasPayload.length;
+      totalTarefas += synced.count;
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectTaskColumnLayout, parseTarefasValues } from "@/lib/sheets";
+import { detectTaskColumnLayout, parseTarefasValues, alignTaskSheetRows } from "@/lib/sheets";
 
 /** Fixture B:I — layout PlanilhaModelo (col A vazia, Check em B). */
 function fixtureLayoutBI(): string[][] {
@@ -35,5 +35,19 @@ describe("parseTarefasValues", () => {
     const tarefas = parseTarefasValues(fixtureLayoutBI());
     const concluidas = tarefas.filter((t) => t.check_feito);
     expect(concluidas.every((t) => t.status === "Não iniciado")).toBe(true);
+  });
+
+  it("parseia quando linhas de dados omitem coluna A vazia do cabeçalho", () => {
+    const misaligned = [
+      ["", "Check", "Etapa", "O que?", "Tipo", "Quem?", "Prazo", "Status", "Observações"],
+      ["TRUE", "Organização", "Pegar Acesso da BM", "Marry Me", "Kauê", "10/06/2026", "Não iniciado", ""],
+      ["FALSE", "Preparação", "Configurar a BM", "Marry Me", "Kauê", "11/06/2026", "Não iniciado", ""],
+    ];
+    const aligned = alignTaskSheetRows(misaligned);
+    expect(aligned[1][0]).toBe("");
+    expect(aligned[1][3]).toBe("Pegar Acesso da BM");
+    const tarefas = parseTarefasValues(misaligned);
+    expect(tarefas).toHaveLength(2);
+    expect(tarefas[0].o_que).toBe("Pegar Acesso da BM");
   });
 });

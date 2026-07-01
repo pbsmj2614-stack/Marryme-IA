@@ -11,6 +11,7 @@ import { createSign } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
 import { fetchTodasTarefasBatch } from "@/lib/sheets";
+import { syncTarefasClienteFromSheet } from "@/lib/importSheets";
 import {
   collectAbaCandidates,
   resolveSheetsAba,
@@ -107,6 +108,7 @@ export async function POST() {
     const erros: string[] = [];
     const semAba: string[] = [];
     const semTarefas: string[] = [];
+    const tarefasReimportadas: string[] = [];
 
     const token = await googleToken();
 
@@ -164,7 +166,8 @@ export async function POST() {
       if (!abaIdeal) {
         semAba.push(`${idNorm} (${c.nome_empresa})`);
       } else {
-        const taskCount = tarefasPorAba[abaIdeal]?.length ?? 0;
+        const sheetTasks = tarefasPorAba[abaIdeal] ?? [];
+        const taskCount = sheetTasks.length;
         if (taskCount === 0) semTarefas.push(`${idNorm} (${c.nome_empresa})`);
 
         if (abaIdeal !== c.sheets_aba) {
@@ -185,6 +188,20 @@ export async function POST() {
               reparados.push(
                 `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
               );
+          }
+        }
+
+        // Reimporta tarefas da planilha quando há linhas parseadas (Reparar sozinho não bastava)
+        if (taskCount > 0) {
+          const synced = await syncTarefasClienteFromSheet(
+            supabase,
+            { id_cliente: c.id_cliente, sheets_aba: abaIdeal, nome_empresa: c.nome_empresa },
+            sheetTasks
+          );
+          if (!synced.ok) {
+            erros.push(`${idNorm}: falha ao reimportar tarefas (${synced.error})`);
+          } else if (synced.count > 0) {
+            tarefasReimportadas.push(`${idNorm}: ${synced.count} tarefa(s)`);
           }
         }
       }
@@ -243,6 +260,7 @@ export async function POST() {
       erros,
       semAba,
       semTarefas,
+      tarefasReimportadas,
       cohort: cohort.length,
     });
   } catch (err) {
