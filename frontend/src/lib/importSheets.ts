@@ -364,7 +364,8 @@ export async function importarPlanilha(
           c.abaEncontrada,
           existente,
           todasAbas,
-          abasClientes
+          abasClientes,
+          c.raw.nome_empresa
         );
       })
     )
@@ -386,7 +387,8 @@ export async function importarPlanilha(
       existente,
       todasAbas,
       abasClientes,
-      todasTarefasLote
+      todasTarefasLote,
+      c.nome_empresa
     );
     // Não zera sheets_aba no upsert se resolve falhou mas aba anterior ainda existe
     const sheets_aba =
@@ -455,15 +457,48 @@ export async function importarPlanilha(
       nome_empresa: c.nome_empresa,
     }));
 
-  // ── 7. Sincroniza tarefas por cliente (substitui só quando a planilha retornou linhas) ──
+  // ── 7. Sincroniza tarefas por cliente (planilha = fonte de verdade) ──
   for (const cliente of abasComCliente) {
-    let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
+    const abaEncontrada = encontrarAba(
+      abasClientes,
+      cliente.id_cliente,
+      cliente.nome_empresa,
+      todasAbas
+    );
+    const candidatos = collectAbaCandidates(
+      cliente.id_cliente,
+      abaEncontrada,
+      cliente.sheets_aba,
+      todasAbas,
+      abasClientes,
+      cliente.nome_empresa
+    );
+    const abasTry =
+      candidatos.length > 0 ? candidatos : [cliente.sheets_aba];
 
-    try {
-      const refetched = await fetchAndParseTarefasAba(cliente.sheets_aba);
-      if (refetched.length > tarefas.length) tarefas = refetched;
-    } catch {
-      // mantém lote
+    let bestAba = cliente.sheets_aba;
+    let tarefas: import("@/lib/sheets").TarefaSheet[] = [];
+
+    for (const aba of abasTry) {
+      let parsed = todasTarefasLote[aba] ?? [];
+      try {
+        const refetched = await fetchAndParseTarefasAba(aba);
+        if (refetched.length > parsed.length) parsed = refetched;
+      } catch {
+        // mantém lote
+      }
+      if (parsed.length > tarefas.length) {
+        tarefas = parsed;
+        bestAba = aba;
+      }
+    }
+
+    if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
+      await supabase
+        .from("mm_clientes")
+        .update({ sheets_aba: bestAba, atualizado_em: new Date().toISOString() })
+        .eq("id_cliente", cliente.id_cliente);
+      cliente.sheets_aba = bestAba;
     }
 
     if (tarefas.length === 0) {

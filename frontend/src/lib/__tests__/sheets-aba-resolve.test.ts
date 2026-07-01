@@ -30,4 +30,21 @@ describe("resolveSheetsAba", () => {
     );
     expect(result).toBe("MM062_Rafa");
   });
+
+  it("prefere aba por nome quando prefixo do cadastro tem 0 tarefas (MM050 vs MM058)", () => {
+    const porAba: Record<string, TarefaSheet[]> = {
+      MM050_Cliente: tarefas(0),
+      MM058_Cliente: tarefas(12),
+    };
+    const result = resolveSheetsAba(
+      "MM050",
+      "MM058_Cliente",
+      "MM050_Cliente",
+      ["MM050_Cliente", "MM058_Cliente"],
+      ["MM050_Cliente", "MM058_Cliente"],
+      porAba,
+      "Cliente"
+    );
+    expect(result).toBe("MM058_Cliente");
+  });
 });

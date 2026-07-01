@@ -6,17 +6,40 @@
 import { getAbaIdPrefixFromTitle, normalizeMmId } from "@/lib/sheets-cadastro";
 import type { TarefaSheet } from "@/lib/sheets";
 
+function normalizeNomeKey(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/_/g, "");
+}
+
+/** Aba contém o nome da empresa (ignora prefixo MM###). */
+export function abaMatchesNomeEmpresa(aba: string, nomeEmpresa: string): boolean {
+  const nomeKey = normalizeNomeKey(nomeEmpresa);
+  if (nomeKey.length < 3) return false;
+  const abaSemPrefixo = aba.replace(/^MM\d+[-_\s]*/i, "");
+  const abaKey = normalizeNomeKey(abaSemPrefixo);
+  if (abaKey.length < 3) return false;
+  return abaKey.includes(nomeKey) || nomeKey.includes(abaKey);
+}
+
 /** Coleta todas as abas candidatas para um cliente. */
 export function collectAbaCandidates(
   idCliente: string,
   abaEncontrada: string | null,
   existente: string | null | undefined,
   todasAbas: string[],
-  abasClientes: string[]
+  abasClientes: string[],
+  nomeEmpresa?: string
 ): string[] {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
   const abasPorPrefixo = abasClientes.filter((a) => getAbaIdPrefixFromTitle(a) === idNorm);
-  const raw = [existente, abaEncontrada, ...abasPorPrefixo];
+  const abasPorNome = nomeEmpresa
+    ? abasClientes.filter((a) => abaMatchesNomeEmpresa(a, nomeEmpresa))
+    : [];
+  const raw = [existente, abaEncontrada, ...abasPorPrefixo, ...abasPorNome];
   return Array.from(new Set(raw.filter((a): a is string => !!a && todasAbas.includes(a))));
 }
 
@@ -27,7 +50,7 @@ function taskCount(
   return tarefasPorAba[aba]?.length ?? 0;
 }
 
-/** Pontua aba: +1000 prefixo correto, +100 match encontrarAba, +count tarefas. */
+/** Pontua aba: tarefas parseadas dominam; bônus de prefixo só com tarefas > 0. */
 export function scoreSheetsAba(
   aba: string,
   idCliente: string,
@@ -35,9 +58,10 @@ export function scoreSheetsAba(
   tarefasPorAba: Record<string, TarefaSheet[]>
 ): number {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
-  let score = taskCount(aba, tarefasPorAba);
-  if (getAbaIdPrefixFromTitle(aba) === idNorm) score += 1000;
-  if (abaEncontrada && aba === abaEncontrada) score += 100;
+  const count = taskCount(aba, tarefasPorAba);
+  let score = count * 100;
+  if (count > 0 && getAbaIdPrefixFromTitle(aba) === idNorm) score += 1000;
+  if (count > 0 && abaEncontrada && aba === abaEncontrada) score += 100;
   return score;
 }
 
@@ -48,7 +72,8 @@ export function resolveSheetsAba(
   existente: string | null | undefined,
   todasAbas: string[],
   abasClientes: string[],
-  tarefasPorAba: Record<string, TarefaSheet[]>
+  tarefasPorAba: Record<string, TarefaSheet[]>,
+  nomeEmpresa?: string
 ): string | null {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
   const candidatos = collectAbaCandidates(
@@ -56,7 +81,8 @@ export function resolveSheetsAba(
     abaEncontrada,
     existente,
     todasAbas,
-    abasClientes
+    abasClientes,
+    nomeEmpresa
   );
   if (candidatos.length === 0) return null;
 
@@ -69,6 +95,16 @@ export function resolveSheetsAba(
       best = aba;
     } else if (s === bestScore && aba === abaEncontrada) {
       best = aba;
+    }
+  }
+
+  // Prefixo correto mas 0 tarefas perde para aba com tarefas (MM044+ com aba MM058)
+  if (taskCount(best, tarefasPorAba) === 0) {
+    const comTarefas = candidatos.filter((a) => taskCount(a, tarefasPorAba) > 0);
+    if (comTarefas.length > 0) {
+      best = comTarefas.reduce((a, b) =>
+        taskCount(a, tarefasPorAba) >= taskCount(b, tarefasPorAba) ? a : b
+      );
     }
   }
 

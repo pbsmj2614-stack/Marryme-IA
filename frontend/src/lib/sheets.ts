@@ -299,6 +299,9 @@ function buildTaskHeaderMap(headerRow: string[]): Record<string, number> {
     if (k === "o_que" || k === "oque" || k.startsWith("o_que") || k === "tarefa_a_realizar") {
       map.o_que ??= i;
     }
+    if (k === "tarefa" || k === "atividade" || k === "descricao" || k === "acao") {
+      map.o_que ??= i;
+    }
     if (k === "check" || k === "check_feito" || k === "feito" || k.startsWith("check")) {
       map.check ??= i;
       map.check_feito ??= i;
@@ -426,6 +429,57 @@ function parseWithLayout(values: string[][], layout: FixedLayoutCols): TarefaShe
       };
     })
     .filter((t) => isValidTaskRow(t.o_que));
+}
+
+function inferOQueColumnFromData(values: string[][], startRow: number): number | null {
+  const rows = values.slice(startRow).filter((r) => r.some((c) => cleanCell(c)));
+  if (rows.length < 2) return null;
+
+  const maxCols = Math.max(...rows.map((r) => r.length), 0);
+  let bestCol = -1;
+  let bestScore = 0;
+
+  for (let col = 0; col < maxCols; col++) {
+    const cells = rows.map((r) => readCell(r, col)).filter((c) => c.length >= 4);
+    if (cells.length < 2) continue;
+
+    const checkLike = cells.filter((c) => parseCheckbox(c)).length;
+    const dateLike = cells.filter((c) => /\d{1,2}[\/\-.]\d{1,2}/.test(c)).length;
+    if (checkLike > cells.length * 0.4) continue;
+    if (dateLike > cells.length * 0.4) continue;
+
+    const avgLen = cells.reduce((s, c) => s + c.length, 0) / cells.length;
+    const score = cells.length * avgLen;
+    if (score > bestScore) {
+      bestScore = score;
+      bestCol = col;
+    }
+  }
+
+  return bestCol >= 0 ? bestCol : null;
+}
+
+function parseWithInferredLayout(values: string[][]): TarefaSheet[] {
+  const { headerRowIdx } = findTaskHeaderRow(values);
+  const start = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  const oQueCol = inferOQueColumnFromData(values, start);
+  if (oQueCol === null) return [];
+
+  const hMap = headerRowIdx >= 0 ? buildTaskHeaderMap(values[headerRowIdx] ?? []) : {};
+  const checkCol =
+    hMap.check ?? hMap.check_feito ?? (oQueCol >= 2 ? oQueCol - 2 : oQueCol > 0 ? 0 : null);
+
+  return parseWithLayout(values, {
+    dataStartRow: start,
+    checkCol: checkCol ?? null,
+    etapaCol: Math.max(0, oQueCol - 1),
+    oQueCol,
+    tipoCol: oQueCol + 1,
+    quemCol: oQueCol + 2,
+    prazoCol: oQueCol + 3,
+    statusCol: oQueCol + 4,
+    obsCol: oQueCol + 5,
+  });
 }
 
 function layoutFromHeaderMap(
@@ -572,15 +626,15 @@ async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<strin
   return data.values ?? [];
 }
 
-/** Lê valores da aba e parseia tarefas — compara B:I e A:I e fica com a maior contagem. */
+/** Lê valores da aba e parseia tarefas — compara A:I e B:I e fica com a maior contagem válida. */
 export async function fetchAndParseTarefasAba(aba: string): Promise<TarefaSheet[]> {
   let best: TarefaSheet[] = [];
-  for (const suffix of ["B:I", "A:I"] as const) {
+  for (const suffix of ["A:I", "B:I"] as const) {
     try {
       const values = await fetchSheetValues(aba, suffix);
       if (values.length === 0) continue;
       const parsed = parseTarefasValues(values);
-      if (parsed.length > best.length) best = parsed;
+      if (scoreParseResult(parsed) > scoreParseResult(best)) best = parsed;
     } catch {
       // tenta próximo range
     }
@@ -764,10 +818,12 @@ export function parseTarefasValues(values: string[][]): TarefaSheet[] {
     for (const fixed of fixedLayoutCandidates(grid)) {
       candidates.push(parseWithLayout(grid, fixed));
     }
+    candidates.push(parseWithInferredLayout(grid));
   }
 
   const best = pickBestParse(candidates);
-  if (parseLooksSuspicious(best)) return [];
+  if (best.length === 0) return [];
+  if (parseLooksSuspicious(best) && best.length < 3) return [];
   return best;
 }
 
@@ -795,7 +851,7 @@ export async function fetchTodasTarefasBatch(
   for (let i = 0; i < abas.length; i += BATCH_SIZE) {
     const lote = abas.slice(i, i + BATCH_SIZE);
     const rangesParam = lote
-      .map((a) => `ranges=${encodeURIComponent(`${a}!B:I`)}`)
+      .map((a) => `ranges=${encodeURIComponent(`${a}!A:I`)}`)
       .join("&");
     const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchGet?key=${apiKey()}&${rangesParam}`;
 

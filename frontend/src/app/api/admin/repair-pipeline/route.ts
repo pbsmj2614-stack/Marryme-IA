@@ -136,7 +136,8 @@ export async function POST() {
             abaEncontrada,
             c.sheets_aba,
             todasAbas,
-            abasClientes
+            abasClientes,
+            c.nome_empresa
           );
         })
       )
@@ -158,7 +159,8 @@ export async function POST() {
         c.sheets_aba,
         todasAbas,
         abasClientes,
-        tarefasPorAba
+        tarefasPorAba,
+        c.nome_empresa
       );
 
       if (!abaIdeal) {
