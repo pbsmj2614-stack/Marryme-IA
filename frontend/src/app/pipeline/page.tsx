@@ -671,14 +671,27 @@ function recalcClienteMetrics(c: ClienteComMetricas, tCliente: Tarefa[]): Client
   };
 }
 
+function inheritSheetsAba<T extends { id_cliente: string; nome_empresa: string; sheets_aba: string | null }>(
+  c: T,
+  all: T[]
+): T {
+  if (c.sheets_aba) return c;
+  const key = c.nome_empresa.toLowerCase().trim();
+  const sibling = all.find(
+    (x) => x.nome_empresa.toLowerCase().trim() === key && x.sheets_aba
+  );
+  return sibling ? { ...c, sheets_aba: sibling.sheets_aba } : c;
+}
+
 function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteComMetricas[] {
   const idAliases = buildClienteIdAliasMap(rawClientes);
   const clientesDedup = dedupClientesByNome(rawClientes);
   return clientesDedup.map((c) => {
+    const enriched = inheritSheetsAba(c, rawClientes);
     const tCliente = dedupTarefasMerged(
-      rawTarefas.filter((t) => tarefaBelongsToCliente(t, c, idAliases))
+      rawTarefas.filter((t) => tarefaBelongsToCliente(t, enriched, idAliases))
     );
-    return recalcClienteMetrics({ ...c, tarefas: tCliente } as ClienteComMetricas, tCliente);
+    return recalcClienteMetrics({ ...enriched, tarefas: tCliente } as ClienteComMetricas, tCliente);
   });
 }
 
@@ -988,9 +1001,8 @@ export default function PipelinePage() {
 
   async function handleUpdateTarefa(tarefa: Tarefa, updates: EditForm): Promise<void> {
     setClientes((prev) =>
-      prev.map((c) => ({
-        ...c,
-        tarefas: c.tarefas.map((t) =>
+      prev.map((c) => {
+        const tCliente = c.tarefas.map((t) =>
           t.id === tarefa.id
             ? {
                 ...t,
@@ -1001,8 +1013,11 @@ export default function PipelinePage() {
                 observacoes: updates.observacoes || null,
               }
             : t
-        ),
-      }))
+        );
+        return c.tarefas.some((t) => t.id === tarefa.id)
+          ? recalcClienteMetrics({ ...c, tarefas: tCliente }, tCliente)
+          : c;
+      })
     );
 
     try {
@@ -1025,6 +1040,7 @@ export default function PipelinePage() {
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao atualizar");
       toast.success("Tarefa atualizada na planilha");
+      await invalidatePipeline();
     } catch (err) {
       setClientes((prev) =>
         prev.map((c) => ({

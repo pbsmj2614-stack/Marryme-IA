@@ -19,6 +19,7 @@ import {
   collectAbaCandidates,
   resolveSheetsAba,
 } from "@/lib/sheets-aba-resolve";
+import { clienteIdsForTarefas } from "@/lib/client-utils";
 
 export interface ImportResult {
   clientes: number;
@@ -131,10 +132,6 @@ function encontrarAba(
   return porNomeTodas ?? null;
 }
 
-function clienteIdFromAba(sheetsAba: string, fallbackId: string): string {
-  return getAbaIdPrefixFromTitle(sheetsAba) ?? normalizeMmId(fallbackId) ?? fallbackId;
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function importarPlanilha(
@@ -209,8 +206,10 @@ export async function importarPlanilha(
     .eq("check_feito", true);
   const checksSet = new Set(
     (checksExistentes ?? []).map(
-      (t: { cliente_id: string; o_que: string; prazo: string | null; etapa: string | null }) =>
-        `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`
+      (t: { cliente_id: string; o_que: string; prazo: string | null; etapa: string | null }) => {
+        const idNorm = normalizeMmId(t.cliente_id) ?? t.cliente_id;
+        return `${idNorm}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
+      }
     )
   );
 
@@ -250,7 +249,7 @@ export async function importarPlanilha(
   // ── 4. Monta payload final com sheets_aba reconciliada ──
   const clientesPayload = clientesPreliminar.map(({ raw: c, id_cliente, abaEncontrada }) => {
     const existente = existingSheetsAba.get(id_cliente);
-    const sheets_aba = resolveSheetsAba(
+    const resolved = resolveSheetsAba(
       id_cliente,
       abaEncontrada,
       existente,
@@ -258,6 +257,10 @@ export async function importarPlanilha(
       abasClientes,
       todasTarefasLote
     );
+    // Não zera sheets_aba no upsert se resolve falhou mas aba anterior ainda existe
+    const sheets_aba =
+      resolved ??
+      (existente && todasAbas.includes(existente) ? existente : null);
     if (!sheets_aba) semAbas.push(`${id_cliente} (${c.nome_empresa})`);
     return {
       id_cliente,
@@ -341,12 +344,22 @@ export async function importarPlanilha(
       continue;
     }
 
-    const taskClienteId = clienteIdFromAba(cliente.sheets_aba, cliente.id_cliente);
+    const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
+    const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
+
+    // Consolida tarefas gravadas com prefixo de aba divergente no ID canônico do cadastro
+    for (const altId of idsRelacionados) {
+      if (altId === taskClienteId) continue;
+      await supabase
+        .from("mm_tarefas")
+        .update({ cliente_id: taskClienteId, atualizado_em: new Date().toISOString() })
+        .eq("cliente_id", altId);
+    }
 
     const { error: errDelete } = await supabase
       .from("mm_tarefas")
       .delete()
-      .eq("cliente_id", taskClienteId);
+      .in("cliente_id", idsRelacionados);
 
     if (errDelete) {
       erros.push(
@@ -401,7 +414,10 @@ export async function importarPlanilha(
           o_que: string;
           prazo: string | null;
           etapa: string | null;
-        }) => checksSet.has(`${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`)
+        }) => {
+          const idNorm = normalizeMmId(t.cliente_id) ?? t.cliente_id;
+          return checksSet.has(`${idNorm}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`);
+        }
       )
       .map((t: { id: string }) => t.id);
 

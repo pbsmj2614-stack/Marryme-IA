@@ -527,8 +527,9 @@ export default function DailyPage() {
     const list = tarefasComCliente.filter((t) => isAtrasado(t) && matchesResp(t));
     const grupos: Record<string, { cliente: Cliente; tarefas: TarefaComCliente[] }> = {};
     list.forEach((t) => {
-      if (!grupos[t.cliente_id]) grupos[t.cliente_id] = { cliente: t.cliente, tarefas: [] };
-      grupos[t.cliente_id].tarefas.push(t);
+      const k = t.cliente.id_cliente;
+      if (!grupos[k]) grupos[k] = { cliente: t.cliente, tarefas: [] };
+      grupos[k].tarefas.push(t);
     });
     return Object.values(grupos).sort((a, b) => b.tarefas.length - a.tarefas.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -581,7 +582,7 @@ export default function DailyPage() {
       return clientes
         .filter((c) => isAtivo(c.status) && (!q || c.nome_empresa.toLowerCase().includes(q)))
         .map((c) => {
-          const t = tarefasComCliente.filter((t) => t.cliente_id === c.id_cliente);
+          const t = tarefasComCliente.filter((t) => t.cliente.id_cliente === c.id_cliente);
           const fin = t.filter(isFinalizado).length;
           const atr = t.filter(isAtrasado).length;
           const totalAtivo = t.filter((t) => t.status !== "Cancelado").length;
