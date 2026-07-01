@@ -189,7 +189,7 @@ export async function appendCadastroRow(params: AppendCadastroParams): Promise<v
 /** Prefixo MM### da aba (ex: MM051_Nome → MM051). */
 export function getAbaIdPrefixFromTitle(sheetsAba: string | null | undefined): string | null {
   if (!sheetsAba) return null;
-  const m = sheetsAba.match(/^(MM\d+)/i);
+  const m = sheetsAba.trim().match(/^MM[\s_-]*(\d{1,4})/i);
   if (!m) return null;
-  return normalizeMmId(m[0]);
+  return normalizeMmId(`MM${m[1]}`);
 }

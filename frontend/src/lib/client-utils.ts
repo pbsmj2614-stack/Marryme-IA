@@ -106,8 +106,8 @@ export function buildClienteLookupMap<T extends { nome_empresa: string; id_clien
 /** Prefixo MM### extraído do nome da aba (ex: MM039_Nome → MM039). */
 export function getAbaIdPrefix(sheetsAba: string | null | undefined): string | null {
   if (!sheetsAba) return null;
-  const m = sheetsAba.match(/^(MM\d+)/i);
-  return m ? normalizeMmId(m[0]) : null;
+  const m = sheetsAba.trim().match(/^MM[\s_-]*(\d{1,4})/i);
+  return m ? normalizeMmId(`MM${m[1]}`) : null;
 }
 
 /** IDs de cliente_id a consultar no Supabase (inclui prefixo da aba quando diferente). */

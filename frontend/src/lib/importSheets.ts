@@ -26,8 +26,6 @@ import { clienteIdsForTarefas } from "@/lib/client-utils";
 
 /** Cohort MM044+ — fetch direto da aba (não confia no batch lote). */
 export const MM_COHORT_DIRECT_MIN = 44;
-/** Segunda passada automática pós-import — cohort MM044+ (fetch direto). */
-export const MM_COHORT_RESYNC_MIN = MM_COHORT_DIRECT_MIN;
 const COHORT_FETCH_DELAY_MS = 280;
 
 function cohortFetchDelay(fromNum: number, idCliente: string): Promise<void> {
@@ -415,13 +413,19 @@ export async function resyncTarefasCohort(
   supabase: SupabaseClient,
   fromNum: number,
   shared?: { erros?: string[]; semTarefas?: string[] }
-): Promise<{ clientes: number; tarefas: number; semTarefas: string[]; erros: string[] }> {
+): Promise<{
+  clientes: number;
+  abas: number;
+  tarefas: number;
+  semTarefas: string[];
+  erros: string[];
+}> {
   const erros = shared?.erros ?? [];
   const semTarefasOut: string[] = [];
   let totalTarefas = 0;
 
   const todasAbas = await fetchTodasAbas();
-  const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
+  const abasClientes = todasAbas.filter((a) => getAbaIdPrefixFromTitle(a));
 
   const { data: clientesDb, error: errDb } = await supabase
     .from("mm_clientes")
@@ -437,6 +441,18 @@ export async function resyncTarefasCohort(
       nome_empresa: c.nome_empresa,
       sheets_aba: c.sheets_aba as string | null,
     }));
+  const syncedIds = new Set<string>();
+  const abasCohort = abasClientes
+    .map((aba) => ({ aba, id_cliente: getAbaIdPrefixFromTitle(aba) }))
+    .filter((a): a is { aba: string; id_cliente: string } => {
+      if (!a.id_cliente) return false;
+      return extractMmNum(a.id_cliente) >= fromNum;
+    })
+    .sort((a, b) => extractMmNum(a.id_cliente) - extractMmNum(b.id_cliente));
+  const abasById = new Map<string, string[]>();
+  for (const item of abasCohort) {
+    abasById.set(item.id_cliente, [...(abasById.get(item.id_cliente) ?? []), item.aba]);
+  }
 
   const lote: Record<string, import("@/lib/sheets").TarefaSheet[]> = {};
 
@@ -444,40 +460,19 @@ export async function resyncTarefasCohort(
     const c = cohort[i];
     if (i > 0) await cohortFetchDelay(fromNum, c.id_cliente);
 
-    const abaEncontrada = encontrarAba(abasClientes, c.id_cliente, c.nome_empresa, todasAbas);
-    const abaBase =
-      (c.sheets_aba && todasAbas.includes(c.sheets_aba) && abaPrefixOk(c.sheets_aba, c.id_cliente)
-        ? c.sheets_aba
-        : null) ??
-      abaEncontrada;
-    if (!abaBase || !abaPrefixOk(abaBase, c.id_cliente)) {
+    const abasTry = abasById.get(c.id_cliente) ?? [];
+    if (abasTry.length === 0) {
       semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
       continue;
     }
 
     const cliente = {
       id_cliente: c.id_cliente,
-      sheets_aba: abaBase,
+      sheets_aba: abasTry[0],
       nome_empresa: c.nome_empresa,
     };
 
-    const abasTry = expandAbaCandidates(
-      c.id_cliente,
-      c.nome_empresa,
-      abaBase,
-      collectAbaCandidates(
-        c.id_cliente,
-        abaEncontrada,
-        abaBase,
-        todasAbas,
-        abasClientes,
-        c.nome_empresa
-      ),
-      abasClientes,
-      todasAbas
-    );
-
-    const { tarefas, synced } = await syncClienteTarefasFromAbas(
+    const { bestAba, tarefas, synced } = await syncClienteTarefasFromAbas(
       supabase,
       cliente,
       abasTry,
@@ -488,6 +483,15 @@ export async function resyncTarefasCohort(
     if (tarefas.length === 0) {
       semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
       continue;
+    }
+
+    syncedIds.add(c.id_cliente);
+
+    if (c.sheets_aba !== bestAba) {
+      await supabase
+        .from("mm_clientes")
+        .update({ sheets_aba: bestAba, atualizado_em: new Date().toISOString() })
+        .eq("id_cliente", c.id_cliente);
     }
 
     if (synced?.skipped) {
@@ -503,6 +507,19 @@ export async function resyncTarefasCohort(
     }
   }
 
+  for (const c of cohort) {
+    if (syncedIds.has(c.id_cliente)) continue;
+    if (!semTarefasOut.some((s) => s.startsWith(`${c.id_cliente} (`))) {
+      semTarefasOut.push(`${c.id_cliente} (${c.nome_empresa})`);
+    }
+  }
+
+  for (const item of abasCohort) {
+    if (!cohort.some((c) => c.id_cliente === item.id_cliente)) {
+      erros.push(`${item.id_cliente}: aba existe no Sheets, mas cliente não existe no cadastro`);
+    }
+  }
+
   if (shared?.semTarefas) {
     for (const s of semTarefasOut) {
       if (!shared.semTarefas.some((x) => x.startsWith(s.split(" (")[0] + " ("))) {
@@ -511,7 +528,13 @@ export async function resyncTarefasCohort(
     }
   }
 
-  return { clientes: cohort.length, tarefas: totalTarefas, semTarefas: semTarefasOut, erros };
+  return {
+    clientes: cohort.length,
+    abas: abasCohort.length,
+    tarefas: totalTarefas,
+    semTarefas: semTarefasOut,
+    erros,
+  };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -553,8 +576,8 @@ export async function importarPlanilha(
     return vazio();
   }
 
-  // Apenas abas no formato MM039_NomeCliente (ou MM039)
-  const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
+  // Apenas abas de clientes com prefixo MM no título.
+  const abasClientes = todasAbas.filter((a) => getAbaIdPrefixFromTitle(a));
 
   // ── 3a. Snapshots manuais (preservar após sync) ──
 

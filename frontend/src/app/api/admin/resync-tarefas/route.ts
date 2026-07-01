@@ -10,7 +10,7 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { resyncTarefasCohort } from "@/lib/importSheets";
+import { MM_COHORT_DIRECT_MIN, resyncTarefasCohort } from "@/lib/importSheets";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     if (auth.response) return auth.response;
 
     const fromParam = req.nextUrl.searchParams.get("from");
-    const fromNum = fromParam ? parseInt(fromParam, 10) : 51;
+    const fromNum = fromParam ? parseInt(fromParam, 10) : MM_COHORT_DIRECT_MIN;
     if (!Number.isFinite(fromNum) || fromNum < 1) {
       return NextResponse.json({ error: "Parâmetro from inválido" }, { status: 400 });
     }

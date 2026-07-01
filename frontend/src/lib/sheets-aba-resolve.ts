@@ -41,7 +41,7 @@ function normalizeNomeKey(nome: string): string {
 export function abaMatchesNomeEmpresa(aba: string, nomeEmpresa: string): boolean {
   const nomeKey = normalizeNomeKey(nomeEmpresa);
   if (nomeKey.length < 2) return false;
-  const abaSemPrefixo = aba.replace(/^MM\d+[-_\s]*/i, "");
+  const abaSemPrefixo = aba.replace(/^MM[\s_-]*\d{1,4}[-_\s]*/i, "");
   const abaKey = normalizeNomeKey(abaSemPrefixo);
   if (abaKey.length < 3) return false;
   return abaKey.includes(nomeKey) || nomeKey.includes(abaKey);

@@ -119,7 +119,7 @@ export async function POST() {
       })
     ).json()) as { sheets: { properties: { title: string } }[] };
     const todasAbas = (meta.sheets ?? []).map((s) => s.properties.title);
-    const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
+    const abasClientes = todasAbas.filter((a) => getAbaIdPrefixFromTitle(a));
 
     const { data: clientes, error: errC } = await supabase
       .from("mm_clientes")
@@ -176,25 +176,6 @@ export async function POST() {
                 `${idNorm}: sheets_aba ${c.sheets_aba ?? "(null)"} → ${abaIdeal} (${taskCount} tarefas)`
               );
           }
-        }
-      }
-
-      const prefixoAtual = getAbaIdPrefixFromTitle(c.sheets_aba);
-      if (prefixoAtual && prefixoAtual !== idNorm) {
-        const { data: tarefasOrfa } = await supabase
-          .from("mm_tarefas")
-          .select("id")
-          .eq("cliente_id", prefixoAtual);
-        if ((tarefasOrfa ?? []).length > 0) {
-          const { error: errT } = await supabase
-            .from("mm_tarefas")
-            .update({ cliente_id: idNorm, atualizado_em: new Date().toISOString() })
-            .eq("cliente_id", prefixoAtual);
-          if (errT) erros.push(`${idNorm}: falha ao migrar tarefas de ${prefixoAtual}`);
-          else
-            reparados.push(
-              `${idNorm}: ${tarefasOrfa!.length} tarefa(s) migradas de ${prefixoAtual}`
-            );
         }
       }
 
