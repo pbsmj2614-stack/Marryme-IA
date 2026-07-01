@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import Header from "@/components/Header";
 import { importarPlanilha } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
-import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome } from "@/lib/client-utils";
+import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome, buildClienteIdAliasMap, tarefaBelongsToCliente } from "@/lib/client-utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
@@ -372,6 +372,7 @@ export default function DailyPage() {
     setDailyBusca: setBusca,
   } = useUIStore();
 
+  const [rawClientes, setRawClientes] = useState<Cliente[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const loading = userLoading || dataLoading;
@@ -392,7 +393,9 @@ export default function DailyPage() {
 
   useEffect(() => {
     if (rawData) {
-      setClientes(dedupClientesByNome(rawData.clientes as Cliente[]));
+      const allClientes = rawData.clientes as Cliente[];
+      setRawClientes(allClientes);
+      setClientes(dedupClientesByNome(allClientes));
       setTarefas(rawData.tarefas as Tarefa[]);
     }
   }, [rawData]);
@@ -464,14 +467,6 @@ export default function DailyPage() {
     }
   }
 
-  const clienteMap = useMemo(() => {
-    const m: Record<string, Cliente> = {};
-    clientes.forEach((c) => {
-      m[c.id_cliente] = c;
-    });
-    return m;
-  }, [clientes]);
-
   const isAtivo = isStatusAtivo;
   const isFinalizado = (t: Tarefa) => t.check_feito || t.status === "Finalizado";
   const isAtrasado = (t: Tarefa) =>
@@ -490,18 +485,22 @@ export default function DailyPage() {
     filtroResp === "Todos" || (t.quem ?? "").trim().toLowerCase() === filtroResp.toLowerCase();
 
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() => {
+    const idAliases = buildClienteIdAliasMap(rawClientes);
+    const clientesAtivos = dedupClientesByNome(rawClientes).filter((c) =>
+      isStatusAtivo(c.status)
+    );
     const seen = new Set<string>();
     const result: TarefaComCliente[] = [];
     for (const t of tarefas) {
-      if (!clienteMap[t.cliente_id]) continue;
-      if (/paus|encerr/i.test(clienteMap[t.cliente_id].status ?? "")) continue;
-      const key = `${t.cliente_id}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
+      const cliente = clientesAtivos.find((c) => tarefaBelongsToCliente(t, c, idAliases));
+      if (!cliente) continue;
+      const key = `${cliente.id_cliente}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      result.push({ ...t, cliente: clienteMap[t.cliente_id] });
+      result.push({ ...t, cliente });
     }
     return result;
-  }, [tarefas, clienteMap]);
+  }, [tarefas, rawClientes]);
 
   const currentUserName = useMemo(() => {
     if (!user?.email) return null;

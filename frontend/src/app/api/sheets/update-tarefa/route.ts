@@ -166,7 +166,8 @@ export async function POST(req: NextRequest) {
       const etapaOrigNorm = etapa_original ? etapa_original.trim().toLowerCase() : null;
 
       let rowIndex = -1;
-      for (let i = 0; i < rows.length; i++) {
+      // Busca de baixo para cima — prioriza a linha mais recente (evita match em tarefa antiga duplicada)
+      for (let i = rows.length - 1; i >= 0; i--) {
         const row = rows[i] ?? [];
         const rowOQue = (row[2] ?? "").trim().toLowerCase();
         if (rowOQue !== oQueNorm) continue;
@@ -182,6 +183,17 @@ export async function POST(req: NextRequest) {
 
         rowIndex = i;
         break;
+      }
+
+      // Fallback: só o_que (quando etapa/prazo mudaram ou estavam vazios na criação)
+      if (rowIndex < 0 && oQueNorm) {
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const row = rows[i] ?? [];
+          if ((row[2] ?? "").trim().toLowerCase() === oQueNorm) {
+            rowIndex = i;
+            break;
+          }
+        }
       }
 
       const buildRow = (existing: string[]) => [

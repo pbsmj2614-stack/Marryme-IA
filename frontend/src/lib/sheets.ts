@@ -235,7 +235,8 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
     }
   }
 
-  const dataRows = headerRowIdx >= 0 ? values.slice(headerRowIdx + 1) : values.slice(1);
+  // Sem cabeçalho detectado: inclui desde a linha 0 (não descarta a primeira tarefa).
+  const dataRows = headerRowIdx >= 0 ? values.slice(headerRowIdx + 1) : values;
 
   function tcol(r: string[], pos: number, ...names: string[]): string {
     for (const name of names) {
@@ -276,16 +277,20 @@ function parseTarefasValues(values: string[][]): TarefaSheet[] {
   const statusColIdx = detectStatusCol();
 
   return dataRows
-    .map((r) => ({
-      check_feito: getCheck(r),
-      etapa: tcol(r, 1, "etapa"),
-      o_que: tcol(r, 2, "o_que", "tarefa", "descricao", "atividade"),
-      tipo: tcol(r, 3, "tipo"),
-      quem: tcol(r, 4, "quem", "responsavel", "responsavel_tarefa"),
-      prazo: tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega"),
-      status: r[statusColIdx]?.trim() || "Não iniciado",
-      observacoes: tcol(r, 7, "observacoes", "observacao", "obs"),
-    }))
+    .map((r) => {
+      const oQueFromMap = tcol(r, 2, "o_que", "tarefa", "descricao", "atividade");
+      const oQue = oQueFromMap || r[2]?.trim() || "";
+      return {
+        check_feito: getCheck(r),
+        etapa: tcol(r, 1, "etapa") || r[1]?.trim() || "",
+        o_que: oQue,
+        tipo: tcol(r, 3, "tipo") || r[3]?.trim() || "",
+        quem: tcol(r, 4, "quem", "responsavel", "responsavel_tarefa") || r[4]?.trim() || "",
+        prazo: tcol(r, 5, "prazo", "data_prazo", "data_entrega", "prazo_entrega") || r[5]?.trim() || "",
+        status: r[statusColIdx]?.trim() || "Não iniciado",
+        observacoes: tcol(r, 7, "observacoes", "observacao", "obs") || r[7]?.trim() || "",
+      };
+    })
     .filter((t) => t.o_que !== "");
 }
 

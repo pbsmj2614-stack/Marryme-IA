@@ -12,7 +12,9 @@ import {
   planoBadgeClass,
   planoLabel,
   dedupClientesByNome,
-  dedupTarefas,
+  dedupTarefasMerged,
+  buildClienteIdAliasMap,
+  tarefaBelongsToCliente,
 } from "@/lib/client-utils";
 import { RESPONSAVEIS as RESPONSAVEIS_BASE } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -670,10 +672,12 @@ function recalcClienteMetrics(c: ClienteComMetricas, tCliente: Tarefa[]): Client
 }
 
 function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteComMetricas[] {
-  const tarefas = dedupTarefas(rawTarefas);
+  const idAliases = buildClienteIdAliasMap(rawClientes);
   const clientesDedup = dedupClientesByNome(rawClientes);
   return clientesDedup.map((c) => {
-    const tCliente = tarefas.filter((t) => t.cliente_id === c.id_cliente);
+    const tCliente = dedupTarefasMerged(
+      rawTarefas.filter((t) => tarefaBelongsToCliente(t, c, idAliases))
+    );
     return recalcClienteMetrics({ ...c, tarefas: tCliente } as ClienteComMetricas, tCliente);
   });
 }
@@ -1076,7 +1080,7 @@ export default function PipelinePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_cliente: idCliente, ...addTarefaForm }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = (await res.json()) as { ok?: boolean; error?: string; warning?: string };
       if (!res.ok || !data.ok) {
         if (res.status === 422) {
           throw new Error(
@@ -1085,7 +1089,11 @@ export default function PipelinePage() {
         }
         throw new Error(data.error ?? "Erro ao salvar");
       }
-      toast.success("Tarefa adicionada na planilha e no sistema");
+      if (data.warning) {
+        toast.warning(data.warning, { duration: 12000 });
+      } else {
+        toast.success("Tarefa adicionada na planilha e no sistema");
+      }
       setAddTarefaFor(null);
       setAddTarefaForm({
         etapa: "",

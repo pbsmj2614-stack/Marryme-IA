@@ -159,7 +159,18 @@ export async function importarPlanilha(): Promise<ImportResult> {
   // Apenas abas no formato MM039_NomeCliente (ou MM039)
   const abasClientes = todasAbas.filter((a) => /^MM\d+/i.test(a.trim()));
 
-  // ── 3a. Snapshots manuais (preservar após delete) ──
+  // ── 3a. Snapshots manuais (preservar após sync) ──
+
+  // Clientes já no Supabase — preservar sheets_aba quando a aba ainda existir
+  const { data: existingClientesData } = await supabase
+    .from("mm_clientes")
+    .select("id_cliente, sheets_aba");
+  const existingSheetsAba = new Map<string, string | null>(
+    (existingClientesData ?? []).map((c: { id_cliente: string; sheets_aba: string | null }) => [
+      c.id_cliente,
+      c.sheets_aba,
+    ])
+  );
 
   // Status manual (Pausado / Encerrado) definido pelo app — prevalece sobre "Ativo" da planilha
   const { data: statusOverrideData } = await supabase
@@ -185,27 +196,12 @@ export async function importarPlanilha(): Promise<ImportResult> {
     )
   );
 
-  // ── 3. Limpa tarefas e clientes antigos ──
-  // Tarefas primeiro (referência a mm_clientes via cliente_id)
-  const { error: errLimparTarefas } = await supabase
-    .from("mm_tarefas")
-    .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000");
-
-  if (errLimparTarefas) {
-    erros.push(`Erro ao limpar tarefas antigas: ${errLimparTarefas.message}`);
-    return vazio();
-  }
-
-  const { error: errLimpar } = await supabase
-    .from("mm_clientes")
-    .delete()
-    .neq("id_cliente", "__never__");
-
-  if (errLimpar) {
-    erros.push(`Erro ao limpar clientes antigos: ${errLimpar.message}`);
-    return vazio();
-  }
+  // ── 3. Monta payload de clientes (merge — não apaga clientes/tarefas fora da planilha) ──
+  const resolveSheetsAba = (idCliente: string, abaEncontrada: string | null): string | null => {
+    const existente = existingSheetsAba.get(idCliente);
+    if (existente && todasAbas.includes(existente)) return existente;
+    return abaEncontrada;
+  };
 
   // ── 4. Monta payload de clientes ──
   const clientesPayload = clientesSheet.map((c) => {
@@ -229,45 +225,44 @@ export async function importarPlanilha(): Promise<ImportResult> {
       })(),
       responsavel_mm: c.responsavel_mm || null,
       observacoes: c.observacoes || null,
-      sheets_aba: aba,
+      sheets_aba: resolveSheetsAba(c.id_cliente, aba),
       atualizado_em: new Date().toISOString(),
     };
   });
 
-  // ── 4b. Desduplicar por nome_empresa (mantém o menor ID MM) ──
-  // Evita duplicatas quando a planilha tem a mesma empresa com IDs diferentes
-  const seenNomes = new Map<string, (typeof clientesPayload)[0]>();
+  // ── 4b. Aviso sobre duplicatas por nome (UI deduplica; import mantém todos os IDs) ──
+  const seenNomes = new Map<string, string>();
   for (const c of clientesPayload) {
     const key = c.nome_empresa.toLowerCase().trim();
-    const existing = seenNomes.get(key);
-    if (!existing) {
-      seenNomes.set(key, c);
+    const existingId = seenNomes.get(key);
+    if (!existingId) {
+      seenNomes.set(key, c.id_cliente);
     } else {
-      const existNum = parseInt(existing.id_cliente.replace(/^MM/i, ""), 10) || 999999;
+      const existNum = parseInt(existingId.replace(/^MM/i, ""), 10) || 999999;
       const newNum = parseInt(c.id_cliente.replace(/^MM/i, ""), 10) || 999999;
-      if (newNum < existNum) seenNomes.set(key, c); // mantém o ID mais antigo (menor número)
+      if (newNum < existNum) seenNomes.set(key, c.id_cliente);
     }
   }
-  const clientesPayloadDedup = Array.from(seenNomes.values());
-
-  const duplicatasRemovidas = clientesPayload.length - clientesPayloadDedup.length;
-  if (duplicatasRemovidas > 0) {
+  const duplicatasNomes = clientesPayload.length - seenNomes.size;
+  if (duplicatasNomes > 0) {
     erros.push(
-      `Aviso: ${duplicatasRemovidas} entrada(s) duplicada(s) por nome_empresa removida(s) da importação (mantido o menor ID).`
+      `Aviso: ${duplicatasNomes} empresa(s) com mais de um ID MM no cadastro (exibido o menor ID no app).`
     );
   }
 
-  // ── 5. Insere clientes frescos ──
-  const { error: errClientes } = await supabase.from("mm_clientes").insert(clientesPayloadDedup);
+  // ── 5. Upsert TODOS os clientes da planilha (não descarta IDs duplicados por nome) ──
+  const { error: errClientes } = await supabase
+    .from("mm_clientes")
+    .upsert(clientesPayload, { onConflict: "id_cliente" });
 
   if (errClientes) {
     erros.push(`Erro ao salvar clientes: ${errClientes.message}`);
     return vazio();
   }
-  totalClientes = clientesPayloadDedup.length;
+  totalClientes = clientesPayload.length;
 
-  // ── 6. Busca TODAS as tarefas em batchGet ──
-  const abasComCliente = clientesPayloadDedup
+  // ── 6. Busca TODAS as tarefas em batchGet (todos os IDs com aba) ──
+  const abasComCliente = clientesPayload
     .filter((c) => c.sheets_aba)
     .map((c) => ({
       id_cliente: c.id_cliente,
@@ -282,12 +277,35 @@ export async function importarPlanilha(): Promise<ImportResult> {
     erros.push(`Erro ao buscar tarefas (batchGet): ${String(err)}`);
   }
 
-  // ── 7. Monta e insere tarefas ──
+  // ── 7. Sincroniza tarefas por cliente (substitui só quando a planilha retornou linhas) ──
   for (const cliente of abasComCliente) {
-    const tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
+    let tarefas = todasTarefasLote[cliente.sheets_aba] ?? [];
+
+    // Fallback individual se batchGet retornou vazio (aba pode ter falhado no lote)
+    if (tarefas.length === 0) {
+      try {
+        const { fetchTarefasCliente } = await import("@/lib/sheets");
+        tarefas = await fetchTarefasCliente(cliente.sheets_aba);
+      } catch {
+        // mantém vazio — não apaga tarefas existentes no Supabase
+      }
+    }
 
     if (tarefas.length === 0) {
       semTarefas.push(`${cliente.id_cliente} (${cliente.nome_empresa})`);
+      // Não apaga tarefas existentes — evita perda quando batchGet falha ou parse retorna vazio
+      continue;
+    }
+
+    const { error: errDelete } = await supabase
+      .from("mm_tarefas")
+      .delete()
+      .eq("cliente_id", cliente.id_cliente);
+
+    if (errDelete) {
+      erros.push(
+        `Erro ao limpar tarefas de ${cliente.nome_empresa}: ${errDelete.message}`
+      );
       continue;
     }
 

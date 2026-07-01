@@ -70,6 +70,74 @@ export function dedupClientesByNome<T extends { nome_empresa: string; id_cliente
   return Array.from(seen.values());
 }
 
+/** Mapeia cada id_cliente (incl. duplicatas por nome) para o id canônico (menor MM). */
+export function buildClienteIdAliasMap<T extends { nome_empresa: string; id_cliente: string }>(
+  clientes: T[]
+): Map<string, string> {
+  const canonical = dedupClientesByNome(clientes);
+  const canonicalIdByNome = new Map(
+    canonical.map((c) => [c.nome_empresa.toLowerCase().trim(), c.id_cliente])
+  );
+  const aliases = new Map<string, string>();
+  for (const c of clientes) {
+    aliases.set(
+      c.id_cliente,
+      canonicalIdByNome.get(c.nome_empresa.toLowerCase().trim()) ?? c.id_cliente
+    );
+  }
+  return aliases;
+}
+
+/** Mapa id_cliente → cliente canônico (para Daily/Pipeline com duplicatas por nome). */
+export function buildClienteLookupMap<T extends { nome_empresa: string; id_cliente: string }>(
+  clientes: T[]
+): Map<string, T> {
+  const canonical = dedupClientesByNome(clientes);
+  const byNome = new Map(canonical.map((c) => [c.nome_empresa.toLowerCase().trim(), c]));
+  const lookup = new Map<string, T>();
+  for (const c of clientes) {
+    lookup.set(c.id_cliente, byNome.get(c.nome_empresa.toLowerCase().trim()) ?? c);
+  }
+  return lookup;
+}
+
+/** Prefixo MM### extraído do nome da aba (ex: MM039_Nome → MM039). */
+export function getAbaIdPrefix(sheetsAba: string | null | undefined): string | null {
+  if (!sheetsAba) return null;
+  return sheetsAba.match(/^(MM\d+)/i)?.[1]?.toUpperCase() ?? null;
+}
+
+/** IDs de cliente_id a consultar no Supabase (inclui prefixo da aba quando diferente). */
+export function clienteIdsForTarefas(
+  idCliente: string,
+  sheetsAba: string | null | undefined
+): string[] {
+  const ids = new Set<string>([idCliente]);
+  const prefix = getAbaIdPrefix(sheetsAba);
+  if (prefix) ids.add(prefix);
+  return Array.from(ids);
+}
+
+/**
+ * Verifica se uma tarefa pertence a um cliente (considera alias por nome e prefixo da aba).
+ * Ex: tarefa com cliente_id MM045 aparece no cliente cuja sheets_aba é MM045_Nome.
+ */
+export function tarefaBelongsToCliente<
+  T extends { cliente_id: string },
+  C extends { id_cliente: string; sheets_aba?: string | null },
+>(tarefa: T, cliente: C, idAliases: Map<string, string>): boolean {
+  const tId = tarefa.cliente_id.toUpperCase().trim();
+  const cId = cliente.id_cliente.toUpperCase().trim();
+  const canonical = (idAliases.get(tarefa.cliente_id) ?? tarefa.cliente_id).toUpperCase().trim();
+
+  if (canonical === cId || tId === cId) return true;
+
+  const abaPrefix = getAbaIdPrefix(cliente.sheets_aba);
+  if (abaPrefix && abaPrefix === tId) return true;
+
+  return false;
+}
+
 /** Remove tarefas duplicadas por combinação de cliente + tarefa + prazo + etapa. */
 export function dedupTarefas<
   T extends {
@@ -82,6 +150,19 @@ export function dedupTarefas<
   const seen = new Set<string>();
   return tarefas.filter((t) => {
     const key = `${t.cliente_id}|${t.o_que.trim().toLowerCase()}|${t.prazo ?? ""}|${(t.etapa ?? "").trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Dedup de tarefas já agrupadas no mesmo cliente (ignora cliente_id na chave). */
+export function dedupTarefasMerged<
+  T extends { o_que: string; prazo: string | null; etapa: string | null },
+>(tarefas: T[]): T[] {
+  const seen = new Set<string>();
+  return tarefas.filter((t) => {
+    const key = `${t.o_que.trim().toLowerCase()}|${t.prazo ?? ""}|${(t.etapa ?? "").trim().toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

@@ -128,12 +128,8 @@ export async function POST(req: NextRequest) {
       observacoes?.trim() ?? "",
     ];
 
-    // ── 3. Append no Sheets ──
-    const token = await googleToken();
-    await sAppend(token, `${cliente.sheets_aba}!A:H`, [novaLinha]);
-
-    // ── 4. Insert no Supabase ──
-    const prazoISO = prazo || null; // já vem como YYYY-MM-DD do form HTML date
+    // ── 3. Insert no Supabase primeiro (fonte imediata no app) ──
+    const prazoISO = prazo || null;
     const statusFinal = status?.trim() || "Não iniciado";
 
     const { data: novaTarefa, error: errInsert } = await supabase
@@ -154,16 +150,21 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (errInsert) {
-      console.error(
-        "[add-tarefa] Inconsistência: linha adicionada no Sheets mas falhou no Supabase",
-        errInsert.message
-      );
-      throw new Error(
-        `Tarefa salva na planilha, mas falhou no sistema: ${errInsert.message}. Sincronize Sheets para corrigir.`
-      );
+      throw new Error(`Falha ao salvar tarefa no sistema: ${errInsert.message}`);
     }
 
-    return NextResponse.json({ ok: true, tarefa: novaTarefa });
+    // ── 4. Append no Sheets ──
+    let sheetWarning: string | undefined;
+    try {
+      const token = await googleToken();
+      await sAppend(token, `${cliente.sheets_aba}!A:H`, [novaLinha]);
+    } catch (sheetErr) {
+      const sheetMsg = sheetErr instanceof Error ? sheetErr.message : String(sheetErr);
+      console.error("[add-tarefa] Tarefa salva no Supabase, falhou no Sheets:", sheetMsg);
+      sheetWarning = `Tarefa salva no sistema, mas falhou na planilha: ${sheetMsg}`;
+    }
+
+    return NextResponse.json({ ok: true, tarefa: novaTarefa, warning: sheetWarning });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[add-tarefa]", msg);

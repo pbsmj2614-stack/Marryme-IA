@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { X, ArrowRight, Loader2, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { clienteIdsForTarefas } from "@/lib/client-utils";
 import { getScoreColor, getStatusFromScore } from "@/lib/healthScore";
 import { fmtBRL, fmtPct } from "@/lib/formatters";
 import type { KPIsCampanha } from "@/lib/types";
@@ -200,10 +201,23 @@ export default function PrestadorModal({
     async function fetchData() {
       const supabase = createClient();
 
-      const [tarefasResult, relatorioResult] = await Promise.all([
-        mmId
-          ? supabase.from("mm_tarefas").select("check_feito, status, prazo").eq("cliente_id", mmId)
-          : Promise.resolve({ data: null, error: null }),
+      async function fetchTarefasResumo() {
+        if (!mmId) return null;
+        const { data: clienteMm } = await supabase
+          .from("mm_clientes")
+          .select("sheets_aba")
+          .eq("id_cliente", mmId)
+          .maybeSingle();
+        const ids = clienteIdsForTarefas(mmId, clienteMm?.sheets_aba ?? null);
+        const { data } = await supabase
+          .from("mm_tarefas")
+          .select("check_feito, status, prazo")
+          .in("cliente_id", ids);
+        return data;
+      }
+
+      const [tarefasData, relatorioResult] = await Promise.all([
+        fetchTarefasResumo(),
         supabase
           .from("relatorios_campanha")
           .select("health_score, gerado_em, dados_json")
@@ -213,9 +227,9 @@ export default function PrestadorModal({
           .maybeSingle(),
       ]);
 
-      if (tarefasResult.data) {
+      if (tarefasData) {
         const hoje = new Date().toISOString().split("T")[0];
-        const list = tarefasResult.data as {
+        const list = tarefasData as {
           check_feito: boolean;
           status: string;
           prazo: string | null;
