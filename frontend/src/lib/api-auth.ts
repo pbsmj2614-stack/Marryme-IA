@@ -1,8 +1,8 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
-import type { UserRole } from "@/hooks/useRole";
-import { hasMinRole } from "@/hooks/useRole";
+import type { UserRole } from "@/lib/roles";
+import { hasMinRole } from "@/lib/roles";
 import { isSuperAdminEmail } from "@/lib/constants";
 
 export async function getAuthUser() {

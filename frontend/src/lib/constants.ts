@@ -1,6 +1,6 @@
 /** Constantes compartilhadas entre páginas e componentes. */
 
-import type { UserRole } from "@/hooks/useRole";
+import type { UserRole } from "@/lib/roles";
 
 // ─── Equipe ───────────────────────────────────────────────────────────────────
 
