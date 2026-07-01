@@ -77,9 +77,35 @@ export interface PipelineRaw {
   tarefas: TarefaRow[];
 }
 
+const TAREFAS_PAGE_SIZE = 1000;
+const TAREFAS_SELECT = "id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes";
+
+async function fetchAllPipelineTarefas(): Promise<TarefaRow[]> {
+  const supabase = createClient();
+  const all: TarefaRow[] = [];
+
+  for (let from = 0; ; from += TAREFAS_PAGE_SIZE) {
+    const to = from + TAREFAS_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("mm_tarefas")
+      .select(TAREFAS_SELECT)
+      .order("cliente_id", { ascending: true })
+      .order("prazo", { ascending: true, nullsFirst: false })
+      .range(from, to);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as TarefaRow[];
+    all.push(...page);
+    if (page.length < TAREFAS_PAGE_SIZE) break;
+  }
+
+  return all;
+}
+
 export async function fetchPipelineRaw(): Promise<PipelineRaw> {
   const supabase = createClient();
-  const [{ data: clientes, error: e1 }, { data: tarefas, error: e2 }] = await Promise.all([
+  const [{ data: clientes, error: e1 }, tarefas] = await Promise.all([
     supabase
       .from("mm_clientes")
       .select(
@@ -87,16 +113,12 @@ export async function fetchPipelineRaw(): Promise<PipelineRaw> {
       )
       .order("id_cliente")
       .limit(1000),
-    supabase
-      .from("mm_tarefas")
-      .select("id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes")
-      .limit(5000),
+    fetchAllPipelineTarefas(),
   ]);
   if (e1) throw new Error(e1.message);
-  if (e2) throw new Error(e2.message);
   return {
     clientes: (clientes ?? []) as ClienteRow[],
-    tarefas: (tarefas ?? []) as TarefaRow[],
+    tarefas,
   };
 }
 
