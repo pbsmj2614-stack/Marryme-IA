@@ -293,6 +293,29 @@ function readCell(row: string[], col: number): string {
   return cleanCell(row[col]);
 }
 
+export function normalizeTaskText(value: string | null | undefined): string {
+  return cleanCell(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+export function normalizeTaskDateToISO(value: string | null | undefined): string | null {
+  const s = cleanCell(value);
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
+  if (!br) return null;
+
+  const day = br[1].padStart(2, "0");
+  const month = br[2].padStart(2, "0");
+  const year =
+    br[3].length === 2 ? (parseInt(br[3], 10) < 50 ? `20${br[3]}` : `19${br[3]}`) : br[3];
+  return `${year}-${month}-${day}`;
+}
+
 /** Iguala largura das linhas — a API omite células vazias no fim e às vezes no início. */
 function normalizeSheetGrid(values: string[][]): string[][] {
   if (values.length === 0) return values;
@@ -600,11 +623,46 @@ function pickBestParse(candidates: TarefaSheet[][]): TarefaSheet[] {
   }, [] as TarefaSheet[]);
 }
 
+function layoutSummary(layout: FixedLayoutCols | TaskColumnLayout): Record<string, number | null> {
+  return {
+    dataStartRow: layout.dataStartRow,
+    checkCol: layout.checkCol,
+    etapaCol: layout.etapaCol,
+    oQueCol: layout.oQueCol,
+    tipoCol: layout.tipoCol,
+    quemCol: layout.quemCol,
+    prazoCol: layout.prazoCol,
+    statusCol: layout.statusCol,
+    obsCol: layout.obsCol,
+  };
+}
+
 /** Parse com coluna O que? lendo Tipo (Marry Me) indica layout errado. */
 export function parseLooksSuspicious(tasks: TarefaSheet[]): boolean {
   if (tasks.length === 0) return true;
   const noise = tasks.filter((t) => TIPO_COLUMN_VALUES.has(t.o_que.toLowerCase())).length;
   return noise / tasks.length >= 0.5;
+}
+
+export interface TarefasParseCandidateMeta {
+  source: string;
+  count: number;
+  checks: number;
+  score: number;
+  suspicious: boolean;
+  firstTask: string | null;
+  layout: Record<string, number | null>;
+}
+
+export interface TarefasParseMeta {
+  tasks: TarefaSheet[];
+  headerRowIdx: number;
+  bestSource: string | null;
+  score: number;
+  suspicious: boolean;
+  discarded: boolean;
+  discardReason: string | null;
+  candidates: TarefasParseCandidateMeta[];
 }
 
 /**
@@ -660,18 +718,6 @@ export function formatSheetRange(sheetName: string, a1Suffix: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchSheetsUrl(url: string, retries = 5): Promise<Response> {
-  for (let attempt = 0; attempt < retries; attempt++) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (res.status === 429 && attempt < retries - 1) {
-      await sleep(600 * (attempt + 1));
-      continue;
-    }
-    return res;
-  }
-  throw new Error("Sheets API: falha após retries");
 }
 
 async function fetchSheetValues(aba: string, rangeSuffix: string): Promise<string[][]> {
@@ -838,69 +884,201 @@ export function findTaskRowByOQue(
   etapa?: string | null,
   prazoBR?: string | null
 ): number {
-  const oQueNorm = oQue.trim().toLowerCase();
-  const etapaNorm = etapa?.trim().toLowerCase() ?? null;
+  const oQueNorm = normalizeTaskText(oQue);
+  const etapaNorm = etapa ? normalizeTaskText(etapa) : null;
+  const prazoNorm = normalizeTaskDateToISO(prazoBR);
 
   for (let i = rows.length - 1; i >= layout.dataStartRow; i--) {
     const row = rows[i] ?? [];
-    if (readCell(row, layout.oQueCol).toLowerCase() !== oQueNorm) continue;
-    if (etapaNorm && readCell(row, layout.etapaCol).toLowerCase() !== etapaNorm) continue;
-    if (prazoBR && readCell(row, layout.prazoCol) !== prazoBR) continue;
+    if (normalizeTaskText(readCell(row, layout.oQueCol)) !== oQueNorm) continue;
+    if (etapaNorm && normalizeTaskText(readCell(row, layout.etapaCol)) !== etapaNorm) continue;
+    if (prazoNorm && normalizeTaskDateToISO(readCell(row, layout.prazoCol)) !== prazoNorm) continue;
     return i;
   }
 
   if (oQueNorm) {
     for (let i = rows.length - 1; i >= layout.dataStartRow; i--) {
       const row = rows[i] ?? [];
-      if (readCell(row, layout.oQueCol).toLowerCase() === oQueNorm) return i;
+      if (normalizeTaskText(readCell(row, layout.oQueCol)) === oQueNorm) return i;
     }
   }
   return -1;
 }
 
+export function taskSheetKey(
+  oQue: string,
+  prazo: string | null | undefined,
+  etapa: string | null | undefined
+): string {
+  return `${normalizeTaskText(oQue)}|${normalizeTaskDateToISO(prazo) ?? ""}|${normalizeTaskText(etapa)}`;
+}
+
+export function getDuplicateTaskKeys(tasks: TarefaSheet[]): Array<{ key: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const t of tasks) {
+    const key = taskSheetKey(t.o_que, t.prazo, t.etapa);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([key, count]) => ({ key, count }));
+}
+
 /**
  * Parseia tarefas da aba — prioriza colunas mapeadas pelo cabeçalho (Check / O que?).
  */
-export function parseTarefasValues(values: string[][]): TarefaSheet[] {
-  if (values.length === 0) return [];
+export function parseTarefasValuesWithMeta(values: string[][]): TarefasParseMeta {
+  const empty = (discardReason: string | null = null): TarefasParseMeta => ({
+    tasks: [],
+    headerRowIdx: -1,
+    bestSource: null,
+    score: 0,
+    suspicious: true,
+    discarded: !!discardReason,
+    discardReason,
+    candidates: [],
+  });
+
+  if (values.length === 0) return empty("range_vazio");
 
   const normalized = normalizeSheetGrid(values);
   const aligned = normalizeSheetGrid(alignTaskSheetRows(normalized));
   const { headerRowIdx, hMap } = findTaskHeaderRow(aligned);
 
+  const candidates: Array<{
+    source: string;
+    tasks: TarefaSheet[];
+    layout: FixedLayoutCols | TaskColumnLayout;
+  }> = [];
+
+  function pushCandidate(source: string, layout: FixedLayoutCols | TaskColumnLayout, grid = aligned) {
+    candidates.push({ source, layout, tasks: parseWithLayout(grid, layout) });
+  }
+
   // Cabeçalho com "O que?" → usa colunas exatas (layout padrão B:I / A:I)
   if (headerRowIdx >= 0 && hMap.o_que !== undefined) {
-    const fromHeader = parseWithLayout(aligned, layoutFromHeaderMap(headerRowIdx, hMap));
+    const layout = layoutFromHeaderMap(headerRowIdx, hMap);
+    pushCandidate("header_map", layout);
+    const fromHeader = candidates[candidates.length - 1].tasks;
     if (fromHeader.length > 0 && !parseLooksSuspicious(fromHeader)) {
-      return fromHeader;
+      return {
+        tasks: fromHeader,
+        headerRowIdx,
+        bestSource: "header_map",
+        score: scoreTarefasParse(fromHeader),
+        suspicious: false,
+        discarded: false,
+        discardReason: null,
+        candidates: candidates.map((c) => ({
+          source: c.source,
+          count: c.tasks.length,
+          checks: c.tasks.filter((t) => t.check_feito).length,
+          score: scoreTarefasParse(c.tasks),
+          suspicious: parseLooksSuspicious(c.tasks),
+          firstTask: c.tasks[0]?.o_que ?? null,
+          layout: layoutSummary(c.layout),
+        })),
+      };
     }
   }
 
-  const candidates: TarefaSheet[][] = [
-    parseWithLayout(aligned, layoutFromDetected(aligned)),
-  ];
+  pushCandidate("detected", layoutFromDetected(aligned));
 
   const grids = [aligned];
   if (headerRowIdx >= 0) {
     grids.push(withLeadingPad(aligned, 1, headerRowIdx));
     if (hMap.o_que !== undefined) {
-      candidates.push(
-        parseWithLayout(grids[1], layoutFromHeaderMap(headerRowIdx, hMap))
-      );
+      pushCandidate("header_map_with_pad", layoutFromHeaderMap(headerRowIdx, hMap), grids[1]);
     }
   }
 
-  for (const grid of grids) {
+  for (let idx = 0; idx < grids.length; idx++) {
+    const grid = grids[idx];
     for (const fixed of fixedLayoutCandidates(grid)) {
-      candidates.push(parseWithLayout(grid, fixed));
+      pushCandidate(`fixed_${idx}_${fixed.oQueCol}`, fixed, grid);
     }
-    candidates.push(parseWithInferredLayout(grid));
+    const inferred = parseWithInferredLayout(grid);
+    candidates.push({
+      source: `inferred_${idx}`,
+      tasks: inferred,
+      layout: inferred.length > 0 ? layoutFromDetected(grid) : layoutFromDetected(aligned),
+    });
   }
 
-  const best = pickBestParse(candidates);
-  if (best.length === 0) return [];
-  if (parseLooksSuspicious(best) && best.length < 3) return [];
-  return best;
+  const bestCandidate = candidates.reduce(
+    (best, cur) => (scoreTarefasParse(cur.tasks) > scoreTarefasParse(best.tasks) ? cur : best),
+    { source: "", tasks: [] as TarefaSheet[], layout: layoutFromDetected(aligned) }
+  );
+  const best = bestCandidate.tasks;
+  const suspicious = parseLooksSuspicious(best);
+  const discardReason =
+    best.length === 0 ? "sem_tarefas_parseadas" : suspicious && best.length < 3 ? "parse_suspeito" : null;
+
+  return {
+    tasks: discardReason ? [] : best,
+    headerRowIdx,
+    bestSource: bestCandidate.source || null,
+    score: scoreTarefasParse(best),
+    suspicious,
+    discarded: !!discardReason,
+    discardReason,
+    candidates: candidates.map((c) => ({
+      source: c.source,
+      count: c.tasks.length,
+      checks: c.tasks.filter((t) => t.check_feito).length,
+      score: scoreTarefasParse(c.tasks),
+      suspicious: parseLooksSuspicious(c.tasks),
+      firstTask: c.tasks[0]?.o_que ?? null,
+      layout: layoutSummary(c.layout),
+    })),
+  };
+}
+
+export function parseTarefasValues(values: string[][]): TarefaSheet[] {
+  return parseTarefasValuesWithMeta(values).tasks;
+}
+
+export interface FetchTarefasAbaDiagnostics {
+  aba: string;
+  bestRange: "A:I" | "B:I" | null;
+  tasks: TarefaSheet[];
+  score: number;
+  suspicious: boolean;
+  discarded: boolean;
+  discardReason: string | null;
+  ranges: Array<TarefasParseMeta & { range: "A:I" | "B:I"; valuesRows: number }>;
+}
+
+export async function fetchAndDiagnoseTarefasAba(
+  aba: string
+): Promise<FetchTarefasAbaDiagnostics> {
+  const ranges: Array<TarefasParseMeta & { range: "A:I" | "B:I"; valuesRows: number }> = [];
+
+  for (const suffix of ["A:I", "B:I"] as const) {
+    try {
+      const values = await fetchSheetValues(aba, suffix);
+      const meta = parseTarefasValuesWithMeta(values);
+      ranges.push({ ...meta, range: suffix, valuesRows: values.length });
+    } catch {
+      ranges.push({ ...parseTarefasValuesWithMeta([]), range: suffix, valuesRows: 0 });
+    }
+  }
+
+  const best = ranges.reduce(
+    (acc, cur) => (cur.score > acc.score ? cur : acc),
+    ranges[0] ?? { ...parseTarefasValuesWithMeta([]), range: null as "A:I" | "B:I" | null, valuesRows: 0 }
+  );
+
+  return {
+    aba,
+    bestRange: best.range,
+    tasks: best.tasks,
+    score: best.score,
+    suspicious: best.suspicious,
+    discarded: best.discarded,
+    discardReason: best.discardReason,
+    ranges,
+  };
 }
 
 /**

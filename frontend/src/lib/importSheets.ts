@@ -27,6 +27,7 @@ import { clienteIdsForTarefas } from "@/lib/client-utils";
 /** Cohort MM044+ — fetch direto da aba (não confia no batch lote). */
 export const MM_COHORT_DIRECT_MIN = 44;
 const COHORT_FETCH_DELAY_MS = 280;
+const SAFE_DELETE_MIN_RETAIN_RATIO = 0.8;
 
 function cohortFetchDelay(fromNum: number, idCliente: string): Promise<void> {
   if (extractMmNum(idCliente) < fromNum) return Promise.resolve();
@@ -39,6 +40,14 @@ export interface ImportResult {
   erros: string[];
   semAbas: string[]; // clientes sem aba no Sheets
   semTarefas: string[]; // clientes com aba mas 0 tarefas importadas
+}
+
+function syncRunId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function logSyncEvent(event: string, payload: Record<string, unknown>): void {
+  console.info(`[sync-sheets] ${JSON.stringify({ event, ...payload })}`);
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -310,7 +319,7 @@ async function syncClienteTarefasFromAbas(
   tarefas: import("@/lib/sheets").TarefaSheet[];
   synced: SyncTarefasResult | null;
 }> {
-  let { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(
+  const { aba: bestAba, tarefas } = await pickBestTarefasFromAbas(
     abasTry,
     lote,
     forceDirect,
@@ -419,6 +428,7 @@ export async function syncTarefasClienteFromSheet(
   cliente: { id_cliente: string; sheets_aba: string; nome_empresa: string },
   tarefas: import("@/lib/sheets").TarefaSheet[]
 ): Promise<SyncTarefasResult> {
+  const runId = syncRunId();
   const emptySkip = (skipReason: string): SyncTarefasResult => ({
     ok: true,
     count: 0,
@@ -429,11 +439,20 @@ export async function syncTarefasClienteFromSheet(
     skipReason,
   });
 
-  if (tarefas.length === 0) return emptySkip("planilha_vazia");
-
   const taskClienteId = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
   const abaPrefix = getAbaIdPrefixFromTitle(cliente.sheets_aba);
   const idsRelacionados = clienteIdsForTarefas(taskClienteId, cliente.sheets_aba);
+
+  if (tarefas.length === 0) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: 0,
+      skip_reason: "planilha_vazia",
+    });
+    return emptySkip("planilha_vazia");
+  }
 
   // Só consolida tarefas do prefixo da aba quando aba e cadastro são o mesmo MM (evita roubar MM051→MM052)
   if (abaPrefix === taskClienteId) {
@@ -465,12 +484,67 @@ export async function syncTarefasClienteFromSheet(
   const existing = (existingRows ?? []) as ExistingTarefaRow[];
   const existingCount = existing.length;
   const suspicious = parseLooksSuspicious(tarefas);
+  const strictCohort = extractMmNum(taskClienteId) >= MM_COHORT_DIRECT_MIN;
+  const abaCanonica = !abaPrefix || abaPrefix === taskClienteId;
+  const parseRegrediu =
+    existingCount > 0 &&
+    tarefas.length < existingCount &&
+    tarefas.length < Math.max(3, Math.ceil(existingCount * SAFE_DELETE_MIN_RETAIN_RATIO));
 
   if (suspicious && existingCount > 0) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: tarefas.length,
+      db_before: existingCount,
+      skip_reason: "parse_suspeito_com_dados_existentes",
+    });
     return emptySkip("parse_suspeito_com_dados_existentes");
   }
   if (suspicious && tarefas.length < 3) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: tarefas.length,
+      db_before: existingCount,
+      skip_reason: "parse_suspeito",
+    });
     return emptySkip("parse_suspeito");
+  }
+  if (strictCohort && abaPrefix !== taskClienteId) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: tarefas.length,
+      db_before: existingCount,
+      skip_reason: "aba_sem_prefixo_canonico",
+    });
+    return emptySkip("aba_sem_prefixo_canonico");
+  }
+  if (!abaCanonica) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: tarefas.length,
+      db_before: existingCount,
+      skip_reason: "aba_nao_canonica",
+    });
+    return emptySkip("aba_nao_canonica");
+  }
+  if (parseRegrediu) {
+    logSyncEvent("skip", {
+      run_id: runId,
+      id_cliente: taskClienteId,
+      aba: cliente.sheets_aba,
+      parse_count: tarefas.length,
+      db_before: existingCount,
+      skip_reason: "contagem_regrediu",
+    });
+    return emptySkip("contagem_regrediu");
   }
 
   const byKey = new Map<string, ExistingTarefaRow>();
@@ -543,6 +617,17 @@ export async function syncTarefasClienteFromSheet(
     }
     deleted = idsToRemove.length;
   }
+
+  logSyncEvent("synced", {
+    run_id: runId,
+    id_cliente: taskClienteId,
+    aba: cliente.sheets_aba,
+    parse_count: tarefas.length,
+    db_before: existingCount,
+    inserted: toInsert.length,
+    updated: toUpdate.length,
+    deleted,
+  });
 
   return {
     ok: true,

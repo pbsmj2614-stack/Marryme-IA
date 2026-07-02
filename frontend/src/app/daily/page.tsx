@@ -7,7 +7,14 @@ import { toast } from "sonner";
 import Header from "@/components/Header";
 import type { ImportResult } from "@/lib/importSheets";
 import { getScoreColor } from "@/lib/healthScore";
-import { formatDate, formatDateFull, isStatusAtivo, dedupClientesByNome, buildClienteIdAliasMap, tarefaBelongsToCliente } from "@/lib/client-utils";
+import {
+  formatDate,
+  formatDateFull,
+  isStatusAtivo,
+  buildClienteIdAliasMap,
+  canonicalClientesWithSheetsAba,
+  tarefasForCliente,
+} from "@/lib/client-utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
@@ -395,7 +402,7 @@ export default function DailyPage() {
     if (rawData) {
       const allClientes = rawData.clientes as Cliente[];
       setRawClientes(allClientes);
-      setClientes(dedupClientesByNome(allClientes));
+      setClientes(canonicalClientesWithSheetsAba(allClientes));
       setTarefas(rawData.tarefas as Tarefa[]);
     }
   }, [rawData]);
@@ -489,18 +496,14 @@ export default function DailyPage() {
 
   const tarefasComCliente = useMemo<TarefaComCliente[]>(() => {
     const idAliases = buildClienteIdAliasMap(rawClientes);
-    const clientesAtivos = dedupClientesByNome(rawClientes).filter((c) =>
+    const clientesAtivos = canonicalClientesWithSheetsAba(rawClientes).filter((c) =>
       isStatusAtivo(c.status)
     );
-    const seen = new Set<string>();
     const result: TarefaComCliente[] = [];
-    for (const t of tarefas) {
-      const cliente = clientesAtivos.find((c) => tarefaBelongsToCliente(t, c, idAliases));
-      if (!cliente) continue;
-      const key = `${cliente.id_cliente}|${t.o_que}|${t.prazo ?? ""}|${t.etapa ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      result.push({ ...t, cliente });
+    for (const cliente of clientesAtivos) {
+      for (const tarefa of tarefasForCliente(tarefas, cliente, idAliases)) {
+        result.push({ ...tarefa, cliente });
+      }
     }
     return result;
   }, [tarefas, rawClientes]);
@@ -680,7 +683,7 @@ export default function DailyPage() {
       {modalCliente && (
         <ModalTarefas
           cliente={modalCliente}
-          tarefas={tarefas.filter((t) => t.cliente_id === modalCliente.id_cliente)}
+          tarefas={tarefasComCliente.filter((t) => t.cliente.id_cliente === modalCliente.id_cliente)}
           onClose={() => setModalCliente(null)}
           onCheckChange={handleCheckChange}
         />

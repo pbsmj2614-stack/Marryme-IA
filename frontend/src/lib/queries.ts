@@ -78,7 +78,10 @@ export interface PipelineRaw {
 }
 
 const TAREFAS_PAGE_SIZE = 1000;
+const CLIENTES_PAGE_SIZE = 1000;
 const TAREFAS_SELECT = "id,cliente_id,check_feito,etapa,o_que,tipo,quem,prazo,status,observacoes";
+const CLIENTES_SELECT =
+  "id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba";
 
 async function fetchAllPipelineTarefas(): Promise<TarefaRow[]> {
   const supabase = createClient();
@@ -103,21 +106,35 @@ async function fetchAllPipelineTarefas(): Promise<TarefaRow[]> {
   return all;
 }
 
-export async function fetchPipelineRaw(): Promise<PipelineRaw> {
+async function fetchAllPipelineClientes(): Promise<ClienteRow[]> {
   const supabase = createClient();
-  const [{ data: clientes, error: e1 }, tarefas] = await Promise.all([
-    supabase
+  const all: ClienteRow[] = [];
+
+  for (let from = 0; ; from += CLIENTES_PAGE_SIZE) {
+    const to = from + CLIENTES_PAGE_SIZE - 1;
+    const { data, error } = await supabase
       .from("mm_clientes")
-      .select(
-        "id,id_cliente,nome_empresa,segmento,plano,valor_contrato,status,fase_projeto,responsavel_mm,sheets_aba"
-      )
+      .select(CLIENTES_SELECT)
       .order("id_cliente")
-      .limit(1000),
+      .range(from, to);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as ClienteRow[];
+    all.push(...page);
+    if (page.length < CLIENTES_PAGE_SIZE) break;
+  }
+
+  return all;
+}
+
+export async function fetchPipelineRaw(): Promise<PipelineRaw> {
+  const [clientes, tarefas] = await Promise.all([
+    fetchAllPipelineClientes(),
     fetchAllPipelineTarefas(),
   ]);
-  if (e1) throw new Error(e1.message);
   return {
-    clientes: (clientes ?? []) as ClienteRow[],
+    clientes,
     tarefas,
   };
 }

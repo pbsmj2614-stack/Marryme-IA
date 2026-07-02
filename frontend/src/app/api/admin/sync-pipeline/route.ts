@@ -29,6 +29,7 @@ import {
   extractMmNum,
   findCadastroRowIndex,
   formatMmId,
+  getAbaIdPrefixFromTitle,
   nextMmId,
   normalizeMmId,
   slugifyAba,
@@ -342,9 +343,18 @@ export async function POST() {
             sheetsBatchUpdate,
             sheetsGet: sheetsGetValues,
           });
+          cadRowsForLookup.push(cadastroLinha);
         }
         let abaFinal: string | null = novaAba;
-        if (modeloSheet) {
+        const abaExistente = abas.find(
+          (s) => s.properties.title === novaAba || getAbaIdPrefixFromTitle(s.properties.title) === newId
+        );
+        if (abaExistente) {
+          abaFinal = abaExistente.properties.title;
+        } else {
+          if (!modeloSheet) {
+            throw new Error("Aba PlanilhaModelo não encontrada; cliente não foi criado sem sheets_aba.");
+          }
           try {
             await sheetsPost(token, ":batchUpdate", {
               requests: [
@@ -407,11 +417,10 @@ export async function POST() {
             }
 
             if (updates.length > 0) await sheetsBatchUpdate(token, updates);
-          } catch {
-            abaFinal = null;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            throw new Error(`Falha ao criar aba "${novaAba}": ${msg}`);
           }
-        } else {
-          abaFinal = null;
         }
 
         const dbPayload = {

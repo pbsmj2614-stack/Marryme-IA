@@ -35,7 +35,6 @@ import {
   buildSheetRowFromLayout,
   detectTaskColumnLayout,
   findTaskRowByOQue,
-  sheetAppendRange,
   sheetRowUpdateRange,
   sheetRowValuesForLayout,
 } from "@/lib/sheets";
@@ -102,16 +101,6 @@ async function sUpdate(token: string, range: string, values: string[][]): Promis
   if (!res.ok) throw new Error(`Sheets UPDATE ${range}: ${res.status} — ${await res.text()}`);
 }
 
-async function sAppend(token: string, range: string, values: string[][]): Promise<void> {
-  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ values }),
-  });
-  if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
-}
-
 /** YYYY-MM-DD → DD/MM/YYYY */
 function toDateBR(iso: string): string {
   const [y, m, d] = iso.split("-");
@@ -134,6 +123,7 @@ export async function POST(req: NextRequest) {
     const { id, id_cliente, o_que_original, prazo_original, etapa_original, ...campos } =
       parsed.data;
     const oQueOrigStr = o_que_original?.trim() ?? "";
+    let sheetWarning: string | undefined;
 
     const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -192,11 +182,19 @@ export async function POST(req: NextRequest) {
       if (rowIndex >= 0) {
         await sUpdate(token, sheetRowUpdateRange(cliente.sheets_aba, rowIndex, layout), [rowValues]);
       } else {
-        await sAppend(token, sheetAppendRange(cliente.sheets_aba, layout), [rowValues]);
+        sheetWarning = `Tarefa atualizada no sistema, mas a linha original não foi localizada na aba "${cliente.sheets_aba}". Nenhuma linha nova foi criada para evitar duplicidade.`;
+        console.warn("[update-tarefa]", sheetWarning, {
+          id,
+          id_cliente,
+          sheets_aba: cliente.sheets_aba,
+          o_que_original: oQueOrigStr,
+          etapa_original,
+          prazo_original,
+        });
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, warning: sheetWarning });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[update-tarefa]", msg);

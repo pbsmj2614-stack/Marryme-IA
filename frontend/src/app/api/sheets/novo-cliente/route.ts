@@ -25,6 +25,7 @@ import {
   dateBR,
   detectCadastroLayout,
   findCadastroRowIndex,
+  getAbaIdPrefixFromTitle,
   nextMmId,
   normalizeMmId,
   slugifyAba,
@@ -210,20 +211,27 @@ export async function POST(req: NextRequest) {
       });
 
     const nomeTrimmed = nome_empresa.trim();
-    const novaAba = `${newId}_${slugifyAba(nomeTrimmed)}`;
+    let novaAba = `${newId}_${slugifyAba(nomeTrimmed)}`;
+    const abaExistente = abas.find(
+      (s) => s.properties.title === novaAba || getAbaIdPrefixFromTitle(s.properties.title) === newId
+    );
 
-    const maxTabIndex = abas.reduce((m, s) => Math.max(m, s.properties.index), 0);
-    await sPost(token, ":batchUpdate", {
-      requests: [
-        {
-          duplicateSheet: {
-            sourceSheetId: modeloSheet.properties.sheetId,
-            insertSheetIndex: maxTabIndex + 1,
-            newSheetName: novaAba,
+    if (abaExistente) {
+      novaAba = abaExistente.properties.title;
+    } else {
+      const maxTabIndex = abas.reduce((m, s) => Math.max(m, s.properties.index), 0);
+      await sPost(token, ":batchUpdate", {
+        requests: [
+          {
+            duplicateSheet: {
+              sourceSheetId: modeloSheet.properties.sheetId,
+              insertSheetIndex: maxTabIndex + 1,
+              newSheetName: novaAba,
+            },
           },
-        },
-      ],
-    });
+        ],
+      });
+    }
 
     const novaData = (await sGet(token, `/values/${encodeURIComponent(novaAba)}`)) as {
       values?: string[][];

@@ -10,13 +10,28 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requirePipelineMaintainer } from "@/lib/api-auth";
-import { fetchAndParseTarefasAbaWithRetry, fetchTodasAbas, scoreTarefasParse } from "@/lib/sheets";
+import {
+  fetchAndDiagnoseTarefasAba,
+  fetchAndParseTarefasAbaWithRetry,
+  fetchTodasAbas,
+  getDuplicateTaskKeys,
+  scoreTarefasParse,
+  taskSheetKey,
+} from "@/lib/sheets";
 import { extractMmNum, getAbaIdPrefixFromTitle, normalizeMmId } from "@/lib/sheets-cadastro";
 
 type ClienteDb = {
   id_cliente: string;
   nome_empresa: string;
   sheets_aba: string | null;
+};
+
+type TarefaDb = {
+  cliente_id: string;
+  o_que: string;
+  prazo: string | null;
+  etapa: string | null;
+  check_feito: boolean;
 };
 
 function normalizeMatchKey(value: string): string {
@@ -71,6 +86,17 @@ async function countDbTarefas(supabase: SupabaseClient, idCliente: string): Prom
   return count ?? 0;
 }
 
+function duplicateDbKeys(rows: TarefaDb[]): Array<{ key: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = taskSheetKey(row.o_que, row.prazo, row.etapa);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 1)
+    .map(([key, count]) => ({ key, count }));
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requirePipelineMaintainer();
@@ -100,6 +126,13 @@ export async function GET(req: NextRequest) {
 
     if (error) throw new Error(error.message);
 
+    const { data: tarefasDbData, error: tarefasErr } = await supabase
+      .from("mm_tarefas")
+      .select("cliente_id, o_que, prazo, etapa, check_feito");
+
+    if (tarefasErr) throw new Error(tarefasErr.message);
+    const tarefasDb = (tarefasDbData ?? []) as TarefaDb[];
+
     const rows = [];
     for (const cliente of (clientes ?? []) as ClienteDb[]) {
       const id = normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente;
@@ -112,20 +145,48 @@ export async function GET(req: NextRequest) {
       for (const aba of candidates) {
         try {
           const tarefas = await fetchAndParseTarefasAbaWithRetry(aba, 3);
+          const diag = await fetchAndDiagnoseTarefasAba(aba);
           parsed.push({
             aba,
+            prefixo_aba: getAbaIdPrefixFromTitle(aba),
             tarefas: tarefas.length,
             checks: tarefas.filter((t) => t.check_feito).length,
             score: scoreTarefasParse(tarefas),
             primeira_tarefa: tarefas[0]?.o_que ?? null,
+            ultima_tarefa: tarefas[tarefas.length - 1]?.o_que ?? null,
+            suspeito: diag.suspicious,
+            descartado: diag.discarded,
+            motivo_descarte: diag.discardReason,
+            melhor_range: diag.bestRange,
+            duplicatas_sheet: getDuplicateTaskKeys(diag.tasks),
+            ranges: diag.ranges.map((r) => ({
+              range: r.range,
+              linhas_lidas: r.valuesRows,
+              header_row: r.headerRowIdx,
+              best_source: r.bestSource,
+              tarefas: r.tasks.length,
+              score: r.score,
+              suspeito: r.suspicious,
+              descartado: r.discarded,
+              motivo_descarte: r.discardReason,
+              candidatos_parse: r.candidates,
+            })),
           });
         } catch (err) {
           parsed.push({
             aba,
+            prefixo_aba: getAbaIdPrefixFromTitle(aba),
             tarefas: 0,
             checks: 0,
             score: 0,
             primeira_tarefa: null,
+            ultima_tarefa: null,
+            suspeito: true,
+            descartado: true,
+            motivo_descarte: "erro_fetch_parse",
+            melhor_range: null,
+            duplicatas_sheet: [],
+            ranges: [],
             erro: err instanceof Error ? err.message : String(err),
           });
         }
@@ -133,12 +194,21 @@ export async function GET(req: NextRequest) {
 
       parsed.sort((a, b) => b.score - a.score);
       const dbTarefas = await countDbTarefas(supabase, id);
+      const dbRowsNormalizados = tarefasDb.filter((t) => (normalizeMmId(t.cliente_id) ?? t.cliente_id) === id);
+      const dbIdsDivergentes = Array.from(
+        new Set(dbRowsNormalizados.map((t) => t.cliente_id).filter((clienteId) => clienteId !== id))
+      );
 
       rows.push({
         id_cliente: id,
         nome_empresa: cliente.nome_empresa,
         sheets_aba: cliente.sheets_aba,
+        prefixo_sheets_aba: getAbaIdPrefixFromTitle(cliente.sheets_aba),
         tarefas_db: dbTarefas,
+        tarefas_db_normalizadas: dbRowsNormalizados.length,
+        checks_db_normalizados: dbRowsNormalizados.filter((t) => t.check_feito).length,
+        cliente_ids_db_divergentes: dbIdsDivergentes,
+        duplicatas_db: duplicateDbKeys(dbRowsNormalizados),
         candidatos: candidates.length,
         melhor_aba: parsed[0]?.aba ?? null,
         tarefas_sheet: parsed[0]?.tarefas ?? 0,

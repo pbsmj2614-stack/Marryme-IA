@@ -20,7 +20,9 @@ import { addTarefaSchema } from "@/lib/schemas";
 import {
   buildSheetRowFromLayout,
   detectTaskColumnLayout,
+  findTaskRowByOQue,
   sheetAppendRange,
+  sheetRowUpdateRange,
   sheetRowValuesForLayout,
 } from "@/lib/sheets";
 
@@ -74,6 +76,16 @@ async function sAppend(token: string, range: string, values: string[][]): Promis
     body: JSON.stringify({ values }),
   });
   if (!res.ok) throw new Error(`Sheets APPEND ${range}: ${res.status} — ${await res.text()}`);
+}
+
+async function sUpdate(token: string, range: string, values: string[][]): Promise<void> {
+  const url = `${BASE}/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ values }),
+  });
+  if (!res.ok) throw new Error(`Sheets UPDATE ${range}: ${res.status} — ${await res.text()}`);
 }
 
 async function sRead(token: string, range: string): Promise<string[][]> {
@@ -132,6 +144,28 @@ export async function POST(req: NextRequest) {
     // ── 2. Monta linha para o Sheets com layout detectado (B:I ou A:H) ──
     const prazoBR = prazo ? toDateBR(prazo) : "";
     const statusFinal = status?.trim() || "Não iniciado";
+    const oQueTrimmed = o_que.trim();
+    const etapaTrimmed = etapa?.trim() || null;
+
+    let dupQuery = supabase
+      .from("mm_tarefas")
+      .select("id")
+      .eq("cliente_id", id_cliente)
+      .ilike("o_que", oQueTrimmed)
+      .limit(1);
+
+    dupQuery = prazo ? dupQuery.eq("prazo", prazo) : dupQuery.is("prazo", null);
+    dupQuery = etapaTrimmed ? dupQuery.eq("etapa", etapaTrimmed) : dupQuery.is("etapa", null);
+
+    const { data: duplicadaDb, error: errDupDb } = await dupQuery.maybeSingle();
+
+    if (errDupDb) throw new Error(`Falha ao checar duplicidade: ${errDupDb.message}`);
+    if (duplicadaDb) {
+      return NextResponse.json(
+        { error: "Tarefa já existe para este cliente com mesmo nome, prazo e etapa." },
+        { status: 409 }
+      );
+    }
 
     // ── 3. Insert no Supabase primeiro (fonte imediata no app) ──
     const prazoISO = prazo || null;
@@ -141,8 +175,8 @@ export async function POST(req: NextRequest) {
       .insert({
         cliente_id: id_cliente,
         check_feito: false,
-        etapa: etapa?.trim() || null,
-        o_que: o_que.trim(),
+        etapa: etapaTrimmed,
+        o_que: oQueTrimmed,
         tipo: tipo?.trim() || null,
         quem: quem?.trim() || null,
         prazo: prazoISO,
@@ -163,19 +197,25 @@ export async function POST(req: NextRequest) {
       const token = await googleToken();
       const rows = await sRead(token, `${cliente.sheets_aba}!A:I`);
       const layout = detectTaskColumnLayout(rows);
+      const rowIndex = findTaskRowByOQue(rows, layout, oQueTrimmed, etapaTrimmed, prazoBR);
       const novaLinha = buildSheetRowFromLayout(layout, {
         check_feito: false,
-        etapa: etapa?.trim() ?? null,
-        o_que: o_que.trim(),
+        etapa: etapaTrimmed,
+        o_que: oQueTrimmed,
         tipo: tipo?.trim() || "Marry Me",
         quem: quem?.trim() ?? null,
         prazo: prazoBR,
         status: statusFinal,
         observacoes: observacoes?.trim() ?? null,
-      });
-      await sAppend(token, sheetAppendRange(cliente.sheets_aba, layout), [
-        sheetRowValuesForLayout(layout, novaLinha),
-      ]);
+      }, rowIndex >= 0 ? rows[rowIndex] : undefined);
+      const rowValues = sheetRowValuesForLayout(layout, novaLinha);
+
+      if (rowIndex >= 0) {
+        await sUpdate(token, sheetRowUpdateRange(cliente.sheets_aba, rowIndex, layout), [rowValues]);
+        sheetWarning = "Tarefa já existia na planilha; a linha existente foi atualizada em vez de duplicada.";
+      } else {
+        await sAppend(token, sheetAppendRange(cliente.sheets_aba, layout), [rowValues]);
+      }
     } catch (sheetErr) {
       const sheetMsg = sheetErr instanceof Error ? sheetErr.message : String(sheetErr);
       console.error("[add-tarefa] Tarefa salva no Supabase, falhou no Sheets:", sheetMsg);

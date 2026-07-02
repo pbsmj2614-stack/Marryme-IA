@@ -10,10 +10,9 @@ import {
   formatDate,
   planoBadgeClass,
   planoLabel,
-  dedupClientesByNome,
-  dedupTarefasMerged,
   buildClienteIdAliasMap,
-  tarefaBelongsToCliente,
+  canonicalClientesWithSheetsAba,
+  tarefasForCliente,
 } from "@/lib/client-utils";
 import { RESPONSAVEIS as RESPONSAVEIS_BASE, isPipelineMaintainer } from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -671,26 +670,11 @@ function recalcClienteMetrics(c: ClienteComMetricas, tCliente: Tarefa[]): Client
   };
 }
 
-function inheritSheetsAba<T extends { id_cliente: string; nome_empresa: string; sheets_aba: string | null }>(
-  c: T,
-  all: T[]
-): T {
-  if (c.sheets_aba) return c;
-  const key = c.nome_empresa.toLowerCase().trim();
-  const sibling = all.find(
-    (x) => x.nome_empresa.toLowerCase().trim() === key && x.sheets_aba
-  );
-  return sibling ? { ...c, sheets_aba: sibling.sheets_aba } : c;
-}
-
 function buildClientes(rawClientes: Cliente[], rawTarefas: Tarefa[]): ClienteComMetricas[] {
   const idAliases = buildClienteIdAliasMap(rawClientes);
-  const clientesDedup = dedupClientesByNome(rawClientes);
-  return clientesDedup.map((c) => {
-    const enriched = inheritSheetsAba(c, rawClientes);
-    const tCliente = dedupTarefasMerged(
-      rawTarefas.filter((t) => tarefaBelongsToCliente(t, enriched, idAliases))
-    );
+  const clientesDedup = canonicalClientesWithSheetsAba(rawClientes);
+  return clientesDedup.map((enriched) => {
+    const tCliente = tarefasForCliente(rawTarefas, enriched, idAliases);
     return recalcClienteMetrics({ ...enriched, tarefas: tCliente } as ClienteComMetricas, tCliente);
   });
 }

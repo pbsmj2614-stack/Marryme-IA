@@ -78,13 +78,16 @@ export function buildClienteIdAliasMap<T extends { nome_empresa: string; id_clie
 ): Map<string, string> {
   const canonical = dedupClientesByNome(clientes);
   const canonicalIdByNome = new Map(
-    canonical.map((c) => [c.nome_empresa.toLowerCase().trim(), c.id_cliente])
+    canonical.map((c) => [c.nome_empresa.toLowerCase().trim(), normalizeMmId(c.id_cliente) ?? c.id_cliente])
   );
   const aliases = new Map<string, string>();
   for (const c of clientes) {
+    const idNorm = normalizeMmId(c.id_cliente) ?? c.id_cliente;
+    const canonicalId = canonicalIdByNome.get(c.nome_empresa.toLowerCase().trim()) ?? idNorm;
+    aliases.set(c.id_cliente, canonicalId);
     aliases.set(
-      c.id_cliente,
-      canonicalIdByNome.get(c.nome_empresa.toLowerCase().trim()) ?? c.id_cliente
+      idNorm,
+      canonicalId
     );
   }
   return aliases;
@@ -115,10 +118,26 @@ export function clienteIdsForTarefas(
   idCliente: string,
   sheetsAba: string | null | undefined
 ): string[] {
-  const ids = new Set<string>([idCliente]);
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  const ids = new Set<string>([idCliente, idNorm]);
   const prefix = getAbaIdPrefix(sheetsAba);
   if (prefix) ids.add(prefix);
   return Array.from(ids);
+}
+
+export function inheritSheetsAba<
+  T extends { id_cliente: string; nome_empresa: string; sheets_aba?: string | null },
+>(cliente: T, all: T[]): T {
+  if (cliente.sheets_aba) return cliente;
+  const nome = cliente.nome_empresa.toLowerCase().trim();
+  const sibling = all.find((c) => c.nome_empresa.toLowerCase().trim() === nome && c.sheets_aba);
+  return sibling ? { ...cliente, sheets_aba: sibling.sheets_aba } : cliente;
+}
+
+export function canonicalClientesWithSheetsAba<
+  T extends { id_cliente: string; nome_empresa: string; sheets_aba?: string | null },
+>(clientes: T[]): T[] {
+  return dedupClientesByNome(clientes).map((c) => inheritSheetsAba(c, clientes));
 }
 
 /**
@@ -129,9 +148,13 @@ export function tarefaBelongsToCliente<
   T extends { cliente_id: string },
   C extends { id_cliente: string; sheets_aba?: string | null },
 >(tarefa: T, cliente: C, idAliases: Map<string, string>): boolean {
-  const tId = tarefa.cliente_id.toUpperCase().trim();
-  const cId = cliente.id_cliente.toUpperCase().trim();
-  const canonical = (idAliases.get(tarefa.cliente_id) ?? tarefa.cliente_id).toUpperCase().trim();
+  const tId = (normalizeMmId(tarefa.cliente_id) ?? tarefa.cliente_id).toUpperCase().trim();
+  const cId = (normalizeMmId(cliente.id_cliente) ?? cliente.id_cliente).toUpperCase().trim();
+  const canonical = (
+    idAliases.get(tarefa.cliente_id) ??
+    idAliases.get(tId) ??
+    tarefa.cliente_id
+  ).toUpperCase().trim();
 
   if (canonical === cId || tId === cId) return true;
 
@@ -139,6 +162,13 @@ export function tarefaBelongsToCliente<
   if (abaPrefix && abaPrefix === tId) return true;
 
   return false;
+}
+
+export function tarefasForCliente<
+  T extends { cliente_id: string; o_que: string; prazo: string | null; etapa: string | null },
+  C extends { id_cliente: string; sheets_aba?: string | null },
+>(tarefas: T[], cliente: C, idAliases: Map<string, string>): T[] {
+  return dedupTarefasMerged(tarefas.filter((t) => tarefaBelongsToCliente(t, cliente, idAliases)));
 }
 
 /** Remove tarefas duplicadas por combinação de cliente + tarefa + prazo + etapa. */

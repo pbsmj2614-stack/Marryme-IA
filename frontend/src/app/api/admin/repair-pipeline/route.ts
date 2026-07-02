@@ -13,7 +13,6 @@ import { requirePipelineMaintainer } from "@/lib/api-auth";
 import { fetchTodasTarefasBatch } from "@/lib/sheets";
 import { resyncTarefasCohort } from "@/lib/importSheets";
 import {
-  collectAbaCandidates,
   resolveSheetsAba,
   shouldUpdateSheetsAba,
 } from "@/lib/sheets-aba-resolve";
