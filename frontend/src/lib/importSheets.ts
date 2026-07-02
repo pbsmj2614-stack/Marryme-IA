@@ -173,7 +173,8 @@ function expandAbaCandidates(
 function abaPrefixOk(aba: string, idCliente: string): boolean {
   const idNorm = normalizeMmId(idCliente) ?? idCliente;
   if (extractMmNum(idNorm) < MM_ABA_STRICT_PREFIX_MIN) return true;
-  return getAbaIdPrefixFromTitle(aba) === idNorm;
+  const prefix = getAbaIdPrefixFromTitle(aba);
+  return !prefix || prefix === idNorm;
 }
 
 function normalizeAbaMatchKey(value: string): string {
