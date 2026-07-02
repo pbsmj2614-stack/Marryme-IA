@@ -199,51 +199,104 @@ function addCandidateAba(candidates: string[], aba: string | null | undefined): 
   candidates.push(aba);
 }
 
+/** Prioriza aba com prefixo MM do cliente, depois sheets_aba salva, depois demais. */
+function sortAbasByClientePriority(
+  abas: string[],
+  idCliente: string,
+  sheetsAba?: string | null
+): string[] {
+  const idNorm = normalizeMmId(idCliente) ?? idCliente;
+  return [...abas].sort((a, b) => {
+    const rank = (aba: string) => {
+      if (getAbaIdPrefixFromTitle(aba) === idNorm) return 0;
+      if (sheetsAba && aba === sheetsAba) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+}
+
+async function loadParsedTarefasAba(
+  aba: string,
+  lote: Record<string, import("@/lib/sheets").TarefaSheet[]>,
+  forceDirect: boolean
+): Promise<import("@/lib/sheets").TarefaSheet[]> {
+  let parsed = forceDirect ? [] : (lote[aba] ?? []);
+  if (forceDirect || parsed.length === 0 || parseLooksSuspicious(parsed)) {
+    try {
+      const refetched = await fetchAndParseTarefasAbaWithRetry(aba);
+      if (scoreTarefasParse(refetched) > scoreTarefasParse(parsed)) {
+        parsed = refetched;
+        lote[aba] = refetched;
+      }
+    } catch {
+      // mantém lote
+    }
+  }
+  return parsed;
+}
+
 /** Escolhe aba + tarefas parseadas entre candidatos (refetch só quando lote vazio/suspeito). */
 async function pickBestTarefasFromAbas(
   abas: string[],
   lote: Record<string, import("@/lib/sheets").TarefaSheet[]>,
   forceDirect = false,
-  idCliente?: string
+  idCliente?: string,
+  sheetsAba?: string | null
 ): Promise<{ aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] }> {
   const scoped = idCliente ? abas.filter((a) => abaPrefixOk(a, idCliente)) : abas;
   if (scoped.length === 0) return { aba: abas[0] ?? "", tarefas: [] };
 
+  const ordered = idCliente
+    ? sortAbasByClientePriority(scoped, idCliente, sheetsAba)
+    : scoped;
+  const idNorm = idCliente ? (normalizeMmId(idCliente) ?? idCliente) : null;
+
   let bestNonSuspicious: { aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] } | null =
     null;
   let bestNonSuspiciousScore = -1;
+  let bestFallback: { aba: string; tarefas: import("@/lib/sheets").TarefaSheet[] } | null = null;
+  let bestFallbackScore = -1;
 
-  for (const aba of scoped) {
-    let parsed = forceDirect ? [] : (lote[aba] ?? []);
-    if (forceDirect || parsed.length === 0 || parseLooksSuspicious(parsed)) {
-      try {
-        const refetched = await fetchAndParseTarefasAbaWithRetry(aba);
-        if (scoreTarefasParse(refetched) > scoreTarefasParse(parsed)) {
-          parsed = refetched;
-          lote[aba] = refetched;
-        }
-      } catch {
-        // mantém lote
-      }
-    }
-
+  for (const aba of ordered) {
+    const parsed = await loadParsedTarefasAba(aba, lote, forceDirect);
     const score = scoreTarefasParse(parsed);
     const prefixBonus =
-      idCliente && getAbaIdPrefixFromTitle(aba) === (normalizeMmId(idCliente) ?? idCliente)
-        ? 1_000_000
-        : 0;
+      idNorm && getAbaIdPrefixFromTitle(aba) === idNorm ? 1_000_000 : 0;
+    const totalScore = score + prefixBonus;
+
+    if (parsed.length > 0 && totalScore > bestFallbackScore) {
+      bestFallbackScore = totalScore;
+      bestFallback = { aba, tarefas: parsed };
+    }
+
     if (
       !parseLooksSuspicious(parsed) &&
       parsed.length > 0 &&
-      score + prefixBonus > bestNonSuspiciousScore
+      totalScore > bestNonSuspiciousScore
     ) {
-      bestNonSuspiciousScore = score + prefixBonus;
+      bestNonSuspiciousScore = totalScore;
       bestNonSuspicious = { aba, tarefas: parsed };
+    }
+
+    // Prefixo MM correto + parse válido → não refaz fetch das outras abas (429 no cohort)
+    if (
+      idNorm &&
+      getAbaIdPrefixFromTitle(aba) === idNorm &&
+      parsed.length > 0 &&
+      !parseLooksSuspicious(parsed)
+    ) {
+      return { aba, tarefas: parsed };
     }
   }
 
   if (bestNonSuspicious) return bestNonSuspicious;
-  return { aba: scoped[0], tarefas: [] };
+
+  if (bestFallback && bestFallback.tarefas.length >= 3) {
+    return bestFallback;
+  }
+
+  return { aba: ordered[0], tarefas: [] };
 }
 
 async function syncClienteTarefasFromAbas(
@@ -261,7 +314,8 @@ async function syncClienteTarefasFromAbas(
     abasTry,
     lote,
     forceDirect,
-    cliente.id_cliente
+    cliente.id_cliente,
+    cliente.sheets_aba
   );
 
   if (bestAba !== cliente.sheets_aba && tarefas.length > 0) {
@@ -280,13 +334,73 @@ async function syncClienteTarefasFromAbas(
   return { bestAba, tarefas, synced };
 }
 
-/** Sincroniza tarefas de um cliente a partir da planilha (merge seguro — nunca apaga em massa). */
+/** Chave de match tarefa planilha ↔ Supabase (o_que + prazo + etapa). */
 export function taskSyncKey(
   o_que: string,
   prazo: string | null,
   etapa: string | null
 ): string {
   return `${o_que.trim()}|${prazo ?? ""}|${(etapa ?? "").trim()}`;
+}
+
+function taskSyncKeyOQue(o_que: string): string {
+  return o_que.trim().toLowerCase();
+}
+
+type ExistingTarefaRow = {
+  id: string;
+  o_que: string;
+  prazo: string | null;
+  etapa: string | null;
+  check_feito: boolean;
+};
+
+function buildTarefaPayloadFromSheet(
+  t: import("@/lib/sheets").TarefaSheet,
+  taskClienteId: string
+) {
+  const prazoISO = parseDateBR(t.prazo);
+  const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
+  const statusFinal = t.check_feito
+    ? "Finalizado"
+    : isAtrasado(t.prazo, statusNorm)
+      ? "Atrasado"
+      : statusNorm;
+  return {
+    cliente_id: taskClienteId,
+    check_feito: t.check_feito,
+    etapa: t.etapa || null,
+    o_que: t.o_que.trim(),
+    tipo: t.tipo || null,
+    quem: t.quem || null,
+    prazo: prazoISO,
+    status: statusFinal,
+    observacoes: t.observacoes || null,
+    atualizado_em: new Date().toISOString(),
+  };
+}
+
+function findExistingTarefaMatch(
+  t: import("@/lib/sheets").TarefaSheet,
+  byKey: Map<string, ExistingTarefaRow>,
+  byOQue: Map<string, ExistingTarefaRow[]>
+): ExistingTarefaRow | null {
+  const prazoISO = parseDateBR(t.prazo);
+  const exact = byKey.get(taskSyncKey(t.o_que, prazoISO, t.etapa));
+  if (exact) return exact;
+
+  const oQueMatches = byOQue.get(taskSyncKeyOQue(t.o_que)) ?? [];
+  if (oQueMatches.length === 1) return oQueMatches[0];
+
+  if (oQueMatches.length > 1) {
+    const etapaNorm = (t.etapa ?? "").trim().toLowerCase();
+    const withEtapa = oQueMatches.filter(
+      (row) => (row.etapa ?? "").trim().toLowerCase() === etapaNorm
+    );
+    if (withEtapa.length === 1) return withEtapa[0];
+  }
+
+  return null;
 }
 
 export interface SyncTarefasResult {
@@ -348,85 +462,93 @@ export async function syncTarefasClienteFromSheet(
     };
   }
 
-  const existing = existingRows ?? [];
+  const existing = (existingRows ?? []) as ExistingTarefaRow[];
   const existingCount = existing.length;
+  const suspicious = parseLooksSuspicious(tarefas);
 
-  if (parseLooksSuspicious(tarefas)) {
+  if (suspicious && existingCount > 0) {
+    return emptySkip("parse_suspeito_com_dados_existentes");
+  }
+  if (suspicious && tarefas.length < 3) {
     return emptySkip("parse_suspeito");
   }
 
-  const payloads = tarefas.map((t) => {
-    const prazoISO = parseDateBR(t.prazo);
-    const statusNorm = normalizeTaskStatus(t.status, t.check_feito);
-    const statusFinal = t.check_feito
-      ? "Finalizado"
-      : isAtrasado(t.prazo, statusNorm)
-        ? "Atrasado"
-        : statusNorm;
-    return {
-      cliente_id: taskClienteId,
-      check_feito: t.check_feito,
-      etapa: t.etapa || null,
-      o_que: t.o_que,
-      tipo: t.tipo || null,
-      quem: t.quem || null,
-      prazo: prazoISO,
-      status: statusFinal,
-      observacoes: t.observacoes || null,
-      atualizado_em: new Date().toISOString(),
-    };
-  });
-
-  // Insert-first: nunca apaga antes de gravar — evita zerar cliente se insert falhar
-  const { data: insertedRows, error: errInsert } = await supabase
-    .from("mm_tarefas")
-    .insert(payloads)
-    .select("id");
-
-  if (errInsert) {
-    return {
-      ok: false,
-      count: 0,
-      inserted: 0,
-      updated: 0,
-      deleted: 0,
-      error: errInsert.message,
-    };
+  const byKey = new Map<string, ExistingTarefaRow>();
+  const byOQue = new Map<string, ExistingTarefaRow[]>();
+  for (const row of existing) {
+    byKey.set(taskSyncKey(row.o_que, row.prazo, row.etapa), row);
+    const oQueKey = taskSyncKeyOQue(row.o_que);
+    const list = byOQue.get(oQueKey) ?? [];
+    list.push(row);
+    byOQue.set(oQueKey, list);
   }
 
-  const newIds = (insertedRows ?? []).map((r: { id: string }) => r.id);
-  let deleted = 0;
+  const matchedIds = new Set<string>();
+  const toInsert: ReturnType<typeof buildTarefaPayloadFromSheet>[] = [];
+  const toUpdate: Array<{ id: string; payload: ReturnType<typeof buildTarefaPayloadFromSheet> }> =
+    [];
 
-  if (existingCount > 0 && newIds.length > 0) {
-    const idsToRemove = existing
-      .map((r: { id: string }) => r.id)
-      .filter((id: string) => !newIds.includes(id));
-
-    if (idsToRemove.length > 0) {
-      const { error: errDelete } = await supabase
-        .from("mm_tarefas")
-        .delete()
-        .in("id", idsToRemove);
-
-      if (errDelete) {
-        return {
-          ok: false,
-          count: newIds.length,
-          inserted: newIds.length,
-          updated: 0,
-          deleted: 0,
-          error: `Tarefas inseridas mas falha ao substituir antigas: ${errDelete.message}`,
-        };
-      }
-      deleted = idsToRemove.length;
+  for (const t of tarefas) {
+    const payload = buildTarefaPayloadFromSheet(t, taskClienteId);
+    const match = findExistingTarefaMatch(t, byKey, byOQue);
+    if (match) {
+      matchedIds.add(match.id);
+      toUpdate.push({ id: match.id, payload });
+    } else {
+      toInsert.push(payload);
     }
+  }
+
+  if (toInsert.length > 0) {
+    const { error: errInsert } = await supabase.from("mm_tarefas").insert(toInsert);
+    if (errInsert) {
+      return {
+        ok: false,
+        count: 0,
+        inserted: 0,
+        updated: 0,
+        deleted: 0,
+        error: errInsert.message,
+      };
+    }
+  }
+
+  for (const { id, payload } of toUpdate) {
+    const { error: errUpdate } = await supabase.from("mm_tarefas").update(payload).eq("id", id);
+    if (errUpdate) {
+      return {
+        ok: false,
+        count: toInsert.length + toUpdate.length,
+        inserted: toInsert.length,
+        updated: 0,
+        deleted: 0,
+        error: errUpdate.message,
+      };
+    }
+  }
+
+  const idsToRemove = existing.filter((row) => !matchedIds.has(row.id)).map((row) => row.id);
+  let deleted = 0;
+  if (idsToRemove.length > 0) {
+    const { error: errDelete } = await supabase.from("mm_tarefas").delete().in("id", idsToRemove);
+    if (errDelete) {
+      return {
+        ok: false,
+        count: toInsert.length + toUpdate.length,
+        inserted: toInsert.length,
+        updated: toUpdate.length,
+        deleted: 0,
+        error: errDelete.message,
+      };
+    }
+    deleted = idsToRemove.length;
   }
 
   return {
     ok: true,
-    count: payloads.length,
-    inserted: payloads.length,
-    updated: 0,
+    count: tarefas.length,
+    inserted: toInsert.length,
+    updated: toUpdate.length,
     deleted,
   };
 }
@@ -483,7 +605,10 @@ export async function resyncTarefasCohort(
     const c = cohort[i];
     if (i > 0) await cohortFetchDelay(fromNum, c.id_cliente);
 
-    const abasTry = [...(abasById.get(c.id_cliente) ?? [])];
+    const abasTry: string[] = [];
+    for (const aba of abasById.get(c.id_cliente) ?? []) {
+      addCandidateAba(abasTry, aba);
+    }
     const savedAbaPrefix = getAbaIdPrefixFromTitle(c.sheets_aba);
     if (
       c.sheets_aba &&
@@ -492,8 +617,10 @@ export async function resyncTarefasCohort(
     ) {
       addCandidateAba(abasTry, c.sheets_aba);
     }
-    for (const aba of todasAbas) {
-      if (abaMatchesClienteSemPrefixo(aba, c.nome_empresa)) addCandidateAba(abasTry, aba);
+    if (abasTry.length === 0) {
+      for (const aba of todasAbas) {
+        if (abaMatchesClienteSemPrefixo(aba, c.nome_empresa)) addCandidateAba(abasTry, aba);
+      }
     }
 
     if (abasTry.length === 0) {

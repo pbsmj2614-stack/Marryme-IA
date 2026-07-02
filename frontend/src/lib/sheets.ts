@@ -635,6 +635,15 @@ export function alignTaskSheetRows(values: string[][]): string[][] {
     // Check em B (col A vazia omitida): TRUE/FALSE na col 0 → desloca tudo
     if (looksLikeCheckCol) return [...Array(checkCol).fill(""), ...row];
 
+    // Col A + Check vazios omitidos: linha começa na Etapa (Organização, Preparação…)
+    const looksLikeEtapa =
+      /^(organiza|prepara|planej|execu|lanc|campanha|pos)/i.test(first) ||
+      (hMap.etapa !== undefined &&
+        normalizeKey(first) === normalizeKey(readCell(header, hMap.etapa)));
+    if (looksLikeEtapa && checkCol > 0) {
+      return [...Array(checkCol + 1).fill(""), ...row];
+    }
+
     if (row.length + checkCol <= header.length) return [...Array(checkCol).fill(""), ...row];
     return row;
   });

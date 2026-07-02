@@ -136,4 +136,18 @@ describe("parseTarefasValues", () => {
     expect(tarefas).toHaveLength(1);
     expect(tarefas[0].o_que).toBe("Montar campanha");
   });
+
+  it("alinha quando col A e Check vazios são omitidos (linha começa na Etapa)", () => {
+    const rows = [
+      ["", "Check", "Etapa", "O que?", "Tipo", "Quem?", "Prazo", "Status", "Observações"],
+      ["Organização", "Pegar Acesso da BM", "Marry Me", "Kauê", "10/06/2026", "Não iniciado", ""],
+      ["Preparação", "Configurar a BM", "Marry Me", "Paulo", "11/06/2026", "Não iniciado", ""],
+    ];
+    const aligned = alignTaskSheetRows(rows);
+    expect(aligned[1][3]).toBe("Pegar Acesso da BM");
+    const tarefas = parseTarefasValues(rows);
+    expect(tarefas).toHaveLength(2);
+    expect(tarefas[0].o_que).toBe("Pegar Acesso da BM");
+    expect(tarefas[0].check_feito).toBe(false);
+  });
 });
