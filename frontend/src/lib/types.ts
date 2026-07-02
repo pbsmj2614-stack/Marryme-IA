@@ -137,6 +137,8 @@ export interface ConfigCampanha {
   objetivo_principal: string;
   todas_mensagens: boolean;
   campanhas_pausadas: string[];
+  objetivo_operacional?: "whatsapp_leads" | "outro" | "indeterminado";
+  setup_whatsapp_confirmado?: boolean;
 }
 
 export interface CampanhaInsight {
@@ -144,6 +146,35 @@ export interface CampanhaInsight {
   campaign_name: string;
   status: string;
   objective?: string | null;
+  effective_status?: string | null;
+  impressions: number;
+  reach: number;
+  frequency: number;
+  clicks: number;
+  link_clicks: number;
+  spend: number;
+  ctr: number;
+  link_ctr: number;
+  cpc: number;
+  cpm: number;
+  results: number;
+  cost_per_result: number;
+  thruplay: number;
+  cost_per_thruplay: number;
+  video_3s: number;
+  hook_rate: number;
+  video_p25: number;
+  video_p50: number;
+  video_p75: number;
+  video_p100: number;
+}
+
+export interface AnuncioInsight {
+  ad_id: string;
+  ad_name: string;
+  campaign_id: string;
+  campaign_name: string;
+  status?: string | null;
   effective_status?: string | null;
   impressions: number;
   reach: number;
@@ -209,6 +240,7 @@ export interface ContaMeta {
 export interface DadosRelatorio {
   kpis: KPIsCampanha;
   campanhas: CampanhaInsight[];
+  anuncios?: AnuncioInsight[];
   periodo_inicio: string;
   periodo_fim: string;
   conta?: ContaMeta;

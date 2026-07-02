@@ -35,6 +35,34 @@ interface ProximoPasso {
 interface AnaliseData {
   resumo_executivo: string;
   nota_geral: number;
+  relatorio_decisao?: {
+    destaque_semana?: {
+      titulo: string;
+      metrica: string;
+      leitura: string;
+    };
+    funil?: {
+      impressões?: number;
+      cliques?: number;
+      leads?: number;
+      ctr?: number;
+      conversao_clique_lead?: number;
+      gargalo?: string;
+      leitura?: string;
+    };
+    criativos?: Array<{
+      nome: string;
+      papel: "campeao" | "menor_custo" | "baixo_volume" | "trocar" | "sem_dados";
+      leads: number;
+      custo_por_lead: number | null;
+      investimento: number;
+      leitura: string;
+    }>;
+    aprendizados?: {
+      manter: string[];
+      ajustar: string[];
+    };
+  };
   analise_kpis: {
     ctr: KpiAnalise;
     cpm: KpiAnalise;
@@ -102,6 +130,16 @@ function prazoLabel(p: string) {
   if (p === "imediato") return "Imediato";
   if (p === "esta_semana") return "Esta semana";
   return "Este mês";
+}
+
+function fmtBRL(n: number | null | undefined) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtNum(n: number | null | undefined, dec = 0) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: dec, minimumFractionDigits: dec });
 }
 
 function NotaGeral({ nota }: { nota: number }) {
@@ -371,6 +409,79 @@ export default function AnaliseIA({
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
               {analise.resumo_executivo}
             </p>
+            {analise.relatorio_decisao?.destaque_semana && (
+              <div className="border border-brand-200 bg-brand-50 rounded-xl p-4">
+                <p className="text-xs font-bold text-brand-600 uppercase tracking-wide mb-1">
+                  Destaque da semana
+                </p>
+                <p className="text-sm font-bold text-brand-900">
+                  {analise.relatorio_decisao.destaque_semana.titulo}
+                </p>
+                <p className="text-xs text-brand-700 mt-1">
+                  <span className="font-semibold">
+                    {analise.relatorio_decisao.destaque_semana.metrica}
+                  </span>{" "}
+                  · {analise.relatorio_decisao.destaque_semana.leitura}
+                </p>
+              </div>
+            )}
+            {analise.relatorio_decisao?.funil && (
+              <div className="border border-gray-100 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
+                  Funil de performance
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+                  <div>
+                    <p className="text-[11px] text-gray-400">Impressões</p>
+                    <p className="text-sm font-bold">{fmtNum(analise.relatorio_decisao.funil.impressões)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400">Cliques</p>
+                    <p className="text-sm font-bold">{fmtNum(analise.relatorio_decisao.funil.cliques)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400">Leads</p>
+                    <p className="text-sm font-bold">{fmtNum(analise.relatorio_decisao.funil.leads)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400">CTR</p>
+                    <p className="text-sm font-bold">{fmtNum(analise.relatorio_decisao.funil.ctr, 1)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400">Clique→Lead</p>
+                    <p className="text-sm font-bold">
+                      {fmtNum(analise.relatorio_decisao.funil.conversao_clique_lead, 1)}%
+                    </p>
+                  </div>
+                </div>
+                {analise.relatorio_decisao.funil.leitura && (
+                  <p className="text-xs text-gray-600">{analise.relatorio_decisao.funil.leitura}</p>
+                )}
+              </div>
+            )}
+            {(analise.relatorio_decisao?.criativos ?? []).length > 0 && (
+              <div className="border border-gray-100 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
+                  Decisão por criativo
+                </p>
+                <div className="space-y-2">
+                  {(analise.relatorio_decisao?.criativos ?? []).slice(0, 4).map((c, i) => (
+                    <div key={`${c.nome}-${i}`} className="bg-gray-50 rounded-lg p-3">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white text-gray-600 border border-gray-200">
+                          {c.papel.replace("_", " ")}
+                        </span>
+                        <p className="text-xs font-bold text-gray-800">{c.nome}</p>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mb-1">
+                        {fmtNum(c.leads)} leads · {fmtBRL(c.custo_por_lead)} CPL · {fmtBRL(c.investimento)} investidos
+                      </p>
+                      <p className="text-xs text-gray-600">{c.leitura}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {analise.mensagem_para_cliente && (
               <div className="bg-brand-50 border border-brand-200 rounded-xl p-4">
                 <p className="text-xs font-bold text-brand-600 uppercase tracking-wide mb-1">

@@ -18,6 +18,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import type {
   CampanhaInsight,
+  AnuncioInsight,
   KPIsCampanha,
   DadosRelatorio,
   ContaMeta,
@@ -157,51 +158,60 @@ async function getActiveToken(supabase: ReturnType<typeof supabaseAdmin>): Promi
 // ─── Health score (0–100) ─────────────────────────────────────────────────────
 
 function calcHealthScore(kpis: KPIsCampanha): number {
-  // Sem impressões = sem dados = score 0
+  // Score MarryMe para campanhas de WhatsApp/leads:
+  // CPL/conversa 40%, gasto/orçamento 30%, volume 20%, CTR 10%.
   if (!kpis.impressions || kpis.impressions === 0) return 0;
 
   let score = 0;
 
-  // ── CTR do link (40 pts)
+  const cpl = kpis.cost_per_result ?? 0;
+  if (cpl > 0 && cpl <= 8) score += 40;
+  else if (cpl > 0 && cpl <= 15) score += 32;
+  else if (cpl > 0 && cpl <= 28) score += 22;
+  else if (cpl > 0 && cpl <= 45) score += 12;
+  else if (kpis.results > 0) score += 6;
+
+  const spend = kpis.spend ?? 0;
+  if (spend >= 150) score += 30;
+  else if (spend >= 100) score += 24;
+  else if (spend >= 60) score += 16;
+  else if (spend >= 30) score += 8;
+
+  const results = kpis.results ?? 0;
+  if (results >= 20) score += 20;
+  else if (results >= 10) score += 16;
+  else if (results >= 5) score += 10;
+  else if (results >= 1) score += 5;
+
   const ctr = kpis.link_ctr > 0 ? kpis.link_ctr : kpis.ctr;
-  if (ctr >= 2.0) score += 40;
-  else if (ctr >= 1.0) score += 30;
-  else if (ctr >= 0.5) score += 18;
-  else if (ctr >= 0.2) score += 8;
-
-  // ── Frequência (20 pts) — requer impressões reais (freq > 0)
-  const freq = kpis.frequency ?? 0;
-  if (freq > 0 && freq <= 1.5) score += 20;
-  else if (freq > 0 && freq <= 2.5) score += 15;
-  else if (freq > 0 && freq <= 3.5) score += 9;
-  else if (freq > 0 && freq <= 5.0) score += 4;
-
-  // ── CPM (20 pts) — requer gasto real (cpm > 0)
-  const cpm = kpis.cpm ?? 0;
-  if (cpm > 0 && cpm <= 10) score += 20;
-  else if (cpm > 0 && cpm <= 20) score += 15;
-  else if (cpm > 0 && cpm <= 35) score += 9;
-  else if (cpm > 0 && cpm <= 50) score += 4;
-
-  // ── Hook Rate (20 pts) — se vídeo disponível; senão redistribui para CPM
-  const hookRate = kpis.hook_rate ?? 0;
-  if (hookRate > 0) {
-    if (hookRate >= 20) score += 20;
-    else if (hookRate >= 12) score += 15;
-    else if (hookRate >= 6) score += 9;
-    else if (hookRate >= 3) score += 4;
-  } else {
-    // Campanha de imagem: CPM recebe os 20pts extras (requer cpm > 0)
-    if (cpm > 0 && cpm <= 10) score += 20;
-    else if (cpm > 0 && cpm <= 20) score += 15;
-    else if (cpm > 0 && cpm <= 35) score += 9;
-    else if (cpm > 0 && cpm <= 50) score += 4;
-  }
+  if (ctr >= 1.5) score += 10;
+  else if (ctr >= 1.0) score += 8;
+  else if (ctr >= 0.5) score += 5;
+  else if (ctr >= 0.2) score += 2;
 
   return Math.min(100, Math.max(0, score));
 }
 
-const MESSAGE_OBJECTIVE_PATTERNS = ["MESSAGE", "ENGAGEMENT", "CONVERSATION", "WHATSAPP"];
+const MESSAGE_OBJECTIVE_PATTERNS = [
+  "MESSAGE",
+  "ENGAGEMENT",
+  "CONVERSATION",
+  "WHATSAPP",
+  "LEAD",
+  "OUTCOME_LEADS",
+  "OUTCOME_ENGAGEMENT",
+  "TRAFFIC",
+  "OUTCOME_TRAFFIC",
+];
+const WHATSAPP_LEADS_NAME_PATTERNS = [
+  "MSG",
+  "MENSAGEM",
+  "WHATS",
+  "WHATSAPP",
+  "FORM",
+  "LEAD",
+  "CADASTRO",
+];
 
 function isMessageObjective(objective: string | null | undefined): boolean {
   if (!objective) return false;
@@ -209,12 +219,19 @@ function isMessageObjective(objective: string | null | undefined): boolean {
   return MESSAGE_OBJECTIVE_PATTERNS.some((p) => upper.includes(p));
 }
 
+function hasOperationalLeadSignal(c: Pick<CampanhaInsight, "campaign_name" | "objective" | "results">): boolean {
+  const haystack = `${c.campaign_name} ${c.objective ?? ""}`.toUpperCase();
+  return c.results > 0 || WHATSAPP_LEADS_NAME_PATTERNS.some((p) => haystack.includes(p));
+}
+
 function buildConfigCampanha(campanhas: CampanhaInsight[]): ConfigCampanha {
   const withObjective = campanhas.filter((c) => c.objective);
   const objetivoPrincipal = withObjective[0]?.objective ?? "desconhecido";
   const todasMensagens =
     campanhas.length > 0 &&
-    campanhas.every((c) => !c.objective || isMessageObjective(c.objective));
+    campanhas.every((c) => !c.objective || isMessageObjective(c.objective) || hasOperationalLeadSignal(c));
+  const setupWhatsappConfirmado =
+    campanhas.length > 0 && campanhas.some((c) => hasOperationalLeadSignal(c));
   const campanhasPausadas = campanhas
     .filter((c) => {
       const st = (c.effective_status ?? c.status ?? "").toUpperCase();
@@ -225,6 +242,8 @@ function buildConfigCampanha(campanhas: CampanhaInsight[]): ConfigCampanha {
     objetivo_principal: objetivoPrincipal,
     todas_mensagens: todasMensagens,
     campanhas_pausadas: campanhasPausadas,
+    objetivo_operacional: setupWhatsappConfirmado ? "whatsapp_leads" : "indeterminado",
+    setup_whatsapp_confirmado: setupWhatsappConfirmado,
   };
 }
 
@@ -497,6 +516,56 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    // ── 2a. Insights por anúncio/criativo ─────────────────────────────────────
+    let anunciosRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+      fields: "campaign_id,campaign_name,ad_id,ad_name," + INSIGHT_FIELDS,
+      level: "ad",
+      time_range: timeRange,
+    })) as { data?: Array<Record<string, unknown>> };
+
+    if (!anunciosRaw.data?.length) {
+      anunciosRaw = (await metaGet(activeToken, `/act_${accountId}/insights`, {
+        fields: "campaign_id,campaign_name,ad_id,ad_name," + INSIGHT_FIELDS,
+        level: "ad",
+        date_preset: "last_30d",
+      })) as { data?: Array<Record<string, unknown>> };
+    }
+
+    const anuncios: AnuncioInsight[] = (anunciosRaw.data ?? []).map((ad) => {
+      const adImpressions = parseFloat(String(ad.impressions ?? "0"));
+      const adSpend = parseFloat(String(ad.spend ?? "0"));
+      const adThruplay = extractVideoAction(ad.video_thruplay_watched_actions);
+      const adVideo3s = extractAction(ad.actions, ["video_view"]);
+      const adResults = extractAction(ad.actions, MESSAGE_TYPES);
+      const adCostPerResult = extractAction(ad.cost_per_action_type, MESSAGE_TYPES);
+      return {
+        ad_id: String(ad.ad_id ?? ""),
+        ad_name: String(ad.ad_name ?? ""),
+        campaign_id: String(ad.campaign_id ?? ""),
+        campaign_name: String(ad.campaign_name ?? ""),
+        impressions: adImpressions,
+        reach: parseFloat(String(ad.reach ?? "0")),
+        frequency: parseFloat(String(ad.frequency ?? "0")),
+        clicks: parseFloat(String(ad.clicks ?? "0")),
+        link_clicks: parseFloat(String(ad.inline_link_clicks ?? "0")),
+        spend: adSpend,
+        ctr: parseFloat(String(ad.ctr ?? "0")),
+        link_ctr: parseFloat(String(ad.inline_link_click_ctr ?? "0")),
+        cpc: parseFloat(String(ad.cost_per_inline_link_click ?? "0")),
+        cpm: parseFloat(String(ad.cpm ?? "0")),
+        results: adResults,
+        cost_per_result: adCostPerResult > 0 ? adCostPerResult : adResults > 0 ? adSpend / adResults : 0,
+        thruplay: adThruplay,
+        cost_per_thruplay: adThruplay > 0 ? adSpend / adThruplay : 0,
+        video_3s: adVideo3s,
+        hook_rate: adImpressions > 0 ? (adVideo3s / adImpressions) * 100 : 0,
+        video_p25: extractVideoAction(ad.video_p25_watched_actions),
+        video_p50: extractVideoAction(ad.video_p50_watched_actions),
+        video_p75: extractVideoAction(ad.video_p75_watched_actions),
+        video_p100: extractVideoAction(ad.video_p95_watched_actions),
+      };
+    });
+
     // ── 2b. Fallback: busca % de vídeo no nível de anúncio ────────────────────
     // Campanhas de Engajamento/WhatsApp não retornam video_p* no nível de conta
     // ou campanha, mas os dados estão disponíveis no nível de anúncio (ad level).
@@ -561,6 +630,16 @@ export async function POST(req: NextRequest) {
           p95: videoP95,
           ads: adVideoRaw.data?.length ?? 0,
         });
+
+        for (const ad of anuncios) {
+          const agg = byCampaign[ad.campaign_id];
+          if (agg && ad.video_p25 === 0) {
+            ad.video_p25 = agg.p25;
+            ad.video_p50 = agg.p50;
+            ad.video_p75 = agg.p75;
+            ad.video_p100 = agg.p95;
+          }
+        }
       } catch (videoErr) {
         console.warn("[meta/sincronizar] fallback ad-level falhou (não bloqueia):", videoErr);
       }
@@ -744,6 +823,7 @@ export async function POST(req: NextRequest) {
     const dadosJson: DadosRelatorio = {
       kpis,
       campanhas,
+      anuncios,
       periodo_inicio: inicio,
       periodo_fim: fim,
       conta,

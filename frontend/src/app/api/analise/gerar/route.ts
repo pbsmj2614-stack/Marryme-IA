@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import type { KPIsCampanha, CampanhaInsight, ContaMeta, ConfigCampanha } from "@/lib/types";
+import type { KPIsCampanha, CampanhaInsight, AnuncioInsight, ContaMeta, ConfigCampanha } from "@/lib/types";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getAuthUser, UNAUTHORIZED } from "@/lib/api-auth";
 import { analiseGerarSchema } from "@/lib/schemas";
@@ -20,20 +20,20 @@ import { analiseGerarSchema } from "@/lib/schemas";
 const SYSTEM_PROMPT = `Você é analista sênior de tráfego pago da MarryMe, agência especializada em prestadores de casamento no Brasil.
 
 REGRAS OBRIGATÓRIAS:
-1. Clientes MarryMe usam campanhas de Mensagens com CTA WhatsApp por padrão — isso já está configurado.
-2. NÃO recomende auditar objetivo da campanha, mudar para Mensagens, ou verificar botão WhatsApp UNLESS os dados indicarem claramente problema (ex: zero conversas com gasto relevante E configuração marcada como incorreta).
-3. Hook rate zerado em campanha de Mensagens é LIMITAÇÃO da API Meta (ThruPlay), não necessariamente problema de criativo — use avaliacao "sem_dados" no hook_rate quando aplicável.
-4. Cada recomendação e item de pauta_reuniao DEVE citar qual KPI ou dado concreto justifica a ação (CTR, CPM, frequência, CPL/mensagem, volume de conversas, campanha pausada).
-5. NÃO inclua checklist genérico de setup (objetivo, WhatsApp, pixel) se a configuração já estiver correta nos dados.
+1. O objetivo operacional padrão da MarryMe é gerar leads/conversas qualificadas no WhatsApp. NÃO trate "usar WhatsApp", "mudar para Mensagens/Leads", "verificar botão WhatsApp" ou "auditar objetivo" como recomendação, exceto se setup_whatsapp_confirmado=false e houver zero leads/conversas com gasto relevante.
+2. A análise deve ser um RELATÓRIO DE DECISÃO SEMANAL, não checklist genérico. Priorize funil, criativos, CPL/conversa, volume, CTR, retenção de vídeo, concentração de verba e velocidade comercial no WhatsApp.
+3. Sempre identifique o gargalo do funil: impressões → cliques → leads/conversas. Se CTR baixo e conversão clique→lead boa, o problema é topo do funil/gancho, não formulário/WhatsApp.
+4. Cada recomendação e item de pauta_reuniao DEVE citar um KPI ou dado concreto (CPL, leads, CTR, cliques, conversão clique→lead, verba por criativo, retenção, frequência).
+5. Hook rate/retenção zerados em campanhas de Mensagens pode ser limitação da API Meta; use "sem_dados" quando aplicável.
 6. A nota_geral (0-10) deve ser coerente com o health score automático do sistema quando fornecido.
-7. pauta_reuniao: foco em mudanças acionáveis baseadas nos KPIs — máximo 6 itens, sem repetir verificações de setup já confirmadas.
+7. pauta_reuniao: máximo 5 itens, sem repetir recomendações. Deve virar agenda operacional para CS.
 8. Responda APENAS em português do Brasil.
 
 Benchmarks nicho casamentos (referência):
-- CTR link: >= 1% bom | 0,5-1% atenção | < 0,5% crítico
-- CPM: <= R$ 15 bom | R$ 15-30 atenção | > R$ 30 crítico
-- Frequência: <= 1,5x bom | 1,5-3x atenção | > 3x crítico
-- Custo por mensagem: <= R$ 8 bom | R$ 8-15 atenção | > R$ 15 crítico`;
+- CPL/conversa WhatsApp: <= R$ 8 ótimo | R$ 8-15 bom | R$ 15-28 atenção | > R$ 28 crítico
+- CTR link: >= 1,5% bom | 0,8-1,5% atenção | < 0,8% gargalo de topo
+- Conversão clique→lead: >= 15% forte | 8-15% ok | < 8% gargalo pós-clique
+- Frequência: <= 2,0x saudável | 2,0-3,0x atenção | > 3,0x saturação`;
 
 function fmtBRL(n: number) {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -42,12 +42,28 @@ function fmtN(n: number, dec = 0) {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+function pct(n: number): string {
+  return `${fmtN(n, 1)}%`;
+}
+
+function clickToLeadRate(clicks: number, results: number): number {
+  return clicks > 0 ? (results / clicks) * 100 : 0;
+}
+
+function isWhatsappLeadsSetup(config: ConfigCampanha | undefined, campanhas: CampanhaInsight[]): boolean {
+  if (config?.setup_whatsapp_confirmado || config?.objetivo_operacional === "whatsapp_leads") return true;
+  return campanhas.some((c) => {
+    const haystack = `${c.campaign_name} ${c.objective ?? ""}`.toUpperCase();
+    return c.results > 0 || /(MSG|MENSAGEM|WHATS|WHATSAPP|FORM|LEAD|CADASTRO)/.test(haystack);
+  });
+}
+
 function deriveObjetivoLabel(
   config: ConfigCampanha | undefined,
   campanhas: CampanhaInsight[]
 ): string {
-  if (config?.todas_mensagens) {
-    return "Mensagens / WhatsApp (configuração padrão MarryMe — já ativa)";
+  if (isWhatsappLeadsSetup(config, campanhas)) {
+    return "Leads/conversas no WhatsApp (objetivo operacional padrão MarryMe)";
   }
   if (config?.objetivo_principal && config.objetivo_principal !== "desconhecido") {
     return config.objetivo_principal;
@@ -61,6 +77,7 @@ function buildPrompt(
   categoria: string,
   kpis: KPIsCampanha,
   campanhas: CampanhaInsight[],
+  anuncios: AnuncioInsight[],
   periodo: string,
   faseProjeto: string | null,
   plano: string | null,
@@ -69,15 +86,21 @@ function buildPrompt(
   conta: ContaMeta | undefined,
   config: ConfigCampanha | undefined
 ): string {
-  const resultLabel =
-    config?.todas_mensagens || kpis.results > 0 ? "Conversas/mensagens iniciadas" : "Resultados";
-  const costLabel = config?.todas_mensagens ? "Custo por conversa" : "Custo por resultado";
+  const setupWhatsappConfirmado = isWhatsappLeadsSetup(config, campanhas);
+  const resultLabel = "Leads/conversas WhatsApp";
+  const costLabel = "CPL/custo por conversa";
+  const ctr = kpis.link_ctr || kpis.ctr;
+  const clicks = kpis.link_clicks || kpis.clicks;
+  const clickLeadRate = clickToLeadRate(clicks, kpis.results);
 
   const configBlock = config
     ? `- Objetivo principal detectado: ${config.objetivo_principal}
-- Todas campanhas em objetivo Mensagens/Engajamento: ${config.todas_mensagens ? "Sim" : "Não"}
+- Objetivo operacional MarryMe: ${config.objetivo_operacional ?? "indeterminado"}
+- Setup WhatsApp/leads confirmado: ${setupWhatsappConfirmado ? "Sim" : "Não/indeterminado"}
+- Todas campanhas compatíveis com leads/conversas: ${config.todas_mensagens ? "Sim" : "Não/indeterminado"}
 - Campanhas pausadas/inativas: ${config.campanhas_pausadas.length > 0 ? config.campanhas_pausadas.join(", ") : "Nenhuma"}`
-    : "- Configuração de campanha: não disponível (sync antigo)";
+    : `- Configuração de campanha: não disponível (sync antigo)
+- Setup WhatsApp/leads inferido por dados: ${setupWhatsappConfirmado ? "Sim" : "Não/indeterminado"}`;
 
   const contaBlock = conta
     ? `- Método pagamento: ${conta.metodo ?? "—"}${conta.saldo != null ? ` | Saldo/teto restante: ${fmtBRL(conta.saldo)}` : ""}`
@@ -95,7 +118,31 @@ function buildPrompt(
     )
     .join("\n");
 
-  return `Analise os dados abaixo e gere um diagnóstico completo e recomendações práticas.
+  const anunciosOrdenados = [...anuncios]
+    .sort((a, b) => b.results - a.results || a.cost_per_result - b.cost_per_result || b.spend - a.spend)
+    .slice(0, 8);
+
+  const anunciosTexto = anunciosOrdenados
+    .map(
+      (a) => `
+  - "${a.ad_name || a.ad_id}" | Campanha: "${a.campaign_name}"
+    Leads/conversas: ${fmtN(a.results)} | CPL/conversa: ${a.cost_per_result > 0 ? fmtBRL(a.cost_per_result) : "—"} | Gasto: ${fmtBRL(a.spend)}
+    Impressões: ${fmtN(a.impressions)} | Cliques: ${fmtN(a.link_clicks || a.clicks)} | CTR: ${pct(a.link_ctr || a.ctr)}
+    Conversão clique→lead: ${pct(clickToLeadRate(a.link_clicks || a.clicks, a.results))}
+    Retenção: 25% ${fmtN(a.video_p25)} | 50% ${fmtN(a.video_p50)} | 75% ${fmtN(a.video_p75)} | 95% ${fmtN(a.video_p100)} | ThruPlay ${fmtN(a.thruplay)}`
+    )
+    .join("\n");
+
+  const funilBlock = `- Impressões: ${fmtN(kpis.impressions)}
+- Cliques no link: ${fmtN(clicks)}
+- CTR do link: ${pct(ctr)}
+- Leads/conversas: ${fmtN(kpis.results)}
+- Conversão clique→lead/conversa: ${pct(clickLeadRate)}
+- CPL/custo por conversa: ${kpis.cost_per_result > 0 ? fmtBRL(kpis.cost_per_result) : "—"}
+- Gasto total: ${fmtBRL(kpis.spend)}`;
+
+  return `Analise os dados abaixo e gere um relatório de decisão semanal no padrão MarryMe.
+Premissa: o objetivo do trabalho é gerar leads/conversas qualificadas no WhatsApp. Não recomende mudar para WhatsApp/Leads como pauta; isso já é o objetivo operacional.
 
 # Cliente
 Nome: ${prestadorNome}
@@ -117,28 +164,58 @@ ${contaBlock}
 ${periodo}
 
 # KPIs Consolidados
-- Impressões: ${fmtN(kpis.impressions)}
 - Alcance: ${fmtN(kpis.reach)}
 - Frequência: ${fmtN(kpis.frequency, 2)}x
 - CPM: ${fmtBRL(kpis.cpm)}
-- CTR do link: ${fmtN(kpis.link_ctr || kpis.ctr, 2)}%
-- Cliques no link: ${fmtN(kpis.link_clicks || kpis.clicks)}
 - CPC: ${kpis.cpc > 0 ? fmtBRL(kpis.cpc) : "—"}
-- ${resultLabel}: ${fmtN(kpis.results)}
-- ${costLabel}: ${kpis.cost_per_result > 0 ? fmtBRL(kpis.cost_per_result) : "—"}
-- Gasto total: ${fmtBRL(kpis.spend)}
 - ThruPlay: ${kpis.thruplay > 0 ? fmtN(kpis.thruplay) : "—"}
 - Hook Rate: ${kpis.hook_rate > 0 ? fmtN(kpis.hook_rate, 1) + "%" : "sem dados (normal em campanhas de Mensagens)"}
 
+# Funil Principal
+${funilBlock}
+
 # Campanhas Individuais (${campanhas.length} campanha${campanhas.length !== 1 ? "s" : ""})
 ${campanhasTexto || "Nenhum dado por campanha disponível."}
+
+# Criativos / Anúncios (${anunciosOrdenados.length} anúncio${anunciosOrdenados.length !== 1 ? "s" : ""})
+${anunciosTexto || "Nenhum dado por anúncio disponível. Se não houver criativos, não invente nomes de ADs."}
 
 ---
 Responda APENAS com um JSON válido (sem markdown, sem explicação fora do JSON) com a seguinte estrutura:
 
 {
-  "resumo_executivo": "2-3 parágrafos com diagnóstico geral, principais pontos positivos e alertas críticos",
+  "resumo_executivo": "2 parágrafos com diagnóstico geral no estilo relatório semanal: resultado, gargalo e decisão",
   "nota_geral": <número de 0 a 10>,
+  "relatorio_decisao": {
+    "destaque_semana": {
+      "titulo": "...",
+      "metrica": "...",
+      "leitura": "..."
+    },
+    "funil": {
+      "impressões": <número>,
+      "cliques": <número>,
+      "leads": <número>,
+      "ctr": <número>,
+      "conversao_clique_lead": <número>,
+      "gargalo": "topo_do_funil|pos_clique|volume|criativo|orcamento|sem_dados",
+      "leitura": "..."
+    },
+    "criativos": [
+      {
+        "nome": "...",
+        "papel": "campeao|menor_custo|baixo_volume|trocar|sem_dados",
+        "leads": <número>,
+        "custo_por_lead": <número ou null>,
+        "investimento": <número>,
+        "leitura": "..."
+      }
+    ],
+    "aprendizados": {
+      "manter": ["...", "..."],
+      "ajustar": ["...", "..."]
+    }
+  },
   "analise_kpis": {
     "ctr": { "valor": <número>, "avaliacao": "bom|atencao|critico", "comentario": "..." },
     "cpm": { "valor": <número>, "avaliacao": "bom|atencao|critico", "comentario": "..." },
@@ -169,7 +246,7 @@ Responda APENAS com um JSON válido (sem markdown, sem explicação fora do JSON
     }
   ],
   "pauta_reuniao": [
-    "Ponto 1: ...",
+    "Ponto 1: decisão operacional com KPI concreto...",
     "Ponto 2: ..."
   ],
   "proximos_passos": [
@@ -177,6 +254,80 @@ Responda APENAS com um JSON válido (sem markdown, sem explicação fora do JSON
   ],
   "mensagem_para_cliente": "Mensagem curta e motivadora (2-3 frases) para compartilhar com o cliente sobre os resultados"
 }`;
+}
+
+function normalizeIdea(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isGenericSetupIdea(value: string): boolean {
+  const v = normalizeIdea(value);
+  return (
+    /mudar|alterar|trocar|verificar|auditar|configurar|revisar/.test(v) &&
+    /(objetivo|mensagens|leads|whatsapp|botao|cta|pixel)/.test(v)
+  );
+}
+
+function dedupeStrings(items: string[], blockSetup: boolean): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const key = normalizeIdea(item).slice(0, 90);
+    if (!key || seen.has(key)) continue;
+    if (blockSetup && isGenericSetupIdea(item)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function sanitizeAnalise(
+  raw: Record<string, unknown>,
+  setupWhatsappConfirmado: boolean
+): Record<string, unknown> {
+  const analise = { ...raw };
+
+  if (Array.isArray(analise.pauta_reuniao)) {
+    analise.pauta_reuniao = dedupeStrings(
+      analise.pauta_reuniao.filter((x): x is string => typeof x === "string"),
+      setupWhatsappConfirmado
+    ).slice(0, 5);
+  }
+
+  if (Array.isArray(analise.recomendacoes)) {
+    const seen = new Set<string>();
+    analise.recomendacoes = analise.recomendacoes.filter((item) => {
+      if (!item || typeof item !== "object") return false;
+      const rec = item as { titulo?: unknown; descricao?: unknown };
+      const text = `${String(rec.titulo ?? "")} ${String(rec.descricao ?? "")}`;
+      const key = normalizeIdea(text).slice(0, 90);
+      if (!key || seen.has(key)) return false;
+      if (setupWhatsappConfirmado && isGenericSetupIdea(text)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  if (Array.isArray(analise.proximos_passos)) {
+    const seen = new Set<string>();
+    analise.proximos_passos = analise.proximos_passos.filter((item) => {
+      if (!item || typeof item !== "object") return false;
+      const step = item as { acao?: unknown };
+      const text = String(step.acao ?? "");
+      const key = normalizeIdea(text).slice(0, 90);
+      if (!key || seen.has(key)) return false;
+      if (setupWhatsappConfirmado && isGenericSetupIdea(text)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  return analise;
 }
 
 export async function POST(req: NextRequest) {
@@ -243,14 +394,17 @@ export async function POST(req: NextRequest) {
     const dadosJson = relatorio.dados_json as {
       kpis?: KPIsCampanha;
       campanhas?: CampanhaInsight[];
+      anuncios?: AnuncioInsight[];
       conta?: ContaMeta;
       config_campanha?: ConfigCampanha;
     };
     const kpis = dadosJson?.kpis as KPIsCampanha;
     const campanhas = (dadosJson?.campanhas ?? []) as CampanhaInsight[];
+    const anuncios = (dadosJson?.anuncios ?? []) as AnuncioInsight[];
     const conta = dadosJson?.conta;
     const config = dadosJson?.config_campanha;
     const objetivo = deriveObjetivoLabel(config, campanhas);
+    const setupWhatsappConfirmado = isWhatsappLeadsSetup(config, campanhas);
     const periodo = `${new Date(relatorio.periodo_inicio + "T00:00:00").toLocaleDateString("pt-BR")} a ${new Date(relatorio.periodo_fim + "T00:00:00").toLocaleDateString("pt-BR")}`;
 
     const prompt = buildPrompt(
@@ -258,6 +412,7 @@ export async function POST(req: NextRequest) {
       prestador.categoria,
       kpis,
       campanhas,
+      anuncios,
       periodo,
       faseProjeto,
       plano,
@@ -328,6 +483,7 @@ export async function POST(req: NextRequest) {
           }
 
           if (Object.keys(analiseJson).length > 0) {
+            analiseJson = sanitizeAnalise(analiseJson, setupWhatsappConfirmado);
             await supabase.from("analises_ia").insert({
               prestador_id,
               relatorio_id: relatorio.id,
