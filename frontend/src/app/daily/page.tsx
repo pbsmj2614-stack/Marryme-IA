@@ -19,6 +19,12 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePipelineRaw, useInvalidatePipeline } from "@/hooks/useClientes";
 import { PageLoading } from "@/components/ui";
 import { useUIStore } from "@/store/uiStore";
+import {
+  RESPONSAVEIS,
+  buildRespChartDefs,
+  normalizePersonName,
+  resolveResponsavelFromEmail,
+} from "@/lib/constants";
 import { Loader2, RefreshCw, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -58,14 +64,7 @@ interface ClienteComMetricas extends Cliente {
   atrasadas: number;
 }
 
-// ─── Chart de produtividade ───────────────────────────────────────────────────
-
-interface RespDef {
-  key: string;
-  label: string;
-  color: string;
-  match: (q: string) => boolean;
-}
+const RESP_CHART = buildRespChartDefs();
 
 const DAY_ABBR: Record<number, string> = {
   0: "Dom.",
@@ -76,15 +75,6 @@ const DAY_ABBR: Record<number, string> = {
   5: "Sex.",
   6: "Sáb.",
 };
-
-const RESP_CHART: RespDef[] = [
-  { key: "Paulo", label: "Paulo", color: "#f43f5e", match: (q) => /^paulo$/i.test(q.trim()) },
-  { key: "PauloM", label: "Paulo M", color: "#8b5cf6", match: (q) => /paulo\s*m/i.test(q.trim()) },
-  { key: "Consolo", label: "Consolo", color: "#f59e0b", match: (q) => /consolo/i.test(q.trim()) },
-  { key: "Kauê", label: "Kauê", color: "#06b6d4", match: (q) => /kau[eê]/i.test(q.trim()) },
-  { key: "Cristal", label: "Cristal", color: "#10b981", match: (q) => /cristal/i.test(q.trim()) },
-  { key: "Outros", label: "Outros", color: "#cbd5e1", match: () => true },
-];
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -482,7 +472,7 @@ export default function DailyPage() {
   const isAtrasado = (t: Tarefa) =>
     !isFinalizado(t) && (t.status === "Atrasado" || (!!t.prazo && t.prazo < TODAY));
 
-  const normStr = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const normStr = normalizePersonName;
 
   const getPrioridade = (t: Tarefa): number => {
     if (isAtrasado(t)) return 0;
@@ -509,17 +499,14 @@ export default function DailyPage() {
   }, [tarefas, rawClientes]);
 
   const currentUserName = useMemo(() => {
-    if (!user?.email) return null;
-    const prefix = normStr(user.email.split("@")[0]);
     const nomes = Array.from(
       new Set(tarefasComCliente.map((t) => t.quem?.trim()).filter(Boolean) as string[])
     );
-    return nomes.find((nome) => prefix.startsWith(normStr(nome))) ?? null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return resolveResponsavelFromEmail(user?.email, nomes);
   }, [user, tarefasComCliente]);
 
   const respOptions = useMemo(() => {
-    const nomes = new Set<string>();
+    const nomes = new Set<string>(RESPONSAVEIS);
     tarefasComCliente.forEach((t) => {
       if (t.quem?.trim()) nomes.add(t.quem.trim());
     });

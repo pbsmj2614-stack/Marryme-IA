@@ -4,8 +4,103 @@ import type { UserRole } from "@/lib/roles";
 
 // ─── Equipe ───────────────────────────────────────────────────────────────────
 
-export const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê", "Giovanni"] as const;
+export const RESPONSAVEIS = ["Paulo", "Murilo", "Kauê", "Giovanni", "Isabella"] as const;
 export type Responsavel = (typeof RESPONSAVEIS)[number];
+
+/** Cores do gráfico de produtividade no Daily. */
+export const RESP_CHART_COLORS: Record<Responsavel, string> = {
+  Paulo: "#f43f5e",
+  Murilo: "#8b5cf6",
+  Kauê: "#06b6d4",
+  Giovanni: "#10b981",
+  Isabella: "#ec4899",
+};
+
+/** Prefixo do e-mail (antes do @) → nome do responsável no pipeline. */
+export const EMAIL_RESPONSAVEIS_ALIASES: Record<string, Responsavel> = {
+  pauloguimaraes: "Paulo",
+  paulo: "Paulo",
+  murilo: "Murilo",
+  kaue: "Kauê",
+  giovanni: "Giovanni",
+  isabella: "Isabella",
+};
+
+export function normalizePersonName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+/** Resolve o responsável do usuário logado a partir do e-mail. */
+export function resolveResponsavelFromEmail(
+  email: string | null | undefined,
+  taskNames?: string[]
+): string | null {
+  if (!email) return null;
+  const prefix = normalizePersonName(email.split("@")[0]);
+
+  for (const [alias, name] of Object.entries(EMAIL_RESPONSAVEIS_ALIASES)) {
+    if (prefix === alias || prefix.startsWith(alias) || alias.startsWith(prefix)) {
+      return name;
+    }
+  }
+
+  const respMatch = RESPONSAVEIS.find((r) => prefix.startsWith(normalizePersonName(r)));
+  if (respMatch) return respMatch;
+
+  if (taskNames?.length) {
+    return taskNames.find((nome) => prefix.startsWith(normalizePersonName(nome))) ?? null;
+  }
+
+  return null;
+}
+
+export interface RespChartDef {
+  key: string;
+  label: string;
+  color: string;
+  match: (quem: string) => boolean;
+}
+
+/** Time ativo + aliases legados da planilha (Paulo M, Consolo, Cristal). */
+export function buildRespChartDefs(): RespChartDef[] {
+  const legacy: RespChartDef[] = [
+    {
+      key: "PauloM",
+      label: "Paulo M",
+      color: "#a78bfa",
+      match: (q) => /paulo\s*m/i.test(q.trim()),
+    },
+    {
+      key: "Consolo",
+      label: "Consolo",
+      color: "#f59e0b",
+      match: (q) => /consolo/i.test(q.trim()),
+    },
+    {
+      key: "Cristal",
+      label: "Cristal",
+      color: "#14b8a6",
+      match: (q) => /cristal/i.test(q.trim()),
+    },
+  ];
+
+  const team: RespChartDef[] = RESPONSAVEIS.map((name) => ({
+    key: name,
+    label: name,
+    color: RESP_CHART_COLORS[name],
+    match: (q) => normalizePersonName(q) === normalizePersonName(name),
+  }));
+
+  return [
+    ...legacy,
+    ...team,
+    { key: "Outros", label: "Outros", color: "#cbd5e1", match: () => true },
+  ];
+}
 
 // ─── Status de cliente (mm_clientes) ─────────────────────────────────────────
 
